@@ -1,0 +1,702 @@
+@import "tailwindcss";
+@import "./fonts.css";
+
+/* Preline UI */
+@source "../../../../node_modules/preline/dist/*.js";
+@import "../../../../node_modules/preline/variants.css";
+@import "../../../../node_modules/preline/src/plugins/datepicker/styles-utility.css";
+
+@theme {
+  --color-blue: #279ff9;
+  --color-green: #3fb536;
+  --color-yellow: #ffc400;
+  --color-red: #ff707a;
+  --color-black: #2e2e30;
+  --color-white: #ffffff;
+  --color-gray-200: #f5f5fa;
+  --color-gray-600: #808089;
+
+  --color-primary-600: #279ff9;
+  --color-primary-500: #279ff9;
+}
+
+@layer base {
+  html,
+  body {
+    @apply w-full overflow-x-hidden text-black;
+  }
+}
+
+@utility container {
+  @apply mx-auto w-full max-w-[1700px] px-4;
+}
+
+/* Header Component */
+@layer components {
+  .header {
+    @apply container flex flex-wrap bg-white py-3 sm:flex-nowrap sm:justify-start md:py-5;
+  }
+
+  .header__nav {
+    @apply mx-auto flex basis-full flex-wrap items-center justify-between;
+  }
+
+  .header__logo {
+    @apply h-8 flex-none focus:outline-hidden md:h-11;
+
+    img {
+      @apply h-full w-auto;
+    }
+  }
+
+  .header__actions {
+    @apply flex items-center gap-x-5 sm:order-3;
+  }
+
+  .header__toggle {
+    @apply relative hidden size-9 items-center justify-center gap-x-2 rounded-lg border border-gray-200 bg-white text-gray-800 shadow-2xs hover:bg-gray-50 focus:bg-gray-50 focus:outline-hidden disabled:pointer-events-none disabled:opacity-50 sm:hidden;
+
+    svg {
+      @apply size-4;
+    }
+  }
+
+  .header__btn {
+    @apply inline-flex items-center bg-white text-gray-800;
+
+    svg {
+      @apply size-6;
+    }
+  }
+
+  .header__collapse {
+    @apply grow basis-full overflow-hidden transition-all duration-300 sm:order-2 sm:grow-0 sm:basis-auto;
+  }
+
+  .header__menu {
+    @apply mt-5 flex flex-col gap-8 sm:mt-0 sm:flex-row sm:items-center sm:ps-5;
+  }
+
+  .header__link {
+    @apply hover:text-blue focus:text-blue text-gray-600 focus:outline-hidden;
+  }
+
+  .header__dropdown-toggle {
+    @apply flex w-full items-center gap-x-1 focus:outline-hidden;
+
+    svg {
+      @apply hs-dropdown-open:-rotate-180 sm:hs-dropdown-open:rotate-0 ms-1 size-3 shrink-0 text-gray-600 duration-300;
+    }
+  }
+
+  .header__dropdown-menu {
+    @apply hs-dropdown-open:opacity-100 top-full z-40 hidden space-y-1 rounded-lg bg-white p-1 opacity-0 transition-[opacity,margin] duration-150 ease-in-out before:absolute before:start-0 before:-top-5 before:h-5 before:w-full sm:w-48 sm:shadow-md;
+  }
+
+  .header__dropdown-item {
+    @apply hover:text-blue flex items-center gap-x-3.5 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-200 focus:outline-hidden;
+  }
+  .header__lang {
+    @apply hover:text-blue flex items-center gap-x-2 text-sm font-semibold text-gray-800 transition-colors focus:outline-hidden;
+
+    svg {
+      @apply hs-dropdown-open:rotate-180 size-3 text-gray-600 transition-transform duration-300;
+    }
+  }
+
+  .header__lang-dropdown {
+    @apply hs-dropdown-open:opacity-100 top-full z-40 hidden space-y-1 rounded-lg bg-white p-1 opacity-0 transition-[opacity,margin] duration-150 ease-in-out sm:w-32 sm:shadow-md;
+  }
+}
+
+/* Footer Component */
+@layer components {
+  .footer {
+    @apply bg-white pt-16;
+  }
+
+  .footer--dark {
+    color: #fff;
+    background-color: #101828;
+  }
+
+  .footer__container {
+    @apply mx-auto max-w-[1440px] px-4;
+  }
+
+  .footer__top {
+    @apply grid grid-cols-1 gap-12 pb-16 lg:grid-cols-4;
+  }
+
+  .footer__logo {
+    @apply mb-6 block h-12;
+    img {
+      @apply h-full w-auto;
+    }
+  }
+
+  .footer__desc {
+    @apply mb-4 max-w-xs text-lg leading-relaxed;
+  }
+
+  .footer__socials {
+    @apply flex items-center gap-x-4;
+  }
+
+  .footer__social-link {
+    @apply hover:border-blue hover:bg-blue flex size-10 items-center justify-center rounded-full border border-gray-600 transition-colors hover:text-white;
+    svg {
+      @apply size-5;
+    }
+  }
+
+  .footer__title {
+    @apply mb-5 text-xl font-bold;
+  }
+
+  .footer__list {
+    @apply flex flex-col gap-y-4;
+  }
+
+  .footer__link {
+    @apply hover:text-blue transition-colors;
+  }
+
+  .footer__apps {
+    @apply flex flex-wrap gap-3;
+  }
+
+  .footer__app-link {
+    @apply block;
+    img {
+      @apply h-11 w-auto;
+    }
+  }
+
+  .footer__bottom {
+    @apply border-t border-gray-200/5 py-4;
+  }
+  .footer:not(.footer--dark) .footer__bottom {
+    @apply bg-gray-200;
+  }
+
+  .footer__copyright {
+    @apply text-center;
+  }
+}
+
+/* Section Header Component */
+@layer components {
+  .section-header {
+    @apply mb-12 flex flex-col gap-2;
+  }
+
+  .section-header--center {
+    @apply items-center text-center;
+  }
+
+  .section-header--row {
+    @apply items-start md:flex-row md:items-end md:justify-between;
+  }
+
+  .section-header__subtitle {
+    @apply text-red text-xl font-semibold md:text-3xl;
+  }
+
+  .section-header__title {
+    @apply mb-2 text-3xl leading-tight font-bold md:text-5xl;
+  }
+
+  .section-header__desc {
+    @apply max-w-3xl text-lg text-black/70 md:text-2xl;
+  }
+
+  .section-header__content {
+    @apply flex flex-col gap-2;
+  }
+}
+
+/* Buttons */
+@layer components {
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-x-2 rounded-sm border border-gray-300 bg-white px-5 py-2.5 text-center text-sm shadow-2xs hover:bg-gray-50 focus:bg-gray-50 focus:outline-hidden disabled:pointer-events-none disabled:opacity-50 md:px-6;
+    box-shadow: 0px 11px 25px rgba(23, 125, 201, 0.25);
+  }
+
+  .btn--primary {
+    @apply bg-blue hover:bg-blue/90 focus:bg-blue/90 border-transparent text-white;
+  }
+
+  .btn--outline {
+    @apply hover:bg-blue hover:border-blue focus:bg-blue aria-pressed:bg-blue aria-pressed:border-blue border-gray-400 bg-transparent shadow-none hover:text-white focus:text-white aria-pressed:text-white aria-pressed:hover:border-gray-400 aria-pressed:hover:bg-transparent aria-pressed:hover:text-black;
+  }
+
+  .btn--icon {
+    @apply w-8;
+  }
+  .btn__icon.btn__md {
+    @apply w-12;
+  }
+
+  .btn--sm {
+    @apply px-3 py-1 text-sm;
+  }
+
+  .btn--md {
+    @apply px-6 text-lg;
+  }
+
+  .btn--lg {
+    @apply px-8 text-lg;
+  }
+}
+
+/* Breadcrumb Component */
+@layer components {
+  .breadcrumb {
+    @apply mb-5 flex items-center whitespace-nowrap;
+  }
+
+  .breadcrumb__item {
+    @apply inline-flex items-center;
+  }
+
+  .breadcrumb__link {
+    @apply hover:text-blue focus:text-blue flex items-center text-sm text-gray-600 transition-colors focus:outline-hidden;
+  }
+
+  .breadcrumb__separator {
+    @apply mx-2 size-4 shrink-0 text-gray-400 rtl:rotate-180;
+  }
+
+  .breadcrumb__item--active {
+    @apply truncate text-sm font-semibold text-black;
+  }
+}
+
+/* Selection Group (Radio Buttons) */
+@layer components {
+  .selection-group {
+    @apply flex flex-wrap gap-4;
+  }
+
+  .selection-group__item {
+    @apply relative min-w-[120px];
+  }
+
+  .selection-group__input {
+    @apply absolute inset-0 z-10 cursor-pointer opacity-0;
+  }
+
+  .selection-group__label {
+    @apply flex items-center justify-center rounded-md border border-gray-300 bg-gray-200 px-6 py-2 text-center text-lg text-gray-500 transition-all;
+  }
+
+  .selection-group__input:checked + .selection-group__label {
+    @apply border-blue bg-blue text-white;
+    box-shadow: 0px 11px 25px rgba(39, 159, 249, 0.35);
+  }
+}
+
+/* Choice Group (Radio Cards) */
+@layer components {
+  .choice-group {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3;
+  }
+
+  .choice-group--two {
+    @apply lg:grid-cols-2;
+  }
+
+  .choice-group__item {
+    @apply relative min-w-[120px];
+  }
+
+  .choice-group__input {
+    @apply absolute inset-0 cursor-pointer opacity-0;
+  }
+
+  .choice-group__label {
+    @apply flex h-full items-start justify-between gap-3 rounded-md border border-gray-300 bg-white px-3.5 py-2.5 transition-all;
+  }
+
+  .choice-group__content {
+    @apply flex flex-col gap-1;
+  }
+
+  .choice-group__title {
+    @apply font-semibold text-black transition-colors;
+  }
+
+  .choice-group__subtext {
+    @apply text-green text-base font-semibold transition-colors;
+  }
+
+  .choice-group__icon {
+    @apply relative mt-1 flex size-5 shrink-0 items-center justify-center rounded-full border-2 border-gray-400 transition-all;
+
+    &::after {
+      @apply size-2 rounded-full bg-transparent transition-all content-[''];
+    }
+  }
+
+  .choice-group__input:checked + .choice-group__label {
+    @apply border-blue bg-blue shadow-blue/25 text-white shadow-lg;
+
+    .choice-group__title {
+      @apply text-white;
+    }
+
+    .choice-group__subtext {
+      @apply text-white/90;
+    }
+
+    .choice-group__icon {
+      @apply border-white;
+
+      &::after {
+        @apply bg-white;
+      }
+    }
+  }
+
+  /* Payment Specific: Hide/Show details based on radio state */
+  .payment-collapse {
+    @apply relative z-20 grid grid-rows-[0fr] transition-all duration-300;
+
+    & > div {
+      @apply overflow-hidden;
+    }
+  }
+
+  .choice-group__input:checked ~ .payment-collapse {
+    @apply mt-2 grid-rows-[1fr];
+  }
+  .choice-group__payment-details {
+    @apply mt-4 space-y-4 border-t border-white/20 pt-4;
+  }
+}
+
+/* Form */
+@layer components {
+  .form-label {
+    @apply mb-2 inline-block md:text-lg;
+  }
+
+  .form-control {
+    @apply block w-full rounded-md border border-gray-300 bg-white px-4 py-3 text-black placeholder:text-gray-500 focus:border-blue-700 focus:ring-blue-700 disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .form-input-action {
+    @apply relative flex items-center;
+  }
+
+  .form-input-action .form-control {
+    @apply pe-20 rtl:ps-22;
+  }
+
+  .form-input-action__btn {
+    @apply text-blue hover:text-blue/80 absolute end-0 border-s border-gray-300 px-4 font-semibold transition-colors focus:outline-none;
+  }
+
+  .form-control--underline {
+    @apply focus:border-blue block w-full border-b border-gray-300 bg-transparent py-3 text-black transition-all placeholder:text-gray-400 focus:outline-none;
+  }
+
+  select.form-control {
+    @apply relative flex appearance-none items-center justify-center;
+    background-image: url('data:image/svg+xml;utf8,<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 9L12 15L18 9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 20px;
+
+    [dir="rtl"] & {
+      background-position: left 10px center;
+    }
+  }
+
+  .checkbox-group {
+    @apply flex items-center gap-2;
+  }
+
+  .checkbox-input {
+    @apply relative inline-flex size-5 shrink-0 cursor-pointer appearance-none items-center justify-center rounded-full border border-black transition-all duration-200 focus:ring-0 focus:ring-transparent focus:outline-none disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .checkbox-input::after {
+    @apply text-blue -mt-1.5 hidden size-4 items-center justify-center text-lg font-bold;
+    content: url('data:image/svg+xml,<svg width="9" height="7" viewBox="0 0 9 7" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0.75 3.75L2.75 5.75L7.75 0.75" stroke="%23B40027" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  }
+
+  .checkbox-input:checked::after {
+    @apply inline-flex;
+  }
+
+  .checkbox-label {
+    @apply cursor-pointer text-sm select-none;
+  }
+}
+
+/* Tags */
+@layer components {
+  .tag-list {
+    @apply mx-auto mb-10 flex overflow-x-auto border-b border-gray-300 md:w-fit;
+  }
+
+  .tag {
+    @apply aria-pressed:border-blue hover:border-blue hover:text-blue aria-pressed:text-blue inline-flex shrink-0 cursor-pointer items-center justify-center gap-x-1.5 border-b-2 border-transparent px-3 py-2.5 whitespace-nowrap text-black transition-colors duration-300 md:min-w-[100px] md:px-6 md:text-base;
+
+    svg {
+      @apply size-5 shrink-0;
+    }
+  }
+}
+
+/* Plan Card */
+@layer components {
+  .plan-card {
+    @apply overflow-hidden rounded-[18px] border border-gray-300 bg-white p-3 text-black/70;
+    &:hover {
+      box-shadow: 0px 0px 14px rgba(0, 0, 0, 0.15);
+    }
+  }
+
+  .plan-card__thumbnail {
+    @apply relative block w-full;
+  }
+
+  .plan-card__thumbnail img {
+    @apply h-[314px] w-full rounded-md object-cover object-center;
+  }
+
+  .plan-card__badges-wrapper {
+    @apply absolute inset-x-3 top-3 flex items-center justify-between gap-2;
+  }
+
+  .plan-card__badge {
+    @apply bg-yellow rounded-lg px-3 py-1 text-center text-white font-stretch-semi-expanded text-shadow-2xs;
+  }
+
+  .plan-card__select {
+    @apply bg-blue/70 aria-pressed:bg-blue hover:bg-blue inline-flex cursor-pointer items-center gap-x-2 rounded-lg px-3 py-1 text-center text-white transition-colors text-shadow-2xs aria-pressed:[&>svg]:block;
+
+    svg {
+      @apply hidden size-4 shrink-0;
+    }
+  }
+
+  .plan-card__overlay-link {
+    @apply bg-blue absolute end-3 top-full flex size-11 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white text-white;
+
+    svg {
+      @apply size-7;
+    }
+  }
+
+  .plan-card__body {
+    @apply p-3 pb-0;
+  }
+
+  .plan-card__title {
+    @apply mb-2 text-xl font-semibold text-black;
+  }
+
+  .plan-card__meta {
+    @apply mb-4 flex items-center gap-x-2;
+
+    time {
+      @apply font-semibold;
+    }
+  }
+
+  .plan-card__footer {
+    @apply flex items-center justify-between border-t border-gray-600/30 pt-2;
+  }
+
+  .plan-card__category {
+    @apply hover:text-blue text-lg hover:underline;
+  }
+
+  .plan-card__price {
+    @apply text-green text-lg font-semibold;
+  }
+}
+
+/* Meal Card */
+@layer components {
+  .meal-card {
+    @apply overflow-hidden text-black/70;
+  }
+
+  .meal-card__thumbnail {
+    @apply relative;
+  }
+
+  .meal-card__thumbnail {
+    @apply mb-4 block w-full;
+  }
+
+  .meal-card__thumbnail img {
+    @apply h-[390px] w-full rounded-xl object-cover object-center;
+  }
+
+  .meal-card__overlay-link {
+    @apply bg-blue absolute end-5 bottom-5 flex size-11 items-center justify-center rounded-full border-2 border-white text-white;
+
+    svg {
+      @apply size-7;
+    }
+  }
+
+  .meal-card__title {
+    @apply mb-3 text-xl text-black;
+  }
+
+  .meal-card__footer {
+    @apply flex items-center justify-between border-t border-gray-600/30 pt-2;
+  }
+
+  .meal-card__category {
+    @apply hover:text-blue font-semibold text-black/70 hover:underline;
+  }
+
+  .meal-card__price {
+    @apply text-green text-lg font-semibold;
+  }
+
+  .meal-card__btn {
+    @apply border-blue bg-blue/10 hover:bg-blue aria-pressed:bg-blue aria-pressed:border-blue text-blue mt-3 w-full cursor-pointer rounded-md border py-2 font-medium transition-colors hover:text-white aria-pressed:text-white;
+
+    &:hover {
+      box-shadow: 0px 11px 25px rgba(23, 125, 201, 0.25);
+    }
+  }
+}
+
+/* Review Card */
+@layer components {
+  .review-card {
+    @apply overflow-hidden rounded-lg bg-white p-4 text-black/70 md:p-6;
+    box-shadow: 0px 13px 19px rgba(0, 0, 0, 0.07);
+  }
+
+  .review-card__quote {
+    @apply mb-4 size-10 text-gray-300;
+  }
+
+  .review-card__author {
+    @apply border-red/25 mt-4 flex items-center gap-x-4 border-t pt-4;
+  }
+  .card__author__avatar {
+    @apply size-10 rounded-full object-cover object-center;
+  }
+
+  .review-card__author-name {
+    @apply font-semibold text-black;
+  }
+
+  .review-card__rating {
+    @apply flex items-center gap-x-1;
+  }
+
+  .review-card__rating svg {
+    @apply text-yellow size-5;
+  }
+
+  .review-card__content {
+    @apply mb-4 text-sm;
+  }
+}
+
+/* Blog Card */
+@layer components {
+  .blog-card {
+    @apply relative overflow-hidden rounded-2xl text-white;
+  }
+
+  .blog-card__thumbnail {
+    @apply relative mb-2;
+  }
+
+  .blog-card__thumbnail img {
+    @apply h-[400px] w-full object-cover object-center md:h-[600px];
+  }
+
+  .blog-card__body {
+    @apply absolute inset-0 z-10 flex flex-col justify-end gap-1 p-5;
+    background: linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0) 55.31%,
+      rgba(0, 0, 0, 0.9) 100%
+    );
+  }
+
+  .blog-card__title {
+    @apply mb-1 text-lg font-semibold md:text-2xl;
+  }
+
+  .blog-card__link {
+    @apply text-blue font-semibold underline;
+  }
+}
+
+/* carousel arrow */
+@layer utilities {
+  .carousel-arrow {
+    @apply absolute top-1/2 inline-flex size-12 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white disabled:opacity-0;
+    box-shadow:
+      0 4px 6px -1px rgb(0 0 0 / 0.1),
+      0 2px 4px -2px rgb(0 0 0 / 0.1);
+
+    svg {
+      @apply size-6;
+    }
+  }
+
+  .hs-carousel-prev {
+    @apply start-0 md:-translate-x-1/2;
+  }
+
+  .hs-carousel-next {
+    @apply end-0 md:translate-x-1/2;
+  }
+
+  .hs-carousel-pagination {
+    @apply mt-10 flex gap-x-2;
+
+    span {
+      @apply size-3.5 rounded-full bg-gray-600 transition-all duration-300;
+    }
+
+    span.active {
+      @apply bg-blue mx-0.5 scale-150;
+    }
+  }
+}
+
+/* Pagination Component */
+@layer components {
+  .pagination {
+    @apply flex items-center justify-center gap-x-1;
+  }
+
+  .pagination__list {
+    @apply flex items-center gap-x-1;
+  }
+
+  .pagination__item {
+    @apply hover:text-blue flex size-9.5 items-center justify-center rounded-lg border border-transparent p-1 font-semibold focus:bg-gray-100 focus:outline-hidden disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .pagination__item--active {
+    @apply text-blue;
+  }
+
+  .pagination__arrow {
+    @apply bg-blue hover:bg-blue/75 inline-flex size-9 items-center justify-center gap-x-2 rounded-lg border border-transparent p-2 text-white focus:bg-gray-100 focus:outline-hidden disabled:pointer-events-none disabled:opacity-50 aria-current:pointer-events-none aria-current:bg-gray-300/70 aria-current:text-black;
+
+    svg {
+      @apply size-5;
+    }
+  }
+}

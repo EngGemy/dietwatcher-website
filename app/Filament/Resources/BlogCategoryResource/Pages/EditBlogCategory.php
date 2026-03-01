@@ -1,0 +1,46 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Filament\Resources\BlogCategoryResource\Pages;
+
+use App\Filament\Resources\BlogCategoryResource;
+use Filament\Actions\DeleteAction;
+use Filament\Resources\Pages\EditRecord;
+
+class EditBlogCategory extends EditRecord
+{
+    protected static string $resource = BlogCategoryResource::class;
+
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        $record = $this->getRecord();
+
+        // Load translations for EN and AR
+        $locales = ['en', 'ar'];
+        
+        foreach ($locales as $locale) {
+            $translation = $record->translate($locale);
+            if ($translation) {
+                $data[$locale] = [
+                    'name' => $translation->name,
+                    'description' => $translation->description,
+                ];
+            }
+        }
+
+        return $data;
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            DeleteAction::make(),
+        ];
+    }
+
+    protected function getRedirectUrl(): string
+    {
+        return $this->getResource()::getUrl('index');
+    }
+}
