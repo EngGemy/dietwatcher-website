@@ -415,7 +415,7 @@
     </section>
 
     {{-- FAQ Section --}}
-    <section class="bg-gray-200 py-20">
+    <section id="faq" class="bg-gray-200 py-20">
         <div class="container">
             @php
                 $faqHeader = \App\Models\FaqSectionHeader::where('is_active', true)->first();

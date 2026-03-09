@@ -45,16 +45,16 @@
                 <h3 class="footer__title">{{ __('Navigation') }}</h3>
                 <ul class="footer__list">
                     <li class="footer__item">
-                        <a href="#" class="footer__link">{{ __('Meal Plans') }}</a>
+                        <a href="{{ route('meal-plans.index') }}" class="footer__link">{{ __('Meal Plans') }}</a>
                     </li>
                     <li class="footer__item">
-                        <a href="#" class="footer__link">{{ __('Store') }}</a>
+                        <a href="{{ route('store.index') }}" class="footer__link">{{ __('Store') }}</a>
                     </li>
                     <li class="footer__item">
                         <a href="{{ route('blog.index') }}" class="footer__link">{{ __('Blog') }}</a>
                     </li>
                     <li class="footer__item">
-                        <a href="#" class="footer__link">{{ __('FAQ') }}</a>
+                        <a href="{{ route('faqs.index') }}" class="footer__link">{{ __('FAQ') }}</a>
                     </li>
                     <li class="footer__item">
                         <a href="{{ route('contact.index') }}" class="footer__link">{{ __('Contact Us') }}</a>
@@ -66,10 +66,10 @@
                 <h3 class="footer__title">{{ __('Legal') }}</h3>
                 <ul class="footer__list">
                     <li class="footer__item">
-                        <a href="#" class="footer__link">{{ __('Privacy Policy') }}</a>
+                        <a href="{{ route('privacy') }}" class="footer__link">{{ __('Privacy Policy') }}</a>
                     </li>
                     <li class="footer__item">
-                        <a href="#" class="footer__link">{{ __('Terms & Conditions') }}</a>
+                        <a href="{{ route('terms') }}" class="footer__link">{{ __('Terms & Conditions') }}</a>
                     </li>
                 </ul>
             </div>
