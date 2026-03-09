@@ -60,13 +60,18 @@ Route::get('/faqs', [\App\Http\Controllers\FaqController::class, 'index'])->name
 Route::get('/meal-plans', [MealPlanController::class, 'index'])->name('meal-plans.index');
 Route::get('/meal-plans/{id}', [MealPlanController::class, 'show'])->name('meal-plans.show');
 
-// Meals (products) route
+// Meals (products) route — also accessible as /store (Market link)
+Route::get('/store', fn () => view('pages.meals'))->name('store.index');
 Route::get('/meals', fn () => view('pages.meals'))->name('meals.index');
 
 // Checkout routes
 Route::get('/checkout', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('checkout.index');
 Route::post('/checkout', [\App\Http\Controllers\CheckoutController::class, 'store'])->name('checkout.store');
 Route::post('/checkout/apply-coupon', [\App\Http\Controllers\CheckoutController::class, 'applyCoupon'])->name('checkout.apply-coupon');
+
+// Legal pages
+Route::get('/privacy-policy', fn () => view('pages.privacy'))->name('privacy');
+Route::get('/terms-and-conditions', fn () => view('pages.terms'))->name('terms');
 
 // OTP verification
 Route::post('/otp/send', [\App\Http\Controllers\OtpController::class, 'send'])->name('otp.send');

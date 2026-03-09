@@ -128,7 +128,7 @@ class MenuItemSeeder extends Seeder
             'type' => 'button',
             'label_en' => 'Choose Your Meal Plan',
             'label_ar' => 'اختر خطة وجباتك',
-            'url' => '/#plans',
+            'url' => '/meal-plans',
             'order' => 2,
             'is_active' => true,
             'meta' => [
