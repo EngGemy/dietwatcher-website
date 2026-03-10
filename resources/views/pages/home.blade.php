@@ -17,7 +17,7 @@
                         {{ __('Chef-made, calorie-smart meals delivered in Saudi Arabia. Plans online, managed via our app.') }}
                     </p>
 
-                    <a href="{{ route('meal-plans.index') }}" class="btn btn--primary mb-8 text-lg">
+                    <a href="https://app.diet-watchers.sa/meal-plans" class="btn btn--primary mb-8 text-lg">
                         {{ __('Choose Meal Plans') }}
                     </a>
 
@@ -104,7 +104,7 @@
             </div>
 
             <div class="text-center">
-                <a href="{{ route('meal-plans.index') }}" class="btn btn--primary btn--md">{{ __('Choose Your Meal Plan') }}</a>
+                <a href="https://app.diet-watchers.sa/meal-plans" class="btn btn--primary btn--md">{{ __('Choose Your Meal Plan') }}</a>
             </div>
         </div>
     </section>
