@@ -20,6 +20,7 @@ jobs:
           script: |
             git config --global --add safe.directory /home/dwsa/public_html/website
             cd /home/dwsa/public_html/website
+            git stash
             GIT_SSH_COMMAND="ssh -i /home/developers/.ssh/id_ed25519" git pull origin main
             php /usr/local/bin/composer install --no-dev --optimize-autoloader --ignore-platform-req=php
             php artisan migrate --force
