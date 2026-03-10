@@ -39,7 +39,8 @@
       "WebSearch",
       "WebFetch(domain:tailwindflex.com)",
       "mcp__claude_ai_Figma__get_metadata",
-      "WebFetch(domain:www.figma.com)"
+      "WebFetch(domain:www.figma.com)",
+      "Bash(git add:*)"
     ]
   }
 }
