@@ -18,8 +18,9 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
           script: |
+            git config --global --add safe.directory /home/dwsa/public_html/website
             cd /home/dwsa/public_html/website
-            git pull origin main
+            GIT_SSH_COMMAND="ssh -i /home/developers/.ssh/id_ed25519" git pull origin main
             php /usr/local/bin/composer install --no-dev --optimize-autoloader --ignore-platform-req=php
             php artisan migrate --force
             php artisan config:cache
