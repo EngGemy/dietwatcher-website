@@ -45,7 +45,7 @@ class MenuItemSeeder extends Seeder
             'type' => 'link',
             'label_en' => 'Weight Loss',
             'label_ar' => 'إنقاص الوزن',
-            'url' => '/#plans',
+            'url' => 'https://app.diet-watchers.sa/meal-plans',
             'order' => 1,
             'is_active' => true,
         ]);
@@ -56,7 +56,7 @@ class MenuItemSeeder extends Seeder
             'type' => 'link',
             'label_en' => 'Muscle Gain',
             'label_ar' => 'بناء العضلات',
-            'url' => '/#plans',
+            'url' => 'https://app.diet-watchers.sa/meal-plans',
             'order' => 2,
             'is_active' => true,
         ]);
@@ -67,7 +67,7 @@ class MenuItemSeeder extends Seeder
             'type' => 'link',
             'label_en' => 'Healthy Lifestyle',
             'label_ar' => 'نمط حياة صحي',
-            'url' => '/#plans',
+            'url' => 'https://app.diet-watchers.sa/meal-plans',
             'order' => 3,
             'is_active' => true,
         ]);
@@ -128,7 +128,7 @@ class MenuItemSeeder extends Seeder
             'type' => 'button',
             'label_en' => 'Choose Your Meal Plan',
             'label_ar' => 'اختر خطة وجباتك',
-            'url' => '/meal-plans',
+            'url' => 'https://app.diet-watchers.sa/meal-plans',
             'order' => 2,
             'is_active' => true,
             'meta' => [
