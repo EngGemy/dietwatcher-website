@@ -35,6 +35,10 @@ class MealPlanController extends Controller
                 ->with('info', __('Plan details coming soon.'));
         }
 
-        return view('pages.meal-plan-detail', compact('plan'));
+        // Fetch dynamic calorie options and durations from API
+        $apiCalories = $this->externalDataService->getPlanCalories((int) $id);
+        $apiDurations = $this->externalDataService->getPlanDurations((int) $id);
+
+        return view('pages.meal-plan-detail', compact('plan', 'apiCalories', 'apiDurations'));
     }
 }

@@ -252,13 +252,18 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                         <div class="space-y-4">
                             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div>
-                                    <select name="city" class="form-control @error('city') border-red-500 @enderror">
-                                        <option value="">{{ __('City') }}</option>
-                                        @foreach($cities as $key => $name)
-                                            <option value="{{ $key }}" {{ old('city') === $key ? 'selected' : '' }}>{{ $name }}</option>
+                                    <select name="zone_id" class="form-control @error('zone_id') border-red-500 @enderror"
+                                            x-model="selectedZoneId" @change="onZoneChange()">
+                                        <option value="">{{ __('Select Zone') }}</option>
+                                        @foreach($zones as $zone)
+                                            @if($zone['is_active'] ?? true)
+                                            <option value="{{ $zone['id'] }}" {{ old('zone_id') == $zone['id'] ? 'selected' : '' }}>
+                                                {{ is_array($zone['name']) ? ($zone['name'][app()->getLocale()] ?? $zone['name']['en'] ?? '') : $zone['name'] }}
+                                            </option>
+                                            @endif
                                         @endforeach
                                     </select>
-                                    @error('city')
+                                    @error('zone_id')
                                         <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
                                     @enderror
                                 </div>
@@ -275,6 +280,45 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                 <input type="text" name="building" class="form-control @error('building') border-red-500 @enderror"
                                        placeholder="{{ __('Location') }}" value="{{ old('building') }}" />
                             </div>
+                        </div>
+                    </div>
+
+                    {{-- Branch Pickup --}}
+                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-show="deliveryType === 'pickup'" x-transition>
+                        <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Pickup Branch') }}</h3>
+                        <div class="space-y-3">
+                            <template x-if="branchesLoading">
+                                <p class="text-sm text-gray-500">{{ __('Loading branches...') }}</p>
+                            </template>
+                            <template x-if="!branchesLoading">
+                                <div class="space-y-3">
+                                    <select name="branch_id" class="form-control" x-model="selectedBranchId">
+                                        <option value="">{{ __('Select pickup branch') }}</option>
+                                        <template x-for="branch in branches" :key="branch.id">
+                                            <option :value="branch.id" x-text="(typeof branch.name === 'object' ? (branch.name['{{ app()->getLocale() }}'] || branch.name['en'] || '') : branch.name) + (branch.address ? ' — ' + branch.address : '')"></option>
+                                        </template>
+                                    </select>
+
+                                    {{-- Show selected branch details --}}
+                                    <template x-if="selectedBranchId">
+                                        <div class="rounded-lg bg-blue-50 p-3">
+                                            <template x-for="branch in branches.filter(b => String(b.id) === String(selectedBranchId))" :key="branch.id">
+                                                <div class="flex items-start gap-3">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-blue flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                                                    </svg>
+                                                    <div>
+                                                        <p class="font-semibold text-sm" x-text="typeof branch.name === 'object' ? (branch.name['{{ app()->getLocale() }}'] || branch.name['en'] || '') : branch.name"></p>
+                                                        <p class="text-xs text-gray-600" x-show="branch.address" x-text="branch.address"></p>
+                                                        <p class="text-xs text-gray-600" x-show="branch.phone" dir="ltr" x-text="branch.phone"></p>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
                         </div>
                     </div>
 
@@ -330,8 +374,8 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
 
                                     <div class="space-y-2">
                                         <div class="flex items-center justify-between">
-                                            <span class="text-gray-600">{{ __('Items Total') }}</span>
-                                            <span class="font-bold text-gray-900">SAR <span x-text="subtotal().toFixed(2)"></span></span>
+                                            <span class="text-gray-600">{{ __('Items Total') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></span>
+                                            <span class="font-bold text-gray-900">SAR <span x-text="subtotalInclVat().toFixed(2)"></span></span>
                                         </div>
                                         <div class="flex items-center justify-between">
                                             <span class="text-gray-600">{{ __('Delivery fees') }}</span>
@@ -341,9 +385,9 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                             <span class="text-green-600">{{ __('Discount') }}</span>
                                             <span class="font-bold text-green-600">- SAR <span x-text="discount.toFixed(2)"></span></span>
                                         </div>
-                                        <div class="flex items-center justify-between">
-                                            <span class="text-gray-600">{{ __('VAT') }} (15%)</span>
-                                            <span class="font-bold text-gray-900">SAR <span x-text="vatAmount().toFixed(2)"></span></span>
+                                        <div class="flex items-center justify-between text-sm text-gray-400">
+                                            <span>{{ __('VAT included') }} ({{ (int)(\App\Models\Settings\Setting::getValue('vat_rate', 15)) }}%)</span>
+                                            <span>SAR <span x-text="vatAmount().toFixed(2)"></span></span>
                                         </div>
                                     </div>
                                 </div>
@@ -351,7 +395,7 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
 
                             {{-- Total --}}
                             <div class="flex items-center justify-between">
-                                <span class="text-lg font-semibold md:text-xl">{{ __('Total') }}</span>
+                                <span class="text-lg font-semibold md:text-xl">{{ __('Total') }} <span class="text-xs font-normal text-gray-500">({{ __('Incl. VAT') }})</span></span>
                                 <span class="text-lg font-semibold text-green-600 md:text-xl">SAR <span x-text="total().toFixed(2)"></span></span>
                             </div>
 
@@ -917,6 +961,18 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
             discount: 0,
             email: '{{ old('email', '') }}',
 
+            // Zone state
+            selectedZoneId: '{{ old('zone_id', '') }}',
+            zones: @json($zones),
+
+            // Plan durations from API
+            planDurations: @json($planDurations ?? []),
+
+            // Branch pickup state
+            selectedBranchId: '{{ old('branch_id', '') }}',
+            branches: [],
+            branchesLoading: true,
+
             // Duration multiplier map from backend
             durationMultipliers: @json($durationMultipliers),
 
@@ -937,26 +993,50 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
             couponLoading: false,
             couponMessage: '',
 
-            // Computed: subtotal with duration multiplier
+            // ─── PRICES FROM API ARE VAT-INCLUSIVE (like mobile app) ───
+            // The baseSubtotal already includes VAT. We extract VAT for display only.
+
+            // Computed: subtotal with duration multiplier (VAT-inclusive price from API)
             subtotal() {
                 const multiplier = this.durationMultipliers[this.duration] || 1;
                 return Math.round(this.baseSubtotal * multiplier * 100) / 100;
             },
 
-            // Computed: delivery fee (0 for pickup)
+            // Computed: subtotal including VAT (same as subtotal — price already includes VAT)
+            subtotalInclVat() {
+                return this.subtotal();
+            },
+
+            // Computed: delivery fee based on zone selection
             deliveryFee() {
-                return this.deliveryType === 'home' ? this.deliveryFeeAmount : 0;
+                if (this.deliveryType !== 'home') return 0;
+                if (this.selectedZoneId && this.zones.length > 0) {
+                    const zone = this.zones.find(z => String(z.id) === String(this.selectedZoneId));
+                    if (zone) {
+                        const hasPlan = {{ collect($cart)->contains(fn($item) => !empty($item['options']['duration_days'])) ? 'true' : 'false' }};
+                        return hasPlan
+                            ? parseFloat(zone.subscription_delivery_price || 0)
+                            : parseFloat(zone.order_delivery_price || 0);
+                    }
+                }
+                return this.deliveryFeeAmount;
             },
 
-            // Computed: VAT on (subtotal + delivery - discount)
+            // Zone change handler
+            onZoneChange() {
+                // Recalculate when zone changes
+            },
+
+            // Computed: VAT extracted from VAT-inclusive price (for display only)
+            // Formula: VAT = inclPrice - (inclPrice / (1 + vatRate))
             vatAmount() {
-                const taxable = this.subtotal() + this.deliveryFee() - this.discount;
-                return Math.round(taxable * this.vatRate * 100) / 100;
+                const inclTotal = this.subtotal() + this.deliveryFee() - this.discount;
+                return Math.round((inclTotal - (inclTotal / (1 + this.vatRate))) * 100) / 100;
             },
 
-            // Computed: grand total
+            // Computed: grand total (price already includes VAT, just add delivery and subtract discount)
             total() {
-                return Math.round((this.subtotal() + this.deliveryFee() - this.discount + this.vatAmount()) * 100) / 100;
+                return Math.round((this.subtotal() + this.deliveryFee() - this.discount) * 100) / 100;
             },
 
             // AJAX coupon validation
@@ -1178,6 +1258,12 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
             // Watch for duration changes to re-validate coupon
             init() {
                 this.$watch('duration', () => this.revalidateCoupon());
+
+                // Fetch branches for pickup option
+                fetch('{{ route('api.branches') }}')
+                    .then(r => r.json())
+                    .then(data => { this.branches = data; this.branchesLoading = false; })
+                    .catch(() => { this.branches = []; this.branchesLoading = false; });
             }
         }
     }

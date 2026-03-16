@@ -397,16 +397,213 @@ class ExternalDataService
 
     // ─── Subscriptions ───────────────────────────────────────────
 
-    public function getSubscriptions(int $page = 1): array
+    public function getSubscriptions(int $page = 1, ?string $phone = null): array
     {
-        return Cache::remember($this->cacheKey("subscriptions_page_{$page}"), 300, function () use ($page) {
+        $cacheKey = $this->cacheKey("subscriptions_page_{$page}" . ($phone ? "_phone_" . md5($phone) : ''));
+
+        return Cache::remember($cacheKey, 300, function () use ($page, $phone) {
             try {
-                $response = $this->http()->get("{$this->baseUrl}/subscriptions", ['page' => $page]);
+                $params = ['page' => $page];
+                if ($phone) {
+                    $params['phone'] = $phone;
+                }
+                $response = $this->http()->get("{$this->baseUrl}/subscriptions", $params);
                 if ($response->successful()) {
-                    return $response->json('data', []);
+                    $json = $response->json();
+                    return [
+                        'data' => array_map([$this, 'transformSubscription'], $json['data'] ?? []),
+                        'meta' => $json['meta'] ?? ['currentPage' => $page, 'lastPage' => 1],
+                    ];
                 }
             } catch (\Exception $e) {
                 Log::warning('External API /subscriptions failed: ' . $e->getMessage());
+            }
+            return ['data' => [], 'meta' => ['currentPage' => $page, 'lastPage' => 1]];
+        });
+    }
+
+    public function getSubscription(int $id): ?array
+    {
+        try {
+            $response = $this->http()->get("{$this->baseUrl}/subscriptions/{$id}");
+            if ($response->successful()) {
+                $data = $response->json('data');
+                return $data ? $this->transformSubscription($data) : null;
+            }
+        } catch (\Exception $e) {
+            Log::warning("External API /subscriptions/{$id} failed: " . $e->getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Create a subscription via the backend API.
+     */
+    public function createSubscription(array $data): array
+    {
+        try {
+            $response = $this->http()->post("{$this->baseUrl}/subscriptions", $data);
+            if ($response->successful()) {
+                return ['success' => true, 'data' => $response->json('data', [])];
+            }
+            return ['success' => false, 'message' => $response->json('message', 'Subscription creation failed')];
+        } catch (\Exception $e) {
+            Log::warning('External API POST /subscriptions failed: ' . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Calculate subscription pricing via the backend API.
+     */
+    public function calculateSubscription(array $data): array
+    {
+        try {
+            $response = $this->http()->post("{$this->baseUrl}/subscriptions/calculate", $data);
+            if ($response->successful()) {
+                return ['success' => true, 'data' => $response->json('data', [])];
+            }
+            return ['success' => false, 'message' => $response->json('message', 'Calculation failed')];
+        } catch (\Exception $e) {
+            Log::warning('External API /subscriptions/calculate failed: ' . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Transform raw subscription data into frontend format.
+     */
+    protected function transformSubscription(array $subscription): array
+    {
+        return [
+            'id' => $subscription['id'] ?? 0,
+            'plan_name' => $subscription['plan']['name'] ?? $subscription['plan_name'] ?? '',
+            'plan_image' => $subscription['plan']['image'] ?? $subscription['plan_image'] ?? '',
+            'status' => $subscription['status'] ?? 'pending',
+            'start_at' => $subscription['start_at'] ?? '',
+            'end_at' => $subscription['end_at'] ?? '',
+            'total' => $subscription['total'] ?? 0,
+            'discount' => $subscription['discount'] ?? 0,
+            'tax' => $subscription['tax'] ?? 0,
+            'duration_days' => $subscription['duration']['days'] ?? $subscription['duration_days'] ?? 0,
+            'calorie_range' => $subscription['calorie']['min_amount'] ?? '',
+            'with_weekend' => $subscription['with_weekend'] ?? false,
+            'customer_name' => $subscription['customer']['name'] ?? '',
+            'customer_phone' => $subscription['customer']['phone'] ?? '',
+            'zone_name' => $subscription['zone']['name'] ?? '',
+            'days' => $subscription['days'] ?? [],
+            'meals_per_day' => $subscription['meals_per_day'] ?? [],
+        ];
+    }
+
+    // ─── Zones ────────────────────────────────────────────────────
+
+    /**
+     * Get delivery zones from API.
+     */
+    public function getZones(): array
+    {
+        return Cache::remember($this->cacheKey('zones'), 3600, function () {
+            try {
+                $response = $this->http()->get("{$this->baseUrl}/zones");
+                if ($response->successful()) {
+                    $data = $response->json('data', []);
+                    return array_map(function ($zone) {
+                        return [
+                            'id' => $zone['id'] ?? 0,
+                            'name' => $zone['name'] ?? '',
+                            'subscription_delivery_price' => (float) ($zone['subscription_delivery_price'] ?? $zone['subscriptionDeliveryPrice'] ?? 0),
+                            'order_delivery_price' => (float) ($zone['order_delivery_price'] ?? $zone['orderDeliveryPrice'] ?? 0),
+                            'min_order_price' => (float) ($zone['min_order_price'] ?? $zone['minOrderPrice'] ?? 0),
+                            'is_active' => $zone['is_active'] ?? $zone['isActive'] ?? true,
+                        ];
+                    }, $data);
+                }
+            } catch (\Exception $e) {
+                Log::warning('External API /zones failed: ' . $e->getMessage());
+            }
+            return [];
+        });
+    }
+
+    // ─── Branches ──────────────────────────────────────────────────
+
+    /**
+     * Get pickup branches from API.
+     */
+    public function getBranches(): array
+    {
+        return Cache::remember($this->cacheKey('branches'), 3600, function () {
+            try {
+                $response = $this->http()->get("{$this->baseUrl}/branches");
+                if ($response->successful()) {
+                    return array_map(function ($branch) {
+                        return [
+                            'id' => $branch['id'] ?? 0,
+                            'name' => $branch['name'] ?? '',
+                            'address' => $branch['address'] ?? '',
+                            'phone' => $branch['phone'] ?? '',
+                            'is_active' => $branch['is_active'] ?? $branch['isActive'] ?? true,
+                        ];
+                    }, $response->json('data', []));
+                }
+            } catch (\Exception $e) {
+                Log::warning('External API /branches failed: ' . $e->getMessage());
+            }
+            return [];
+        });
+    }
+
+    // ─── Plan Durations & Calories ────────────────────────────────
+
+    /**
+     * Get plan durations from API (available packages for a plan).
+     */
+    public function getPlanDurations(int $planId): array
+    {
+        return Cache::remember($this->cacheKey("plan_durations_{$planId}"), 3600, function () use ($planId) {
+            try {
+                $response = $this->http()->get("{$this->baseUrl}/programs/{$planId}/durations");
+                if ($response->successful()) {
+                    return array_map(function ($d) {
+                        return [
+                            'id' => $d['id'] ?? 0,
+                            'days' => (int) ($d['days'] ?? 0),
+                            'price' => (float) ($d['price']['amount'] ?? $d['price'] ?? 0),
+                            'delivery_price' => (float) ($d['delivery_price']['amount'] ?? $d['delivery_price'] ?? $d['deliveryPrice'] ?? 0),
+                            'is_default' => $d['is_default'] ?? $d['isDefault'] ?? false,
+                            'label' => $d['label'] ?? ($d['days'] ?? 0) . ' ' . __('Days'),
+                        ];
+                    }, $response->json('data', []));
+                }
+            } catch (\Exception $e) {
+                Log::warning("External API /programs/{$planId}/durations failed: " . $e->getMessage());
+            }
+            return [];
+        });
+    }
+
+    /**
+     * Get plan calorie options from API.
+     */
+    public function getPlanCalories(int $planId): array
+    {
+        return Cache::remember($this->cacheKey("plan_calories_{$planId}"), 3600, function () use ($planId) {
+            try {
+                $response = $this->http()->get("{$this->baseUrl}/programs/{$planId}/calories");
+                if ($response->successful()) {
+                    return array_map(function ($c) {
+                        return [
+                            'id' => $c['id'] ?? 0,
+                            'min_amount' => (int) ($c['min_amount'] ?? $c['minAmount'] ?? $c['min'] ?? 0),
+                            'max_amount' => (int) ($c['max_amount'] ?? $c['maxAmount'] ?? $c['max'] ?? 0),
+                            'is_default' => $c['is_default'] ?? $c['isDefault'] ?? false,
+                            'macros' => $c['macros'] ?? null,
+                        ];
+                    }, $response->json('data', []));
+                }
+            } catch (\Exception $e) {
+                Log::warning("External API /programs/{$planId}/calories failed: " . $e->getMessage());
             }
             return [];
         });
@@ -473,6 +670,7 @@ class ExternalDataService
             'home',
             'settings',
             'all_meals',
+            'zones',
         ];
 
         foreach (['en', 'ar'] as $locale) {

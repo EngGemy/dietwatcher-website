@@ -60,6 +60,7 @@ class CheckoutController extends Controller
             // Build cart with this single plan
             $mealType = $request->get('meal_type', 'breakfast');
             $calories = $request->get('calories', '');
+            $durationId = $request->get('duration_id', '');
 
             $cart = [
                 'plan_' . $planId => [
@@ -72,6 +73,7 @@ class CheckoutController extends Controller
                         'mealType' => $mealType,
                         'calories' => $calories,
                         'duration_days' => $plan->duration_days ?? 28,
+                        'duration_id' => $durationId,
                     ],
                 ],
             ];
@@ -95,19 +97,34 @@ class CheckoutController extends Controller
             $baseSubtotal += $item['price'] * $item['quantity'];
         }
 
-        // Plans = free delivery, Meals = fee from settings
-        $deliveryFeeAmount = $hasPlanItems ? 0 : (float) Setting::getValue('delivery_fee', 25);
         $vatRate = (float) Setting::getValue('vat_rate', 15) / 100;
 
-        // Get available cities
-        $cities = [
-            'riyadh' => __('Riyadh'),
-            'jeddah' => __('Jeddah'),
-            'dammam' => __('Dammam'),
-            'khobar' => __('Al Khobar'),
-            'makkah' => __('Makkah'),
-            'madinah' => __('Madinah'),
-        ];
+        // Fetch dynamic zones from API
+        $zones = $this->externalDataService->getZones();
+
+        // Fallback to hardcoded cities if API returns empty
+        if (empty($zones)) {
+            $zones = [
+                ['id' => 1, 'name' => __('Riyadh'), 'subscription_delivery_price' => 0, 'order_delivery_price' => 25, 'is_active' => true],
+                ['id' => 2, 'name' => __('Jeddah'), 'subscription_delivery_price' => 0, 'order_delivery_price' => 25, 'is_active' => true],
+                ['id' => 3, 'name' => __('Dammam'), 'subscription_delivery_price' => 0, 'order_delivery_price' => 25, 'is_active' => true],
+                ['id' => 4, 'name' => __('Al Khobar'), 'subscription_delivery_price' => 0, 'order_delivery_price' => 25, 'is_active' => true],
+                ['id' => 5, 'name' => __('Makkah'), 'subscription_delivery_price' => 0, 'order_delivery_price' => 25, 'is_active' => true],
+                ['id' => 6, 'name' => __('Madinah'), 'subscription_delivery_price' => 0, 'order_delivery_price' => 25, 'is_active' => true],
+            ];
+        }
+
+        // Plans = delivery included in price, Meals = fee from zone
+        $deliveryFeeAmount = $hasPlanItems ? 0 : (float) Setting::getValue('delivery_fee', 25);
+
+        // Fetch plan durations if cart has plan items
+        $planDurations = [];
+        if ($hasPlanItems) {
+            $firstPlanItem = collect($cart)->first(fn($item) => !empty($item['options']['duration_days']));
+            if ($firstPlanItem) {
+                $planDurations = $this->externalDataService->getPlanDurations($firstPlanItem['id']);
+            }
+        }
 
         $durationMultipliers = self::DURATION_MULTIPLIERS;
 
@@ -116,8 +133,9 @@ class CheckoutController extends Controller
             'baseSubtotal',
             'deliveryFeeAmount',
             'vatRate',
-            'cities',
-            'durationMultipliers'
+            'zones',
+            'durationMultipliers',
+            'planDurations'
         ));
     }
 
@@ -131,7 +149,7 @@ class CheckoutController extends Controller
             'name' => 'required|string|max:255',
             'phone' => 'required|string|max:20',
             'email' => 'required|email|max:255',
-            'city' => 'required_if:delivery_type,home|nullable|string',
+            'zone_id' => 'required_if:delivery_type,home|nullable|integer',
             'street' => 'required_if:delivery_type,home|nullable|string|max:255',
             'building' => 'nullable|string|max:255',
         ]);
@@ -156,9 +174,25 @@ class CheckoutController extends Controller
         $multiplier = self::DURATION_MULTIPLIERS[$validated['duration']] ?? 1;
         $subtotal = round($baseSubtotal * $multiplier, 2);
 
-        // Plans = free delivery, Meals = fee from settings
+        // Get delivery fee from zone if provided, otherwise from settings
         $deliveryFeeFromSettings = $hasPlanItems ? 0 : (float) Setting::getValue('delivery_fee', 25);
-        $deliveryFee = $validated['delivery_type'] === 'home' ? $deliveryFeeFromSettings : 0.0;
+        $zoneDeliveryFee = 0.0;
+        $zoneName = null;
+
+        if ($validated['delivery_type'] === 'home' && !empty($validated['zone_id'])) {
+            $zones = $this->externalDataService->getZones();
+            $selectedZone = collect($zones)->firstWhere('id', (int) $validated['zone_id']);
+            if ($selectedZone) {
+                $zoneName = $selectedZone['name'];
+                $zoneDeliveryFee = $hasPlanItems
+                    ? (float) $selectedZone['subscription_delivery_price']
+                    : (float) $selectedZone['order_delivery_price'];
+            }
+        }
+
+        $deliveryFee = $validated['delivery_type'] === 'home'
+            ? ($zoneDeliveryFee > 0 ? $zoneDeliveryFee : $deliveryFeeFromSettings)
+            : 0.0;
 
         // Handle coupon discount
         $discountAmount = 0.0;
@@ -177,11 +211,12 @@ class CheckoutController extends Controller
             }
         }
 
-        // VAT on (subtotal + delivery - discount)
+        // Prices from API are VAT-INCLUSIVE (like mobile app)
+        // Extract VAT from the inclusive price for record-keeping
         $vatRate = (float) Setting::getValue('vat_rate', 15) / 100;
-        $taxableAmount = $subtotal + $deliveryFee - $discountAmount;
-        $vatAmount = round($taxableAmount * $vatRate, 2);
-        $total = $taxableAmount + $vatAmount;
+        $total = $subtotal + $deliveryFee - $discountAmount;
+        // VAT is extracted from the inclusive total: VAT = total - (total / (1 + vatRate))
+        $vatAmount = round($total - ($total / (1 + $vatRate)), 2);
 
         // Convert to halalas (smallest currency unit) for Moyasar
         $amountInHalalas = (int) round($total * 100);
@@ -203,7 +238,7 @@ class CheckoutController extends Controller
             'start_date' => $validated['start_date'],
             'duration' => $validated['duration'],
             'delivery_type' => $validated['delivery_type'],
-            'city' => $validated['city'] ?? null,
+            'city' => $zoneName ?? ($validated['zone_id'] ?? null),
             'street' => $validated['street'] ?? null,
             'building' => $validated['building'] ?? null,
             'coupon' => $couponCode,

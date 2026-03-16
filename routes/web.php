@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\BlogController;
 use App\Http\Controllers\MealPlanController;
+use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -68,6 +69,31 @@ Route::get('/meals', fn () => view('pages.meals'))->name('meals.index');
 Route::get('/checkout', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('checkout.index');
 Route::post('/checkout', [\App\Http\Controllers\CheckoutController::class, 'store'])->name('checkout.store');
 Route::post('/checkout/apply-coupon', [\App\Http\Controllers\CheckoutController::class, 'applyCoupon'])->name('checkout.apply-coupon');
+
+// Subscription routes
+Route::get('/subscriptions', [SubscriptionController::class, 'index'])->name('subscriptions.index');
+Route::get('/subscriptions/{id}', [SubscriptionController::class, 'show'])->name('subscriptions.show');
+
+// AJAX: get plan durations/calories/zones for dynamic checkout
+Route::get('/api/plan/{id}/durations', function (int $id) {
+    $service = app(\App\Services\ExternalDataService::class);
+    return response()->json($service->getPlanDurations($id));
+})->name('api.plan.durations');
+
+Route::get('/api/plan/{id}/calories', function (int $id) {
+    $service = app(\App\Services\ExternalDataService::class);
+    return response()->json($service->getPlanCalories($id));
+})->name('api.plan.calories');
+
+Route::get('/api/zones', function () {
+    $service = app(\App\Services\ExternalDataService::class);
+    return response()->json($service->getZones());
+})->name('api.zones');
+
+Route::get('/api/branches', function () {
+    $service = app(\App\Services\ExternalDataService::class);
+    return response()->json($service->getBranches());
+})->name('api.branches');
 
 // Legal pages
 Route::get('/privacy-policy', fn () => view('pages.privacy'))->name('privacy');
