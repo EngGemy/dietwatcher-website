@@ -6,6 +6,7 @@
     $hardcodedLinks = [
         ['label' => __('Meal Plans'), 'url' => route('meal-plans.index')],
         ['label' => __('Meals'),      'url' => route('meals.index')],
+        ['label' => __('My Subscriptions'), 'url' => route('subscriptions.index')],
         ['label' => __('FAQs'),       'url' => '/#faq'],
         ['label' => __('Contact Us'), 'url' => route('contact.index')],
     ];
