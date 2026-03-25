@@ -4,11 +4,10 @@
     $dynamicUrls = $headerMenu->map(fn($m) => rtrim($m->url ?? '', '/'))->filter()->toArray();
 
     $hardcodedLinks = [
-        ['label' => __('Meal Plans'), 'url' => route('meal-plans.index')],
-        ['label' => __('Meals'),      'url' => route('meals.index')],
-        ['label' => __('My Subscriptions'), 'url' => route('subscriptions.index')],
-        ['label' => __('FAQs'),       'url' => '/#faq'],
-        ['label' => __('Contact Us'), 'url' => route('contact.index')],
+        ['label' => __('Meal Plans'), 'url' => route('meal-plans.index'), 'route' => 'meal-plans.*'],
+        ['label' => __('Market'),     'url' => route('meals.index'),      'route' => 'meals.*'],
+        ['label' => __('Blog'),       'url' => route('blog.index'),       'route' => 'blog.*'],
+        ['label' => __('FAQs'),       'url' => '/#faq',                   'route' => null],
     ];
 
     // Only keep hardcoded links that aren't already in the dynamic menu
@@ -91,7 +90,7 @@
             <div class="header__menu">
                 {{-- Hardcoded links that are NOT in the dynamic menu --}}
                 @foreach($extraLinks as $link)
-                    <a class="header__link" href="{{ $link['url'] }}">{{ $link['label'] }}</a>
+                    <a class="header__link {{ (!empty($link['route']) && request()->routeIs($link['route'])) ? 'header__link--active' : '' }}" href="{{ $link['url'] }}">{{ $link['label'] }}</a>
                 @endforeach
 
                 {{-- Dynamic menu items from database --}}
@@ -101,7 +100,7 @@
                             <button
                                 id="hs-navbar-{{ $menuItem->id }}-dropdown"
                                 type="button"
-                                class="hs-dropdown-toggle header__dropdown-toggle"
+                                class="hs-dropdown-toggle header__dropdown-toggle {{ collect($menuItem->children)->contains(fn($c) => request()->url() === rtrim($c->url, '/')) ? 'header__link--active' : '' }}"
                                 aria-haspopup="menu"
                                 aria-expanded="false"
                                 aria-label="{{ __('Mega Menu') }}"
@@ -126,7 +125,7 @@
                             </div>
                         </div>
                     @elseif($menuItem->type === 'link')
-                        <a class="header__link" href="{{ $menuItem->url }}">
+                        <a class="header__link {{ request()->url() === rtrim($menuItem->url, '/') ? 'header__link--active' : '' }}" href="{{ $menuItem->url }}">
                             {{ $menuItem->label }}
                         </a>
                     @endif
@@ -139,6 +138,29 @@
 <div class="header-spacer" id="header-spacer"></div>
 
 <style>
+/* ─── Active Nav Link ───────────────────────────── */
+.header__link--active {
+    color: var(--color-blue, #2563eb);
+    font-weight: 600;
+    position: relative;
+}
+.header__link--active::after,
+.header__dropdown-toggle.header__link--active::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: var(--color-blue, #2563eb);
+    border-radius: 1px;
+}
+.header__dropdown-toggle.header__link--active {
+    color: var(--color-blue, #2563eb);
+    font-weight: 600;
+    position: relative;
+}
+
 /* ─── Fixed Header ──────────────────────────────── */
 .header-sticky-wrap {
     position: fixed;

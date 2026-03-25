@@ -145,7 +145,7 @@
                         <img src="{{ asset('assets/images/how-old-3.png') }}" class="mb-8 rounded-lg" alt="" />
                         <h3 class="mb-4 text-xl font-semibold md:text-2xl">{{ __('Enjoy Your Meals!') }}</h3>
                         <p class="text-lg text-black/70 md:text-xl">
-                            {{ __('Your meals are ready - fresh, nutritious, and made to enjoy.') }}
+                            {{ __('our meals are ready - fresh, nutritious, and made to enjoy.') }}
                         </p>
                     </div>
                 @endforelse
@@ -228,7 +228,7 @@
                 </p>
             </header>
 
-            <div class="grid gap-8 md:grid-cols-2 md:gap-12 lg:grid-cols-3 xl:grid-cols-4">
+            <div class="grid gap-8 md:grid-cols-2 md:gap-12 lg:grid-cols-4">
                 @forelse($instantMeals as $meal)
                     @php
                         $mealImage = $meal['image_url'] ?? '';
