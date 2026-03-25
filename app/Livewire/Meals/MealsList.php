@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Meals;
 
 use App\Services\ExternalDataService;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 class MealsList extends Component
@@ -21,6 +22,13 @@ class MealsList extends Component
     {
         $service = app(ExternalDataService::class);
         $this->groups = $service->getShopMealGroups();
+    }
+
+    /** Re-render when cart changes so card qty controls stay in sync */
+    #[On('cart-updated')]
+    public function onCartUpdated(): void
+    {
+        // Render is called automatically; session is read fresh in render()
     }
 
     public function updatedSearch(): void
@@ -58,7 +66,6 @@ class MealsList extends Component
         $service = app(ExternalDataService::class);
 
         if ($this->search !== '') {
-            // Search across ALL meals (all pages) for accurate results
             $allMeals = $service->getAllMeals($this->selectedGroup);
 
             $query = mb_strtolower($this->search);
@@ -68,9 +75,8 @@ class MealsList extends Component
                     || str_contains(mb_strtolower($meal['tag_name'] ?? ''), $query);
             }));
 
-            $this->lastPage = 1; // No pagination during search
+            $this->lastPage = 1;
         } else {
-            // Normal paginated browsing
             $filters = ['page' => $this->currentPage];
 
             if ($this->selectedGroup) {
@@ -82,8 +88,12 @@ class MealsList extends Component
             $this->lastPage = (int) ($result['meta']['lastPage'] ?? 1);
         }
 
+        // Pass current cart state so each card can show its qty
+        $cartItems = session()->get('cart', []);
+
         return view('livewire.meals.meals-list', [
-            'meals' => $meals,
+            'meals'     => $meals,
+            'cartItems' => $cartItems,
         ]);
     }
 }

@@ -37,6 +37,31 @@ class CartManager extends Component
         $this->addToCart($planId, $name, $price, $image, $options);
     }
 
+    #[On('decrement-cart-item')]
+    public function handleDecrement(int $planId = 0): void
+    {
+        if ($planId === 0) {
+            return;
+        }
+
+        $key  = 'plan_' . $planId;
+        $cart = session()->get('cart', []);
+
+        if (!isset($cart[$key])) {
+            return;
+        }
+
+        if ($cart[$key]['quantity'] <= 1) {
+            unset($cart[$key]);
+        } else {
+            $cart[$key]['quantity']--;
+        }
+
+        session()->put('cart', $cart);
+        $this->cart = $cart;
+        $this->dispatch('cart-updated');
+    }
+
     public function addToCart(int $planId, string $name, float $price, string $image, array $options = []): void
     {
         $cart = session()->get('cart', []);
