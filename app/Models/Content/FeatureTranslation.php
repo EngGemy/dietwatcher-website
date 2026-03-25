@@ -18,7 +18,7 @@ class FeatureTranslation extends Model
 {
     public $timestamps = true;
 
-    protected $fillable = ['title', 'description'];
+    protected $fillable = ['feature_id', 'locale', 'title', 'description'];
 
     public function feature(): BelongsTo
     {

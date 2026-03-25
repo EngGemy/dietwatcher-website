@@ -78,7 +78,18 @@
   }
 
   .header__link {
-    @apply hover:text-blue focus:text-blue text-gray-600 focus:outline-hidden;
+    @apply hover:text-blue focus:text-blue text-gray-600 focus:outline-hidden transition-colors duration-200 rounded-lg px-3 py-1.5;
+  }
+
+  .header__link--active,
+  .header__link--active:hover,
+  .header__link--active:focus {
+    @apply bg-blue/10 text-blue font-semibold;
+  }
+
+  .header__dropdown-toggle.header__link--active,
+  .header__dropdown-toggle.header__link--active:hover {
+    @apply bg-blue/10 text-blue font-semibold rounded-lg px-3 py-1.5;
   }
 
   .header__dropdown-toggle {
