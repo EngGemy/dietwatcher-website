@@ -41,8 +41,8 @@ class SettingsComposer
             'socialLinkedIn' => Setting::getValue('social_linkedin', '#'),
             
             // App links
-            'appStoreUrl' => Setting::getValue('app_store_url', '#'),
-            'playStoreUrl' => Setting::getValue('play_store_url', '#'),
+            'appStoreUrl' => Setting::getValue('app_store_url', 'https://apps.apple.com/us/app/diet-watchers-eat-healthy/id6460976436'),
+            'playStoreUrl' => Setting::getValue('play_store_url', 'https://play.google.com/store/apps/details?id=com.diet.watchers.app'),
             
             // SEO
             'metaTitle' => Setting::getValue('meta_title_' . $locale, ''),
