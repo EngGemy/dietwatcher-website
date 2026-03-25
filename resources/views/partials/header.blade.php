@@ -16,6 +16,32 @@
         $urlMatch = in_array(rtrim($link['url'], '/'), $dynamicUrls);
         return !$labelMatch && !$urlMatch;
     });
+
+    // Helper: check if a URL matches the current page or a section within it.
+    // Matches exact path OR any sub-path (e.g. /blog matches /blog/my-post).
+    // Skips fragment-only links like /#faq and external URLs.
+    $isActiveUrl = function (string $url) {
+        $currentPath = '/' . ltrim(request()->path(), '/');
+        $parsed = parse_url($url);
+        $linkPath = rtrim($parsed['path'] ?? '/', '/') ?: '/';
+
+        // Skip fragment-only links (e.g. /#faq on the homepage)
+        if ($linkPath === '/' && !empty($parsed['fragment'])) {
+            return false;
+        }
+
+        // Skip external URLs (different host)
+        if (!empty($parsed['host']) && $parsed['host'] !== request()->getHost()) {
+            return false;
+        }
+
+        // Exact match or section match (current path starts with link path)
+        if ($linkPath === '/') {
+            return $currentPath === '/';
+        }
+
+        return $currentPath === $linkPath || str_starts_with($currentPath, $linkPath . '/');
+    };
 @endphp
 <div class="header-sticky-wrap" id="header-wrap">
 <header class="header" id="site-header">
@@ -90,7 +116,7 @@
             <div class="header__menu">
                 {{-- Hardcoded links that are NOT in the dynamic menu --}}
                 @foreach($extraLinks as $link)
-                    <a class="header__link {{ (!empty($link['route']) && request()->routeIs($link['route'])) ? 'header__link--active' : '' }}" href="{{ $link['url'] }}">{{ $link['label'] }}</a>
+                    <a class="header__link {{ (!empty($link['route']) && request()->routeIs($link['route'])) || $isActiveUrl($link['url']) ? 'header__link--active' : '' }}" href="{{ $link['url'] }}">{{ $link['label'] }}</a>
                 @endforeach
 
                 {{-- Dynamic menu items from database --}}
@@ -100,7 +126,7 @@
                             <button
                                 id="hs-navbar-{{ $menuItem->id }}-dropdown"
                                 type="button"
-                                class="hs-dropdown-toggle header__dropdown-toggle {{ collect($menuItem->children)->contains(fn($c) => request()->url() === rtrim($c->url, '/')) ? 'header__link--active' : '' }}"
+                                class="hs-dropdown-toggle header__dropdown-toggle {{ collect($menuItem->children)->contains(fn($c) => $isActiveUrl($c->url ?? '')) ? 'header__link--active' : '' }}"
                                 aria-haspopup="menu"
                                 aria-expanded="false"
                                 aria-label="{{ __('Mega Menu') }}"
@@ -125,7 +151,7 @@
                             </div>
                         </div>
                     @elseif($menuItem->type === 'link')
-                        <a class="header__link {{ request()->url() === rtrim($menuItem->url, '/') ? 'header__link--active' : '' }}" href="{{ $menuItem->url }}">
+                        <a class="header__link {{ $isActiveUrl($menuItem->url ?? '') ? 'header__link--active' : '' }}" href="{{ $menuItem->url }}">
                             {{ $menuItem->label }}
                         </a>
                     @endif
@@ -138,29 +164,6 @@
 <div class="header-spacer" id="header-spacer"></div>
 
 <style>
-/* ─── Active Nav Link ───────────────────────────── */
-.header__link--active {
-    color: var(--color-blue, #2563eb);
-    font-weight: 600;
-    position: relative;
-}
-.header__link--active::after,
-.header__dropdown-toggle.header__link--active::after {
-    content: '';
-    position: absolute;
-    bottom: -4px;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background-color: var(--color-blue, #2563eb);
-    border-radius: 1px;
-}
-.header__dropdown-toggle.header__link--active {
-    color: var(--color-blue, #2563eb);
-    font-weight: 600;
-    position: relative;
-}
-
 /* ─── Fixed Header ──────────────────────────────── */
 .header-sticky-wrap {
     position: fixed;
