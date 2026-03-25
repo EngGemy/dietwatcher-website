@@ -84,12 +84,29 @@
   .header__link--active,
   .header__link--active:hover,
   .header__link--active:focus {
-    @apply bg-blue/10 text-blue font-semibold;
+    @apply bg-blue text-white font-medium border border-transparent shadow-xs;
   }
 
   .header__dropdown-toggle.header__link--active,
   .header__dropdown-toggle.header__link--active:hover {
-    @apply bg-blue/10 text-blue font-semibold rounded-lg px-3 py-1.5;
+    @apply bg-blue text-white font-medium border border-transparent shadow-xs rounded-lg px-3 py-1.5;
+  }
+
+  /* Section-in-view active: brand blue → green gradient pill */
+  .header__link--section-active {
+    background: linear-gradient(90deg, var(--color-blue) 0%, var(--color-green) 100%);
+    color: var(--color-white);
+    font-weight: 500;
+    border: 1px solid transparent;
+    box-shadow: 0 1px 2px 0 rgba(0,0,0,.05);
+  }
+  .header__link--section-active:hover {
+    background: linear-gradient(90deg, #1a8fe0 0%, #35a02e 100%);
+    color: var(--color-white);
+  }
+  .header__link--section-active:focus {
+    background: linear-gradient(90deg, #1a8fe0 0%, #35a02e 100%);
+    color: var(--color-white);
   }
 
   .header__dropdown-toggle {
@@ -106,6 +123,12 @@
 
   .header__dropdown-item {
     @apply hover:text-blue flex items-center gap-x-3.5 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-200 focus:outline-hidden;
+  }
+
+  .header__dropdown-item--active,
+  .header__dropdown-item--active:hover,
+  .header__dropdown-item--active:focus {
+    @apply bg-blue/10 text-blue font-semibold;
   }
   .header__lang {
     @apply hover:text-blue flex items-center gap-x-2 text-sm font-semibold text-gray-800 transition-colors focus:outline-hidden;

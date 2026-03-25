@@ -17,30 +17,56 @@
         return !$labelMatch && !$urlMatch;
     });
 
-    // Helper: check if a URL matches the current page or a section within it.
-    // Matches exact path OR any sub-path (e.g. /blog matches /blog/my-post).
-    // Skips fragment-only links like /#faq and external URLs.
-    $isActiveUrl = function (string $url) {
+    /**
+     * Returns true when the given URL is "active" for the current request.
+     *
+     * Active when:
+     *   • Current path exactly matches the link's path, OR
+     *   • Current path is a child of the link's path (prefix match), which
+     *     covers child routes such as /blog/my-post matching /blog.
+     *
+     * Never active when:
+     *   • The link is a fragment-only anchor on the home page (e.g. /#faq).
+     *     Those are handled client-side by the IntersectionObserver below.
+     *   • The link points to an external host.
+     *   • The link path is "/" and the current path is not exactly "/".
+     */
+    $isActiveUrl = function (string $url): bool {
         $currentPath = '/' . ltrim(request()->path(), '/');
-        $parsed = parse_url($url);
-        $linkPath = rtrim($parsed['path'] ?? '/', '/') ?: '/';
+        $parsed      = parse_url($url);
+        $linkPath    = rtrim($parsed['path'] ?? '/', '/') ?: '/';
 
-        // Skip fragment-only links (e.g. /#faq on the homepage)
+        // Fragment-only links on home (e.g. /#faq) — handled by JS observer
         if ($linkPath === '/' && !empty($parsed['fragment'])) {
             return false;
         }
 
-        // Skip external URLs (different host)
+        // External URLs
         if (!empty($parsed['host']) && $parsed['host'] !== request()->getHost()) {
             return false;
         }
 
-        // Exact match or section match (current path starts with link path)
+        // Home "/" — exact match only (avoids marking every page active)
         if ($linkPath === '/') {
             return $currentPath === '/';
         }
 
+        // Exact match OR prefix/child-route match
         return $currentPath === $linkPath || str_starts_with($currentPath, $linkPath . '/');
+    };
+
+    /**
+     * Combines named-route pattern matching with URL-path matching so
+     * callers need a single call for extra/hardcoded links.
+     *
+     * Named-route patterns (e.g. "blog.*") are checked first because they
+     * are faster and also cover URL structures that differ from the link href.
+     */
+    $isActiveLink = function (array $link) use ($isActiveUrl): bool {
+        if (!empty($link['route']) && request()->routeIs($link['route'])) {
+            return true;
+        }
+        return $isActiveUrl($link['url'] ?? '');
     };
 @endphp
 <div class="header-sticky-wrap" id="header-wrap">
@@ -114,19 +140,28 @@
             role="region"
         >
             <div class="header__menu">
-                {{-- Hardcoded links that are NOT in the dynamic menu --}}
+                {{-- Hardcoded links not in the dynamic menu --}}
                 @foreach($extraLinks as $link)
-                    <a class="header__link {{ (!empty($link['route']) && request()->routeIs($link['route'])) || $isActiveUrl($link['url']) ? 'header__link--active' : '' }}" href="{{ $link['url'] }}">{{ $link['label'] }}</a>
+                    @php $active = $isActiveLink($link); @endphp
+                    <a
+                        class="header__link {{ $active ? 'header__link--active' : '' }}"
+                        href="{{ $link['url'] }}"
+                        @if($active) aria-current="page" @endif
+                    >{{ $link['label'] }}</a>
                 @endforeach
 
                 {{-- Dynamic menu items from database --}}
                 @foreach($headerMenu as $menuItem)
                     @if($menuItem->type === 'dropdown')
+                        @php
+                            $dropdownActive = collect($menuItem->children)
+                                ->contains(fn($c) => $isActiveUrl($c->url ?? ''));
+                        @endphp
                         <div class="hs-dropdown [--adaptive:none] [--strategy:static] [--trigger:hover] sm:[--adaptive:adaptive] sm:[--strategy:fixed]">
                             <button
                                 id="hs-navbar-{{ $menuItem->id }}-dropdown"
                                 type="button"
-                                class="hs-dropdown-toggle header__dropdown-toggle {{ collect($menuItem->children)->contains(fn($c) => $isActiveUrl($c->url ?? '')) ? 'header__link--active' : '' }}"
+                                class="hs-dropdown-toggle header__dropdown-toggle {{ $dropdownActive ? 'header__link--active' : '' }}"
                                 aria-haspopup="menu"
                                 aria-expanded="false"
                                 aria-label="{{ __('Mega Menu') }}"
@@ -144,16 +179,22 @@
                                 aria-labelledby="hs-navbar-{{ $menuItem->id }}-dropdown"
                             >
                                 @foreach($menuItem->children as $subItem)
-                                    <a class="header__dropdown-item" href="{{ $subItem->url }}">
-                                        {{ $subItem->label }}
-                                    </a>
+                                    @php $childActive = $isActiveUrl($subItem->url ?? ''); @endphp
+                                    <a
+                                        class="header__dropdown-item {{ $childActive ? 'header__dropdown-item--active' : '' }}"
+                                        href="{{ $subItem->url }}"
+                                        @if($childActive) aria-current="page" @endif
+                                    >{{ $subItem->label }}</a>
                                 @endforeach
                             </div>
                         </div>
                     @elseif($menuItem->type === 'link')
-                        <a class="header__link {{ $isActiveUrl($menuItem->url ?? '') ? 'header__link--active' : '' }}" href="{{ $menuItem->url }}">
-                            {{ $menuItem->label }}
-                        </a>
+                        @php $active = $isActiveUrl($menuItem->url ?? ''); @endphp
+                        <a
+                            class="header__link {{ $active ? 'header__link--active' : '' }}"
+                            href="{{ $menuItem->url }}"
+                            @if($active) aria-current="page" @endif
+                        >{{ $menuItem->label }}</a>
                     @endif
                 @endforeach
             </div>
@@ -192,28 +233,89 @@
 </style>
 
 <script>
-(function() {
-    var wrap = document.getElementById('header-wrap');
+(function () {
+    /* ─── 1. Sticky header — scroll shadow + spacer sync ─── */
+    var wrap   = document.getElementById('header-wrap');
     var spacer = document.getElementById('header-spacer');
     if (!wrap) return;
 
-    // Set spacer height to match header
-    function setSpacer() {
+    function syncSpacer() {
         if (spacer) spacer.style.height = wrap.offsetHeight + 'px';
     }
-    setSpacer();
-    window.addEventListener('resize', setSpacer);
+    syncSpacer();
+    window.addEventListener('resize', syncSpacer);
 
-    function onScroll() {
-        if (window.scrollY > 10) {
-            wrap.classList.add('is-scrolled');
-        } else {
-            wrap.classList.remove('is-scrolled');
-        }
-        setSpacer();
+    window.addEventListener('scroll', function () {
+        wrap.classList.toggle('is-scrolled', window.scrollY > 10);
+        syncSpacer();
+    }, { passive: true });
+
+    /* ─── 2. Section IntersectionObserver ─────────────────
+     *
+     * Deferred to DOMContentLoaded so that page sections (which are
+     * rendered AFTER this header partial) are in the DOM when we call
+     * getElementById(). Without deferring, the script runs while only
+     * the header exists, so getElementById('faq') would return null.
+     *
+     * Works for both desktop and mobile: Preline collapses the menu
+     * visually but the .header__link elements stay in the DOM.
+     */
+    function initSectionObserver() {
+        var allNavLinks = document.querySelectorAll('.header__link[href]');
+        var observed    = [];
+
+        allNavLinks.forEach(function (link) {
+            var href = link.getAttribute('href') || '';
+            if (href.indexOf('#') === -1) return;
+
+            try {
+                var parsed   = new URL(href, location.origin);
+                var fragment = parsed.hash.slice(1);
+                if (!fragment) return;
+
+                // Only observe sections that live on the current page
+                var linkPath = parsed.pathname.replace(/\/$/, '') || '/';
+                var curPath  = location.pathname.replace(/\/$/, '') || '/';
+                if (linkPath !== curPath) return;
+
+                var section = document.getElementById(fragment);
+                if (section) observed.push({ link: link, section: section });
+            } catch (e) { /* malformed href — skip */ }
+        });
+
+        if (observed.length === 0) return;
+
+        var sectionObserver = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                var match = null;
+                for (var i = 0; i < observed.length; i++) {
+                    if (observed[i].section === entry.target) { match = observed[i]; break; }
+                }
+                if (!match) return;
+
+                match.link.classList.toggle('header__link--section-active', entry.isIntersecting);
+
+                if (entry.isIntersecting) {
+                    match.link.setAttribute('aria-current', 'true');
+                } else {
+                    match.link.removeAttribute('aria-current');
+                }
+            });
+        }, {
+            // -80px top margin accounts for the fixed header height.
+            rootMargin: '-80px 0px -20% 0px',
+            threshold:  0.15
+        });
+
+        observed.forEach(function (o) { sectionObserver.observe(o.section); });
     }
 
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
+    // Defer until the full page DOM is ready; handles both fresh loads
+    // (document.readyState === 'loading') and late-executing scripts.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSectionObserver);
+    } else {
+        initSectionObserver();
+    }
 })();
 </script>

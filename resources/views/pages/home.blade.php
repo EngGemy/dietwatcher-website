@@ -24,10 +24,10 @@
                     <div class="">
                         <p class="mb-2 text-lg">{{ __('Download app') }}</p>
                         <div class="flex flex-wrap items-center gap-1.5">
-                            <a href="#">
+                            <a href="{{ $playStoreUrl }}" target="_blank" rel="noopener">
                                 <img src="{{ asset('assets/images/play.png') }}" alt="{{ __('Google Play') }}" />
                             </a>
-                            <a href="#">
+                            <a href="{{ $appStoreUrl }}" target="_blank" rel="noopener">
                                 <img src="{{ asset('assets/images/store.png') }}" alt="{{ __('App Store') }}" />
                             </a>
                         </div>
@@ -66,16 +66,18 @@
                         $catImageUrl = str_starts_with($catImage, 'http') ? $catImage : asset($catImage);
                         $catFallback = 'assets/images/meal-plan-' . ($loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3) . '.png';
                     @endphp
-                    <a href="{{ route('meal-plans.index', ['category' => $category['id']]) }}" class="rounded-xl border border-gray-300 p-3 group hover:border-blue transition-colors">
-                        <div class="relative overflow-hidden rounded-lg mb-4 bg-gray-100">
+                    <a href="{{ route('meal-plans.index', ['category' => $category['id']]) }}" class="rounded-xl border border-gray-300 p-3">
+                        <div class="relative mb-4 overflow-hidden rounded-lg">
                             <img
                                 src="{{ $catImageUrl }}"
-                                class="w-full h-64 object-cover group-hover:scale-105 transition-transform duration-300"
+                                class="w-full"
                                 alt="{{ $catName }}"
                                 onerror="this.src='{{ asset($catFallback) }}'"
                             />
+                            <div class="absolute inset-0 flex items-center px-5">
+                                <h3 class="max-w-[55%] text-2xl font-bold leading-tight text-white drop-shadow">{{ $catName }}</h3>
+                            </div>
                         </div>
-                        <h3 class="text-xl font-bold text-black mb-2 text-center">{{ $catName }}</h3>
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
                             {{ $catDesc ?: __('Explore our :category meals', ['category' => $catName]) }}
                         </p>
