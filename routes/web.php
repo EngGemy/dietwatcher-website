@@ -107,3 +107,8 @@ Route::post('/otp/verify', [\App\Http\Controllers\OtpController::class, 'verify'
 Route::get('/payment', [\App\Http\Controllers\PaymentController::class, 'form'])->name('payment.form');
 Route::get('/payment/callback', [\App\Http\Controllers\PaymentController::class, 'callback'])->name('payment.callback');
 Route::get('/payment/result', [\App\Http\Controllers\PaymentController::class, 'result'])->name('payment.result');
+
+// ─── AJAX: districts for address picker (Google Maps component) ──────
+Route::get('/api/districts', function () {
+    return response()->json(app(\App\Services\ApiAuthService::class)->getDistricts());
+})->name('api.districts');

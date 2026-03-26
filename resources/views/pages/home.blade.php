@@ -64,18 +64,20 @@
                         $catDesc = $category['description'] ?? '';
                         $catImage = $category['image_url'] ?? 'assets/images/meal-plan-1.png';
                         $catImageUrl = str_starts_with($catImage, 'http') ? $catImage : asset($catImage);
-                        $catFallback = 'assets/images/meal-plan-' . ($loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3) . '.png';
+                        $fallbackIdx = $loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3;
+                        $catFallback = asset('assets/images/meal-plan-' . $fallbackIdx . '.png');
                     @endphp
-                    <a href="{{ route('meal-plans.index', ['category' => $category['id']]) }}" class="rounded-xl border border-gray-300 p-3">
+                    <a href="{{ route('meal-plans.index', ['category' => $category['id']]) }}" class="rounded-xl border border-gray-300 p-3 block transition hover:shadow-md hover:border-blue/40">
                         <div class="relative mb-4 overflow-hidden rounded-lg">
                             <img
                                 src="{{ $catImageUrl }}"
-                                class="w-full"
+                                class="w-full block"
+                                style="aspect-ratio:16/9;object-fit:cover"
                                 alt="{{ $catName }}"
-                                onerror="this.src='{{ asset($catFallback) }}'"
+                                onerror="this.src='{{ $catFallback }}'"
                             />
-                            <div class="absolute inset-0 flex items-center px-5">
-                                <h3 class="max-w-[55%] text-2xl font-bold leading-tight text-white drop-shadow">{{ $catName }}</h3>
+                            <div class="absolute inset-0 flex items-start px-5 py-4">
+                                <h3 class="text-xl font-bold leading-tight text-white" style="max-width:55%;text-shadow:0 1px 3px rgba(0,0,0,.25)">{{ $catName }}</h3>
                             </div>
                         </div>
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
@@ -84,20 +86,20 @@
                     </a>
                 @empty
                     {{-- Fallback static content when no categories from external DB --}}
-                    <a href="#" class="rounded-xl border border-gray-300 p-3">
-                        <img src="{{ asset('assets/images/meal-plan-1.png') }}" class="mb-4" alt="" />
+                    <a href="{{ route('meal-plans.index') }}" class="rounded-xl border border-gray-300 p-3 block transition hover:shadow-md hover:border-blue/40">
+                        <img src="{{ asset('assets/images/meal-plan-1.png') }}" class="mb-4 w-full rounded-lg" alt="{{ __('Weight Management Program') }}" />
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
                             {{ __('Provides balanced, portion-controlled meals to support healthy weight goals.') }}
                         </p>
                     </a>
-                    <a href="#" class="rounded-xl border border-gray-300 p-3">
-                        <img src="{{ asset('assets/images/meal-plan-2.png') }}" class="mb-4" alt="" />
+                    <a href="{{ route('meal-plans.index') }}" class="rounded-xl border border-gray-300 p-3 block transition hover:shadow-md hover:border-blue/40">
+                        <img src="{{ asset('assets/images/meal-plan-2.png') }}" class="mb-4 w-full rounded-lg" alt="{{ __('Medical Condition Program') }}" />
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
                             {{ __('Supports everyday health and manage medical conditions through nutrition.') }}
                         </p>
                     </a>
-                    <a href="#" class="rounded-xl border border-gray-300 p-3">
-                        <img src="{{ asset('assets/images/meal-plan-3.png') }}" class="mb-4" alt="" />
+                    <a href="{{ route('meal-plans.index') }}" class="rounded-xl border border-gray-300 p-3 block transition hover:shadow-md hover:border-blue/40">
+                        <img src="{{ asset('assets/images/meal-plan-3.png') }}" class="mb-4 w-full rounded-lg" alt="{{ __('Life-Style Program') }}" />
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
                             {{ __('Focuses on balanced, nutritious eating for everyday wellness.') }}
                         </p>

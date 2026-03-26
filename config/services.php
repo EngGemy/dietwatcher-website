@@ -46,4 +46,8 @@ return [
         'api_url' => env('MOYASAR_API_URL', 'https://api.moyasar.com/v1'),
     ],
 
+    'google_maps' => [
+        'key' => env('GOOGLE_MAPS_API_KEY', ''),
+    ],
+
 ];

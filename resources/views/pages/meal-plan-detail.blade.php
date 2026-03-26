@@ -402,20 +402,6 @@ $totalPrice = $planPriceInclVat;
                 </div>
             </div>
 
-            {{-- Benefits --}}
-            <div class="hs-accordion rounded-md border border-gray-200 bg-white" id="hs-benefits">
-                <button class="hs-accordion-toggle flex w-full items-center justify-between px-5 py-4 text-start text-2xl font-bold text-gray-800 transition-colors focus:outline-hidden md:p-6" aria-controls="hs-benefits-content">
-                    {{ __('Benefits') }}
-                    <svg class="hs-accordion-active:rotate-180 size-5 text-gray-500 transition-transform duration-300">
-                        <use href="{{ asset('assets/images/icons/sprite.svg#chevron-down') }}"></use>
-                    </svg>
-                </button>
-                <div id="hs-benefits-content" class="hs-accordion-content hidden w-full overflow-hidden transition-[height] duration-300" aria-labelledby="hs-benefits">
-                    <div class="p-5 pt-0! md:p-6">
-                        <p>{{ $plan->benefits ?? __('Improved energy levels, sustainable weight management, and better digestion.') }}</p>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 </section>

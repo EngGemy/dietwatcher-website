@@ -155,7 +155,7 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                                x-model="deliveryType">
                                         <label for="pickup" class="choice-group__label">
                                             <div class="choice-group__content">
-                                                <span class="choice-group__title">{{ __('Pickup from Kitchen') }}</span>
+                                                <span class="choice-group__title">{{ __('Pickup from Branch') }}</span>
                                             </div>
                                             <span class="choice-group__icon"></span>
                                         </label>
@@ -164,6 +164,42 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                 @error('delivery_type')
                                     <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
                                 @enderror
+
+                                {{-- Branch selector — shown right under the pickup option --}}
+                                <div x-show="deliveryType === 'pickup'" x-transition class="mt-4">
+                                    <template x-if="branchesLoading">
+                                        <p class="text-sm text-gray-500">{{ __('Loading branches...') }}</p>
+                                    </template>
+                                    <template x-if="!branchesLoading">
+                                        <div class="space-y-3">
+                                            <select name="branch_id" class="form-control" x-model="selectedBranchId">
+                                                <option value="">{{ __('Select pickup branch') }}</option>
+                                                <template x-for="branch in branches" :key="branch.id">
+                                                    <option :value="branch.id" x-text="(typeof branch.name === 'object' ? (branch.name['{{ app()->getLocale() }}'] || branch.name['en'] || '') : branch.name) + (branch.address ? ' — ' + branch.address : '')"></option>
+                                                </template>
+                                            </select>
+
+                                            {{-- Selected branch detail card --}}
+                                            <template x-if="selectedBranchId">
+                                                <div class="rounded-lg bg-blue-50 p-3">
+                                                    <template x-for="branch in branches.filter(b => String(b.id) === String(selectedBranchId))" :key="branch.id">
+                                                        <div class="flex items-start gap-3">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" style="width:20px;height:20px;flex-shrink:0;margin-top:2px;color:#279ff9" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                                                            </svg>
+                                                            <div>
+                                                                <p class="font-semibold text-sm" x-text="typeof branch.name === 'object' ? (branch.name['{{ app()->getLocale() }}'] || branch.name['en'] || '') : branch.name"></p>
+                                                                <p class="text-xs text-gray-600" x-show="branch.address" x-text="branch.address"></p>
+                                                                <p class="text-xs text-gray-600" x-show="branch.phone" dir="ltr" x-text="branch.phone"></p>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
                             </div>
 
                             {{-- Coupon Code --}}
@@ -250,75 +286,66 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Delivery Address') }}</h3>
 
                         <div class="space-y-4">
-                            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <div>
-                                    <select name="zone_id" class="form-control @error('zone_id') border-red-500 @enderror"
-                                            x-model="selectedZoneId" @change="onZoneChange()">
-                                        <option value="">{{ __('Select Zone') }}</option>
-                                        @foreach($zones as $zone)
-                                            @if($zone['is_active'] ?? true)
-                                            <option value="{{ $zone['id'] }}" {{ old('zone_id') == $zone['id'] ? 'selected' : '' }}>
-                                                {{ is_array($zone['name']) ? ($zone['name'][app()->getLocale()] ?? $zone['name']['en'] ?? '') : $zone['name'] }}
-                                            </option>
-                                            @endif
-                                        @endforeach
-                                    </select>
-                                    @error('zone_id')
-                                        <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                    @enderror
-                                </div>
-                                <div>
-                                    <input type="text" name="street" class="form-control @error('street') border-red-500 @enderror"
-                                           placeholder="{{ __('Street') }}" value="{{ old('street') }}" />
-                                    @error('street')
-                                        <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                    @enderror
-                                </div>
-                            </div>
 
+                            {{-- Zone (kept for delivery-fee calculation) --}}
                             <div>
-                                <input type="text" name="building" class="form-control @error('building') border-red-500 @enderror"
-                                       placeholder="{{ __('Location') }}" value="{{ old('building') }}" />
+                                <select name="zone_id" class="form-control @error('zone_id') border-red-500 @enderror"
+                                        x-model="selectedZoneId" @change="onZoneChange()">
+                                    <option value="">{{ __('Select Zone') }}</option>
+                                    @foreach($zones as $zone)
+                                        @if($zone['is_active'] ?? true)
+                                        <option value="{{ $zone['id'] }}" {{ old('zone_id') == $zone['id'] ? 'selected' : '' }}>
+                                            {{ is_array($zone['name']) ? ($zone['name'][app()->getLocale()] ?? $zone['name']['en'] ?? '') : $zone['name'] }}
+                                        </option>
+                                        @endif
+                                    @endforeach
+                                </select>
+                                @error('zone_id')
+                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                                @enderror
                             </div>
-                        </div>
-                    </div>
 
-                    {{-- Branch Pickup --}}
-                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-show="deliveryType === 'pickup'" x-transition>
-                        <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Pickup Branch') }}</h3>
-                        <div class="space-y-3">
-                            <template x-if="branchesLoading">
-                                <p class="text-sm text-gray-500">{{ __('Loading branches...') }}</p>
-                            </template>
-                            <template x-if="!branchesLoading">
-                                <div class="space-y-3">
-                                    <select name="branch_id" class="form-control" x-model="selectedBranchId">
-                                        <option value="">{{ __('Select pickup branch') }}</option>
-                                        <template x-for="branch in branches" :key="branch.id">
-                                            <option :value="branch.id" x-text="(typeof branch.name === 'object' ? (branch.name['{{ app()->getLocale() }}'] || branch.name['en'] || '') : branch.name) + (branch.address ? ' — ' + branch.address : '')"></option>
-                                        </template>
-                                    </select>
+                            {{-- Google Maps Address Picker --}}
+                            <div
+                                x-data="{
+                                    streetVal: '{{ old('street') }}',
+                                    buildingVal: '{{ old('building') }}',
+                                    onAddressSelected(detail) {
+                                        this.streetVal   = detail.description || '';
+                                        this.buildingVal = detail.description || '';
+                                    }
+                                }"
+                                @address-selected.window="onAddressSelected($event.detail)"
+                            >
+                                {{-- Map picker trigger --}}
+                                <x-google-map-picker
+                                    field-prefix="delivery"
+                                    :placeholder="__('Pick delivery location on map')"
+                                />
 
-                                    {{-- Show selected branch details --}}
-                                    <template x-if="selectedBranchId">
-                                        <div class="rounded-lg bg-blue-50 p-3">
-                                            <template x-for="branch in branches.filter(b => String(b.id) === String(selectedBranchId))" :key="branch.id">
-                                                <div class="flex items-start gap-3">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-blue flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
-                                                    </svg>
-                                                    <div>
-                                                        <p class="font-semibold text-sm" x-text="typeof branch.name === 'object' ? (branch.name['{{ app()->getLocale() }}'] || branch.name['en'] || '') : branch.name"></p>
-                                                        <p class="text-xs text-gray-600" x-show="branch.address" x-text="branch.address"></p>
-                                                        <p class="text-xs text-gray-600" x-show="branch.phone" dir="ltr" x-text="branch.phone"></p>
-                                                    </div>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </template>
+                                {{-- Hidden fields sent to CheckoutController --}}
+                                <input type="hidden" name="street"   x-model="streetVal" />
+                                <input type="hidden" name="building" x-model="buildingVal" />
+
+                                {{-- Editable confirmation of picked address --}}
+                                <div x-show="streetVal" x-transition class="mt-3">
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">{{ __('Address Notes') }}</label>
+                                    <input
+                                        type="text"
+                                        x-model="buildingVal"
+                                        @input="streetVal = buildingVal"
+                                        class="form-control"
+                                        placeholder="{{ __('Apartment, floor, landmark…') }}"
+                                    />
                                 </div>
-                            </template>
+
+                                @error('street')
+                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                                @enderror
+                                @error('building')
+                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                                @enderror
+                            </div>
                         </div>
                     </div>
 
