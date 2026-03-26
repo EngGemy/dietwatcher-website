@@ -13,7 +13,7 @@
             <button
                 type="button"
                 wire:click="filterByCategory(null)"
-                class="tag {{ $selectedCategory === null ? 'tag--active' : '' }}"
+                class="tag"
                 aria-pressed="{{ $selectedCategory === null ? 'true' : 'false' }}">
                 {{ __('All') }}
             </button>
@@ -23,50 +23,50 @@
                     $catName = is_array($category['name'] ?? null)
                         ? ($category['name'][app()->getLocale()] ?? $category['name']['en'] ?? '')
                         : ($category['name'] ?? '');
+                    $catImg  = $category['image_url'] ?? '';
+                    $catImgUrl = $catImg ? (str_starts_with($catImg, 'http') ? $catImg : asset($catImg)) : null;
 
-                    // Map category name to sprite icon ID
-                    $slug = strtolower(preg_replace('/[\s_]+/', '-', $catName));
-                    $iconMap = [
-                        'high-protein'   => 'high-protein',
-                        'vegetarian'     => 'vegetarian',
-                        'balanced'       => 'balanced',
-                        'weight-loss'    => 'weight-loss',
-                        'weight-management' => 'weight-loss',
-                        'drying-plan'    => 'drying-plan',
-                        'drying'         => 'drying-plan',
-                        'bulking-plan'   => 'bulking-plan',
-                        'bulking'        => 'bulking-plan',
-                        'medical'        => 'balanced',
-                        'lifestyle'      => 'balanced',
+                    // Map API category name to sprite icon as fallback
+                    $slug = strtolower(preg_replace('/[^a-z0-9]+/', '-', $catName));
+                    $spriteMap = [
+                        'weight' => 'weight-loss', 'loss' => 'weight-loss',
+                        'protein' => 'high-protein', 'high-protein' => 'high-protein',
+                        'vegetarian' => 'vegetarian', 'vegan' => 'vegetarian',
+                        'balanced' => 'balanced', 'lifestyle' => 'balanced', 'life' => 'balanced',
+                        'dry' => 'drying-plan', 'drying' => 'drying-plan',
+                        'bulk' => 'bulking-plan', 'bulking' => 'bulking-plan',
+                        'medical' => 'balanced', 'condition' => 'balanced',
+                        'muscle' => 'high-protein', 'gain' => 'high-protein',
                     ];
-                    // Try exact slug, then check if any key is contained in the slug
-                    $iconId = $iconMap[$slug] ?? null;
-                    if (!$iconId) {
-                        foreach ($iconMap as $key => $val) {
-                            if (str_contains($slug, $key)) { $iconId = $val; break; }
-                        }
+                    $spriteId = null;
+                    foreach ($spriteMap as $key => $val) {
+                        if (str_contains($slug, $key)) { $spriteId = $val; break; }
                     }
                 @endphp
-                <button
-                    type="button"
-                    wire:click="filterByCategory({{ (int)$category['id'] }})"
-                    class="tag {{ $selectedCategory === (int)$category['id'] ? 'tag--active' : '' }}"
-                    aria-pressed="{{ $selectedCategory === (int)$category['id'] ? 'true' : 'false' }}">
-                    @if($iconId)
-                        <svg style="width:16px;height:16px;flex-shrink:0">
-                            <use href="{{ asset('assets/images/icons/sprite.svg#' . $iconId) }}"></use>
-                        </svg>
-                    @endif
-                    {{ $catName }}
-                </button>
+                @if($catName)
+                    <button
+                        type="button"
+                        wire:click="filterByCategory({{ (int)$category['id'] }})"
+                        class="tag"
+                        aria-pressed="{{ $selectedCategory === (int)$category['id'] ? 'true' : 'false' }}">
+                        @if($catImgUrl)
+                            <img src="{{ $catImgUrl }}" alt="" width="20" height="20" style="width:20px;height:20px;border-radius:50%;object-fit:cover;flex-shrink:0" />
+                        @elseif($spriteId)
+                            <svg>
+                                <use href="{{ asset('assets/images/icons/sprite.svg#' . $spriteId) }}"></use>
+                            </svg>
+                        @endif
+                        {{ $catName }}
+                    </button>
+                @endif
             @endforeach
         </div>
 
-        {{-- Types of Meal dropdown --}}
-        <div class="relative" style="flex-shrink:0">
+        {{-- Types of Meal — native select, no double arrow --}}
+        <div class="relative flex-shrink-0">
             <select
                 wire:model.live="selectedMealType"
-                class="relative ps-4 py-2.5 pe-8 flex gap-x-2 text-nowrap w-full min-w-[180px] cursor-pointer border-b border-gray-300 text-start bg-transparent outline-none appearance-none text-sm text-gray-700"
+                style="appearance:none;-webkit-appearance:none;background-image:none;background:transparent;border:none;border-bottom:1px solid #d1d5db;padding:.625rem 2rem .625rem .25rem;font-size:.875rem;color:#374151;min-width:160px;cursor:pointer;outline:none"
             >
                 <option value="">{{ __('Types of Meal') }}</option>
                 <option value="breakfast">{{ __('Breakfast') }}</option>
@@ -74,9 +74,9 @@
                 <option value="snack">{{ __('Snack') }}</option>
                 <option value="dinner">{{ __('Dinner') }}</option>
             </select>
-            <div class="pointer-events-none absolute end-2.5 top-1/2 -translate-y-1/2">
-                <svg width="16" height="16" style="width:16px;height:16px" class="text-gray-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/>
+            <div class="pointer-events-none absolute end-0 top-1/2 -translate-y-1/2">
+                <svg class="size-4 shrink-0 text-gray-500">
+                    <use href="{{ asset('assets/images/icons/sprite.svg#arrow-sm-down') }}"></use>
                 </svg>
             </div>
         </div>
@@ -107,7 +107,7 @@
 
                         <a href="{{ route('meal-plans.show', $plan['id']) }}" class="plan-card__select">
                             {{ __('Select') }}
-                            <svg width="16" height="16" style="width:16px;height:16px">
+                            <svg>
                                 <use href="{{ asset('assets/images/icons/sprite.svg#check') }}"></use>
                             </svg>
                         </a>
