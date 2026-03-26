@@ -23,25 +23,21 @@
                     $catName = is_array($category['name'] ?? null)
                         ? ($category['name'][app()->getLocale()] ?? $category['name']['en'] ?? '')
                         : ($category['name'] ?? '');
-                    $catImg  = $category['image_url'] ?? '';
-                    $catImgUrl = $catImg ? (str_starts_with($catImg, 'http') ? $catImg : asset($catImg)) : null;
 
-                    // Map API category name to sprite icon as fallback
-                    $slug = strtolower(preg_replace('/[^a-z0-9]+/', '-', $catName));
-                    $spriteMap = [
-                        'weight' => 'weight-loss', 'loss' => 'weight-loss',
-                        'protein' => 'high-protein', 'high-protein' => 'high-protein',
-                        'vegetarian' => 'vegetarian', 'vegan' => 'vegetarian',
-                        'balanced' => 'balanced', 'lifestyle' => 'balanced', 'life' => 'balanced',
-                        'dry' => 'drying-plan', 'drying' => 'drying-plan',
-                        'bulk' => 'bulking-plan', 'bulking' => 'bulking-plan',
-                        'medical' => 'balanced', 'condition' => 'balanced',
-                        'muscle' => 'high-protein', 'gain' => 'high-protein',
-                    ];
-                    $spriteId = null;
-                    foreach ($spriteMap as $key => $val) {
-                        if (str_contains($slug, $key)) { $spriteId = $val; break; }
-                    }
+                    // Map to sprite icon by scanning category name for keywords
+                    $lower = strtolower($catName);
+                    $spriteId = match(true) {
+                        str_contains($lower, 'protein')                    => 'high-protein',
+                        str_contains($lower, 'vegetarian') ||
+                          str_contains($lower, 'vegan')                    => 'vegetarian',
+                        str_contains($lower, 'weight') ||
+                          str_contains($lower, 'loss')                     => 'weight-loss',
+                        str_contains($lower, 'dry')                        => 'drying-plan',
+                        str_contains($lower, 'bulk') ||
+                          str_contains($lower, 'muscle') ||
+                          str_contains($lower, 'gain')                     => 'bulking-plan',
+                        default                                             => 'balanced',
+                    };
                 @endphp
                 @if($catName)
                     <button
@@ -49,35 +45,50 @@
                         wire:click="filterByCategory({{ (int)$category['id'] }})"
                         class="tag"
                         aria-pressed="{{ $selectedCategory === (int)$category['id'] ? 'true' : 'false' }}">
-                        @if($catImgUrl)
-                            <img src="{{ $catImgUrl }}" alt="" width="20" height="20" style="width:20px;height:20px;border-radius:50%;object-fit:cover;flex-shrink:0" />
-                        @elseif($spriteId)
-                            <svg>
-                                <use href="{{ asset('assets/images/icons/sprite.svg#' . $spriteId) }}"></use>
-                            </svg>
-                        @endif
+                        <svg>
+                            <use href="{{ asset('assets/images/icons/sprite.svg#' . $spriteId) }}"></use>
+                        </svg>
                         {{ $catName }}
                     </button>
                 @endif
             @endforeach
         </div>
 
-        {{-- Types of Meal — native select, no double arrow --}}
-        <div class="relative flex-shrink-0">
-            <select
-                wire:model.live="selectedMealType"
-                style="appearance:none;-webkit-appearance:none;background-image:none;background:transparent;border:none;border-bottom:1px solid #d1d5db;padding:.625rem 2rem .625rem .25rem;font-size:.875rem;color:#374151;min-width:160px;cursor:pointer;outline:none"
+        {{-- Types of Meal — custom dropdown, no native arrow conflict --}}
+        <div class="relative flex-shrink-0" x-data="{ open: false, label: '{{ __('Types of Meal') }}' }" @click.outside="open = false">
+            <button
+                type="button"
+                @click="open = !open"
+                class="relative flex items-center gap-x-2 cursor-pointer border-b border-gray-300 ps-1 pe-6 py-2.5 text-sm text-gray-700 min-w-[160px] focus:outline-none whitespace-nowrap"
             >
-                <option value="">{{ __('Types of Meal') }}</option>
-                <option value="breakfast">{{ __('Breakfast') }}</option>
-                <option value="lunch">{{ __('Lunch') }}</option>
-                <option value="snack">{{ __('Snack') }}</option>
-                <option value="dinner">{{ __('Dinner') }}</option>
-            </select>
-            <div class="pointer-events-none absolute end-0 top-1/2 -translate-y-1/2">
-                <svg class="size-4 shrink-0 text-gray-500">
-                    <use href="{{ asset('assets/images/icons/sprite.svg#arrow-sm-down') }}"></use>
-                </svg>
+                <span x-text="label"></span>
+                <div class="pointer-events-none absolute end-0 top-1/2 -translate-y-1/2">
+                    <svg class="size-4 shrink-0 text-gray-500">
+                        <use href="{{ asset('assets/images/icons/sprite.svg#arrow-sm-down') }}"></use>
+                    </svg>
+                </div>
+            </button>
+            <div
+                x-show="open"
+                x-transition
+                class="absolute end-0 top-full z-50 mt-1 w-44 rounded-md border border-gray-200 bg-white p-1 shadow-md"
+                style="display:none"
+            >
+                @foreach(['' => __('All Types'), 'breakfast' => __('Breakfast'), 'lunch' => __('Lunch'), 'snack' => __('Snack'), 'dinner' => __('Dinner')] as $val => $lbl)
+                    <button
+                        type="button"
+                        wire:click="filterByMealType('{{ $val }}')"
+                        @click="label = '{{ $val === '' ? __('Types of Meal') : $lbl }}'; open = false"
+                        class="flex w-full items-center justify-between rounded-md px-4 py-2 text-sm text-gray-800 hover:bg-gray-100 {{ $selectedMealType === $val ? 'font-semibold text-blue' : '' }}"
+                    >
+                        {{ $lbl }}
+                        @if($selectedMealType === $val && $val !== '')
+                            <svg class="size-3.5 text-blue shrink-0">
+                                <use href="{{ asset('assets/images/icons/sprite.svg#check') }}"></use>
+                            </svg>
+                        @endif
+                    </button>
+                @endforeach
             </div>
         </div>
     </div>
