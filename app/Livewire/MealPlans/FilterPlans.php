@@ -11,6 +11,7 @@ use Livewire\Component;
 class FilterPlans extends Component
 {
     public ?int $selectedCategory = null;
+    public string $selectedMealType = '';
     public string $pageTitle = '';
     public string $pageDescription = '';
 
@@ -36,18 +37,21 @@ class FilterPlans extends Component
         $this->selectedCategory = $categoryId;
     }
 
+    public function filterByMealType(string $type): void
+    {
+        $this->selectedMealType = $type;
+    }
+
     public function render()
     {
         $service = app(ExternalDataService::class);
 
-        // Get programs filtered by category_id (API-level filtering)
         $plans = $service->getPrograms($this->selectedCategory);
 
-        // Get categories for filter tabs (from /program-categories, falls back to programs)
         $categories = $service->getCategories();
 
         return view('livewire.meal-plans.filter-plans', [
-            'plans' => $plans,
+            'plans'      => $plans,
             'categories' => $categories,
         ]);
     }
