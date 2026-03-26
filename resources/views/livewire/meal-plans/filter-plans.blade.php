@@ -54,19 +54,17 @@
             @endforeach
         </div>
 
-        {{-- Types of Meal — custom dropdown, no native arrow conflict --}}
+        {{-- Types of Meal — custom Alpine dropdown --}}
         <div class="relative flex-shrink-0" x-data="{ open: false, label: '{{ __('Types of Meal') }}' }" @click.outside="open = false">
             <button
                 type="button"
                 @click="open = !open"
-                class="relative flex items-center gap-x-2 cursor-pointer border-b border-gray-300 ps-1 pe-6 py-2.5 text-sm text-gray-700 min-w-[160px] focus:outline-none whitespace-nowrap"
+                class="flex items-center gap-x-2 cursor-pointer border-b border-gray-300 ps-1 pe-2 py-2.5 text-sm text-gray-700 min-w-[160px] focus:outline-none whitespace-nowrap"
             >
-                <span x-text="label"></span>
-                <div class="pointer-events-none absolute end-0 top-1/2 -translate-y-1/2">
-                    <svg class="size-4 shrink-0 text-gray-500">
-                        <use href="{{ asset('assets/images/icons/sprite.svg#arrow-sm-down') }}"></use>
-                    </svg>
-                </div>
+                <span x-text="label" class="flex-1 text-start"></span>
+                <svg width="16" height="16" style="width:16px;height:16px;flex-shrink:0;color:#6b7280" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m6 9 6 6 6-6"/>
+                </svg>
             </button>
             <div
                 x-show="open"
@@ -78,13 +76,13 @@
                     <button
                         type="button"
                         wire:click="filterByMealType('{{ $val }}')"
-                        @click="label = '{{ $val === '' ? __('Types of Meal') : $lbl }}'; open = false"
-                        class="flex w-full items-center justify-between rounded-md px-4 py-2 text-sm text-gray-800 hover:bg-gray-100 {{ $selectedMealType === $val ? 'font-semibold text-blue' : '' }}"
+                        @click="label = '{{ addslashes($val === '' ? __('Types of Meal') : $lbl) }}'; open = false"
+                        class="flex w-full items-center justify-between rounded-md px-4 py-2 text-sm hover:bg-gray-100 {{ $selectedMealType === $val ? 'font-semibold text-blue-600' : 'text-gray-800' }}"
                     >
                         {{ $lbl }}
                         @if($selectedMealType === $val && $val !== '')
-                            <svg class="size-3.5 text-blue shrink-0">
-                                <use href="{{ asset('assets/images/icons/sprite.svg#check') }}"></use>
+                            <svg width="14" height="14" style="width:14px;height:14px;flex-shrink:0;color:#279ff9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"/>
                             </svg>
                         @endif
                     </button>
