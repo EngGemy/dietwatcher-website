@@ -48,7 +48,7 @@
                         <a href="{{ route('meal-plans.index') }}" class="footer__link">{{ __('Meal Plans') }}</a>
                     </li>
                     <li class="footer__item">
-                        <a href="{{ route('store.index') }}" class="footer__link">{{ __('Store') }}</a>
+                        <a href="{{ route('store.index') }}" class="footer__link">{{ __('Market') }}</a>
                     </li>
                     <li class="footer__item">
                         <a href="{{ route('blog.index') }}" class="footer__link">{{ __('Blog') }}</a>

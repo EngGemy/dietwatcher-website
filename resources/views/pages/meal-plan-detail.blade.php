@@ -26,15 +26,50 @@ if (is_string($rawDesc)) {
     $planDesc = (string) $rawDesc;
 }
 
-// Get image URL — API returns full URL
-$planImage = $plan->image_url ?? '';
-$planImageUrl = (str_starts_with($planImage, 'http')) ? $planImage : ($planImage ? asset($planImage) : asset('assets/images/plan-1.png'));
-$images = $plan->images ?? [$planImageUrl];
-if (empty($images[0])) {
+// Program cover: API profile.image — root-relative paths must use API host, not this Laravel origin
+$externalApiOrigin = rtrim(preg_replace('#/api/?$#i', '', (string) config('services.external_api.url', '')), '/');
+$resolveProgramImage = function (?string $url) use ($externalApiOrigin): string {
+    $url = trim((string) $url);
+    if ($url === '') {
+        return asset('assets/images/plan-1.png');
+    }
+    if (str_starts_with($url, '//')) {
+        return 'https:'.$url;
+    }
+    if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+        return $url;
+    }
+    if (str_starts_with($url, '/') && $externalApiOrigin !== '') {
+        return $externalApiOrigin.$url;
+    }
+
+    return asset(ltrim($url, '/'));
+};
+$rawProgramImage = $plan->profile_image_url ?? $plan->image_url ?? '';
+$planImageUrl = $resolveProgramImage($rawProgramImage);
+$rawGallery = $plan->images ?? null;
+if (! is_array($rawGallery) || empty(array_filter($rawGallery))) {
     $images = [$planImageUrl];
+} else {
+    $images = array_values(array_filter(array_map(
+        static fn ($img) => $resolveProgramImage(is_string($img) ? $img : ''),
+        $rawGallery
+    )));
+    if ($images === []) {
+        $images = [$planImageUrl];
+    }
 }
 
-// Meal types
+// Subscription variants (Full / Morning / …) from /programs/{id} when API returns profile + plans
+$subscriptionPlans = [];
+if (! empty($plan->subscription_plans)) {
+    $subscriptionPlans = is_array($plan->subscription_plans)
+        ? $plan->subscription_plans
+        : json_decode(json_encode($plan->subscription_plans), true) ?? [];
+}
+$hasSubscriptionPlans = count($subscriptionPlans) > 0;
+
+// Meal types (legacy detail shape without subscription_plans)
 $mealTypes = [
     ['id' => 'breakfast', 'name' => __('Breakfast')],
     ['id' => 'lunch', 'name' => __('Lunch')],
@@ -42,13 +77,30 @@ $mealTypes = [
     ['id' => 'snack', 'name' => __('Snack')],
 ];
 
-// Calorie options — prefer API data, fallback to program data
-if (!empty($apiCalories)) {
+// Calorie options — prefer first subscription plan, then API list, then CMS
+if ($hasSubscriptionPlans && ! empty($subscriptionPlans[0]['calories'])) {
+    $calorieOptions = array_map(static function (array $c): array {
+        return [
+            'range' => $c['range'] ?? '',
+            'label' => $c['label'] ?? (($c['amount'] ?? '').' '.__('kcal')),
+            'id' => (int) ($c['id'] ?? 0),
+            'macros' => $c['macros'] ?? null,
+            'is_default' => (bool) ($c['is_default'] ?? false),
+        ];
+    }, $subscriptionPlans[0]['calories']);
+} elseif (!empty($apiCalories)) {
     $calorieOptions = array_map(function ($cal) {
         $min = $cal['min_amount'] ?? 0;
         $max = $cal['max_amount'] ?? 0;
         $range = $min && $max ? "{$min}-{$max}" : ($max ?: $min);
-        return ['range' => $range, 'label' => $range . ' ' . __('kcal'), 'id' => $cal['id'] ?? 0, 'macros' => $cal['macros'] ?? null];
+
+        return [
+            'range' => $range,
+            'label' => $range.' '.__('kcal'),
+            'id' => $cal['id'] ?? 0,
+            'macros' => $cal['macros'] ?? null,
+            'is_default' => (bool) ($cal['is_default'] ?? false),
+        ];
     }, $apiCalories);
 } elseif (!empty($plan->calorie_options)) {
     $calorieOptions = $plan->calorie_options;
@@ -58,8 +110,9 @@ if (!empty($apiCalories)) {
     ];
 }
 
-// Nutritional info — build from first calorie option macros or API program data
-$firstMacros = $calorieOptions[0]['macros'] ?? null;
+// Nutritional info — build from default calorie option macros or API program data
+$defaultCalorieRow = collect($calorieOptions)->firstWhere('is_default', true) ?? ($calorieOptions[0] ?? null);
+$firstMacros = is_array($defaultCalorieRow) ? ($defaultCalorieRow['macros'] ?? null) : null;
 if ($firstMacros) {
     $totalMacros = ($firstMacros['protein'] ?? 0) + ($firstMacros['carbs'] ?? 0) + ($firstMacros['fats'] ?? $firstMacros['fat'] ?? 0);
     $nutrition = [
@@ -87,7 +140,7 @@ if ($firstMacros) {
     ];
 }
 
-// Default meal includes based on type
+// Default meal includes based on type (legacy UI only)
 $mealIncludes = [
     'breakfast' => [
         __('Fresh breakfast dish (protein + carbs)'),
@@ -110,6 +163,17 @@ $mealIncludes = [
         __('Fresh fruit or nuts'),
     ],
 ];
+
+$firstCalRange = '';
+foreach ($calorieOptions as $co) {
+    if (! empty($co['is_default'])) {
+        $firstCalRange = (string) ($co['range'] ?? '');
+        break;
+    }
+}
+if ($firstCalRange === '' && isset($calorieOptions[0]['range'])) {
+    $firstCalRange = (string) $calorieOptions[0]['range'];
+}
 
 // Calculate start date (next day)
 $startDate = now()->addDay()->format('Y-m-d');
@@ -154,37 +218,49 @@ $totalPrice = $planPriceInclVat;
         <div class="mb-10 grid gap-10 md:mb-16 md:grid-cols-2" x-data="planDetail()" x-init="init()">
             {{-- Image Gallery --}}
             <div class="w-full min-w-0">
-                <div data-hs-carousel='{ "loadingClasses": "opacity-0", "isInfinite": true }' class="relative">
-                    <div class="hs-carousel relative w-full">
-                        <div class="mb-5 w-full overflow-hidden rounded-md md:mb-6">
-                            <div class="hs-carousel-body flex h-[400px] flex-nowrap overflow-hidden opacity-0 transition-transform duration-700 md:h-[600px]">
-                                @foreach($images as $index => $image)
-                                    <div class="hs-carousel-slide h-full">
-                                        <img src="{{ $image && str_starts_with($image, 'http') ? $image : ($image ? asset($image) : asset('assets/images/meal-' . ($index + 1) . '.png')) }}" 
-                                             class="size-full object-cover" 
-                                             alt="{{ $planName }} - {{ $index + 1 }}"
-                                             onerror="this.src='{{ asset('assets/images/meal-' . (($index % 3) + 1) . '.png') }}'">
-                                    </div>
-                                @endforeach
-                            </div>
-                        </div>
-
-                        @if(count($images) > 1)
-                            <div class="hs-carousel-pagination mt-0! w-full overflow-x-auto">
-                                <div class="flex flex-row items-center gap-4">
+                @if($hasSubscriptionPlans)
+                    <div class="mb-5 w-full overflow-hidden rounded-md md:mb-6">
+                        <img src="{{ $planImageUrl }}"
+                             x-bind:src="heroImage"
+                             class="h-[400px] size-full object-cover md:h-[600px]"
+                             alt="{{ $planName }}"
+                             referrerpolicy="no-referrer"
+                             decoding="async"
+                             x-on:error="onPlanHeroImageError($event)">
+                    </div>
+                @else
+                    <div data-hs-carousel='{ "loadingClasses": "opacity-0", "isInfinite": true }' class="relative">
+                        <div class="hs-carousel relative w-full">
+                            <div class="mb-5 w-full overflow-hidden rounded-md md:mb-6">
+                                <div class="hs-carousel-body flex h-[400px] flex-nowrap overflow-hidden opacity-0 transition-transform duration-700 md:h-[600px]">
                                     @foreach($images as $index => $image)
-                                        <div class="hs-carousel-pagination-item hs-carousel-active:border-primary size-20 shrink-0 cursor-pointer overflow-hidden rounded-md border-2 border-transparent md:size-28">
-                                            <img src="{{ $image && str_starts_with($image, 'http') ? $image : ($image ? asset($image) : asset('assets/images/meal-' . ($index + 1) . '.png')) }}" 
-                                                 class="size-full object-contain object-center" 
-                                                 alt=""
+                                        <div class="hs-carousel-slide h-full">
+                                            <img src="{{ $image }}"
+                                                 class="size-full object-cover"
+                                                 alt="{{ $planName }} - {{ $index + 1 }}"
                                                  onerror="this.src='{{ asset('assets/images/meal-' . (($index % 3) + 1) . '.png') }}'">
                                         </div>
                                     @endforeach
                                 </div>
                             </div>
-                        @endif
+
+                            @if(count($images) > 1)
+                                <div class="hs-carousel-pagination mt-0! w-full overflow-x-auto">
+                                    <div class="flex flex-row items-center gap-4">
+                                        @foreach($images as $index => $image)
+                                            <div class="hs-carousel-pagination-item hs-carousel-active:border-primary size-20 shrink-0 cursor-pointer overflow-hidden rounded-md border-2 border-transparent md:size-28">
+                                                <img src="{{ $image }}"
+                                                     class="size-full object-contain object-center"
+                                                     alt=""
+                                                     onerror="this.src='{{ asset('assets/images/meal-' . (($index % 3) + 1) . '.png') }}'">
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+                        </div>
                     </div>
-                </div>
+                @endif
             </div>
 
             {{-- Plan Details & Options --}}
@@ -197,41 +273,72 @@ $totalPrice = $planPriceInclVat;
                     </p>
                 </div>
 
-                {{-- Meal Type Selection --}}
+                {{-- Plan variant (API menus) or legacy meal type --}}
                 <div class="rounded-md border border-gray-200 bg-white p-5">
-                    <p class="mb-3 text-lg md:text-xl">{{ __('Choose your meal type') }}</p>
+                    @if($hasSubscriptionPlans)
+                        <p class="mb-3 text-lg md:text-xl">{{ __('Choose your plan') }}</p>
 
-                    <div class="mb-6 flex flex-wrap gap-3">
-                        @foreach($mealTypes as $type)
-                            <div class="choice-group__item">
-                                <input type="radio" 
-                                       name="meal-type" 
-                                       id="meal-{{ $type['id'] }}" 
-                                       class="choice-group__input"
-                                       value="{{ $type['id'] }}"
-                                       x-model="selectedMeal"
-                                       {{ $loop->first ? 'checked' : '' }}>
-                                <label for="meal-{{ $type['id'] }}" class="choice-group__label justify-center">
-                                    <span class="choice-group__icon"></span>
-                                    {{ $type['name'] }}
-                                </label>
-                            </div>
-                        @endforeach
-                    </div>
+                        <div class="mb-6 flex flex-wrap gap-3">
+                            @foreach($subscriptionPlans as $sp)
+                                @php $spId = (int) ($sp['id'] ?? 0); @endphp
+                                <div class="choice-group__item">
+                                    <input type="radio"
+                                           name="subscription-plan"
+                                           id="subplan-{{ $spId }}"
+                                           class="choice-group__input"
+                                           value="{{ $spId }}"
+                                           x-model.number="selectedSubscriptionPlanId"
+                                           {{ $loop->first ? 'checked' : '' }}>
+                                    <label for="subplan-{{ $spId }}" class="choice-group__label justify-center max-w-full text-center">
+                                        <span class="choice-group__icon"></span>
+                                        <span class="text-start">{{ $sp['name'] ?? '' }}</span>
+                                    </label>
+                                </div>
+                            @endforeach
+                        </div>
 
-                    {{-- Dynamic Includes based on meal type --}}
-                    <div class="rounded-md bg-gray-200 p-5">
-                        <template x-for="(items, type) in {{ json_encode($mealIncludes) }}" :key="type">
-                            <div x-show="selectedMeal === type" x-transition>
-                                <p class="mb-2 text-lg font-semibold" x-text="selectedMeal.charAt(0).toUpperCase() + selectedMeal.slice(1) + ' {{ __('Includes') }}'"></p>
-                                <ul class="list-disc space-y-1.5 ps-6">
-                                    <template x-for="item in items" :key="item">
-                                        <li x-text="item"></li>
-                                    </template>
-                                </ul>
-                            </div>
-                        </template>
-                    </div>
+                        <div class="rounded-md bg-gray-200 p-5">
+                            <p class="mb-2 text-lg font-semibold">{{ __("What's included") }}</p>
+                            <ul class="list-disc space-y-1.5 ps-6">
+                                <template x-for="line in activeMenusDisplay" :key="line">
+                                    <li x-text="line"></li>
+                                </template>
+                            </ul>
+                        </div>
+                    @else
+                        <p class="mb-3 text-lg md:text-xl">{{ __('Choose your meal type') }}</p>
+
+                        <div class="mb-6 flex flex-wrap gap-3">
+                            @foreach($mealTypes as $type)
+                                <div class="choice-group__item">
+                                    <input type="radio"
+                                           name="meal-type"
+                                           id="meal-{{ $type['id'] }}"
+                                           class="choice-group__input"
+                                           value="{{ $type['id'] }}"
+                                           x-model="selectedMeal"
+                                           {{ $loop->first ? 'checked' : '' }}>
+                                    <label for="meal-{{ $type['id'] }}" class="choice-group__label justify-center">
+                                        <span class="choice-group__icon"></span>
+                                        {{ $type['name'] }}
+                                    </label>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <div class="rounded-md bg-gray-200 p-5">
+                            <template x-for="(items, type) in {{ json_encode($mealIncludes) }}" :key="type">
+                                <div x-show="selectedMeal === type" x-transition>
+                                    <p class="mb-2 text-lg font-semibold" x-text="selectedMeal.charAt(0).toUpperCase() + selectedMeal.slice(1) + ' {{ __('Includes') }}'"></p>
+                                    <ul class="list-disc space-y-1.5 ps-6">
+                                        <template x-for="item in items" :key="item">
+                                            <li x-text="item"></li>
+                                        </template>
+                                    </ul>
+                                </div>
+                            </template>
+                        </div>
+                    @endif
                 </div>
 
                 {{-- Start Date --}}
@@ -252,20 +359,17 @@ $totalPrice = $planPriceInclVat;
                     <p class="mb-3 text-lg md:text-xl">{{ __('Choose calories') }}</p>
 
                     <div class="selection-group">
-                        @foreach($calorieOptions as $option)
+                        <template x-for="(opt, index) in calories" :key="opt.id || opt.range || index">
                             <div class="selection-group__item">
-                                <input type="radio" 
-                                       name="calories" 
-                                       id="cal-{{ $loop->index }}" 
+                                <input type="radio"
+                                       name="calories"
+                                       :id="'cal-opt-' + index"
                                        class="selection-group__input"
-                                       value="{{ $option['range'] }}"
-                                       x-model="selectedCalories"
-                                       {{ $loop->first ? 'checked' : '' }}>
-                                <label for="cal-{{ $loop->index }}" class="selection-group__label">
-                                    {{ $option['label'] }}
-                                </label>
+                                       :value="opt.range"
+                                       x-model="selectedCalories">
+                                <label :for="'cal-opt-' + index" class="selection-group__label" x-text="opt.label"></label>
                             </div>
-                        @endforeach
+                        </template>
                     </div>
                 </div>
 
@@ -491,7 +595,15 @@ $totalPrice = $planPriceInclVat;
 function planDetail() {
     return {
         selectedMeal: 'breakfast',
-        selectedCalories: '{{ $calorieOptions[0]['range'] ?? '' }}',
+        selectedSubscriptionPlanId: null,
+        hasSubscriptionPlans: {{ $hasSubscriptionPlans ? 'true' : 'false' }},
+        subscriptionPlans: @json($subscriptionPlans),
+        externalMediaOrigin: @json($externalApiOrigin),
+        defaultProgramImage: @json($planImageUrl),
+        heroImage: @json($planImageUrl),
+        heroImageErrorStage: 0,
+        activeMenusDisplay: @json($hasSubscriptionPlans ? ($subscriptionPlans[0]['menus_display'] ?? []) : []),
+        selectedCalories: @json($firstCalRange),
         selectedDurationId: '',
         planPrice: {{ $planPrice }},
         vatRate: {{ $vatRate }},
@@ -501,7 +613,6 @@ function planDetail() {
         originalPrice: {{ $offerPrice > 0 ? $planPrice : 0 }},
         vatAmount: {{ $vatInPrice }},
 
-        // Nutritional info (reactive)
         currentNutrition: {
             carbs: '{{ $nutrition['carbs']['amount'] ?? '—' }}',
             carbsPercent: {{ $nutrition['carbs']['percent'] ?? 33 }},
@@ -511,50 +622,121 @@ function planDetail() {
             fatPercent: {{ $nutrition['fat']['percent'] ?? 33 }},
         },
 
+        normalizeImageUrl(s) {
+            if (!s || typeof s !== 'string') return '';
+            const u = s.trim();
+            if (u.startsWith('//')) return 'https:' + u;
+            if (/^https?:\/\//i.test(u)) return u;
+            if (u.startsWith('/') && this.externalMediaOrigin) {
+                return this.externalMediaOrigin + u;
+            }
+            if (this.externalMediaOrigin && /^(storage|uploads?)\//i.test(u)) {
+                return this.externalMediaOrigin + '/' + u;
+            }
+            return '';
+        },
+
+        onPlanHeroImageError() {
+            const fallback = '{{ asset('assets/images/plan-1.png') }}';
+            if (this.heroImageErrorStage === 0) {
+                this.heroImageErrorStage = 1;
+                if (this.heroImage !== this.defaultProgramImage) {
+                    this.heroImage = this.defaultProgramImage;
+                } else {
+                    this.heroImage = fallback;
+                }
+                return;
+            }
+            if (this.heroImageErrorStage === 1) {
+                this.heroImageErrorStage = 2;
+                this.heroImage = fallback;
+            }
+        },
+
+        applySubscriptionPlan(plan) {
+            if (!plan) return;
+            this.heroImageErrorStage = 0;
+            const variantUrl = this.normalizeImageUrl(plan.image_url || '');
+            this.heroImage = variantUrl || this.defaultProgramImage;
+            this.activeMenusDisplay = Array.isArray(plan.menus_display) ? plan.menus_display : [];
+
+            this.durations = (plan.durations || []).map(d => ({
+                ...d,
+                price_incl_vat: d.price,
+            }));
+
+            this.calories = (plan.calories || []).map(c => ({
+                range: c.range,
+                label: c.label || (c.amount ? c.amount + ' {{ __('kcal') }}' : ''),
+                id: c.id || 0,
+                is_default: !!c.is_default,
+                macros: c.macros || null,
+            }));
+
+            const defaultCal = this.calories.find(c => c.is_default) || this.calories[0];
+            if (defaultCal) {
+                this.selectedCalories = defaultCal.range;
+                this.updateNutrition(defaultCal);
+            }
+
+            const defaultDur = this.durations.find(d => d.is_default) || this.durations[0];
+            if (defaultDur) {
+                this.selectedDurationId = defaultDur.id;
+                this.onDurationChange(defaultDur);
+            } else {
+                this.selectedDurationId = '';
+            }
+        },
+
         async init() {
-            // Fetch durations from API
-            try {
-                const durRes = await fetch('{{ route('api.plan.durations', $plan->id) }}');
-                const durData = await durRes.json();
-                if (durData.length > 0) {
-                    // Prices from API are already VAT-inclusive
-                    this.durations = durData.map(d => ({
-                        ...d,
-                        price_incl_vat: d.price
-                    }));
-                    // Select default duration
-                    const defaultDur = this.durations.find(d => d.is_default) || this.durations[0];
-                    if (defaultDur) {
-                        this.selectedDurationId = defaultDur.id;
-                        this.onDurationChange(defaultDur);
+            if (this.hasSubscriptionPlans && this.subscriptionPlans.length) {
+                this.selectedSubscriptionPlanId = Number(this.subscriptionPlans[0].id);
+                this.applySubscriptionPlan(this.subscriptionPlans[0]);
+                this.$watch('selectedSubscriptionPlanId', (id) => {
+                    const plan = this.subscriptionPlans.find(p => Number(p.id) === Number(id));
+                    if (plan) this.applySubscriptionPlan(plan);
+                });
+            } else {
+                try {
+                    const durRes = await fetch('{{ route('api.plan.durations', $plan->id) }}');
+                    const durData = await durRes.json();
+                    if (durData.length > 0) {
+                        this.durations = durData.map(d => ({
+                            ...d,
+                            price_incl_vat: d.price,
+                        }));
+                        const defaultDur = this.durations.find(d => d.is_default) || this.durations[0];
+                        if (defaultDur) {
+                            this.selectedDurationId = defaultDur.id;
+                            this.onDurationChange(defaultDur);
+                        }
                     }
+                } catch (e) {
+                    console.warn('Could not fetch plan durations:', e);
                 }
-            } catch (e) {
-                console.warn('Could not fetch plan durations:', e);
+
+                try {
+                    const calRes = await fetch('{{ route('api.plan.calories', $plan->id) }}');
+                    const calData = await calRes.json();
+                    if (calData.length > 0) {
+                        this.calories = calData.map(c => ({
+                            range: (c.min_amount || 0) + '-' + (c.max_amount || 0),
+                            label: (c.min_amount || 0) + '-' + (c.max_amount || 0) + ' {{ __('kcal') }}',
+                            id: c.id || 0,
+                            is_default: !!c.is_default,
+                            macros: c.macros || null,
+                        }));
+                        const defaultCal = this.calories.find(c => c.is_default) || this.calories[0];
+                        if (defaultCal) {
+                            this.selectedCalories = defaultCal.range;
+                            this.updateNutrition(defaultCal);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Could not fetch plan calories:', e);
+                }
             }
 
-            // Fetch calories from API
-            try {
-                const calRes = await fetch('{{ route('api.plan.calories', $plan->id) }}');
-                const calData = await calRes.json();
-                if (calData.length > 0) {
-                    this.calories = calData.map(c => ({
-                        range: (c.min_amount || 0) + '-' + (c.max_amount || 0),
-                        label: (c.min_amount || 0) + '-' + (c.max_amount || 0) + ' {{ __('kcal') }}',
-                        id: c.id || 0,
-                        macros: c.macros || null,
-                    }));
-                    const defaultCal = calData.find(c => c.is_default) || calData[0];
-                    if (defaultCal) {
-                        this.selectedCalories = (defaultCal.min_amount || 0) + '-' + (defaultCal.max_amount || 0);
-                        this.updateNutrition(this.calories[0]);
-                    }
-                }
-            } catch (e) {
-                console.warn('Could not fetch plan calories:', e);
-            }
-
-            // Watch calorie selection to update nutritional info
             this.$watch('selectedCalories', (val) => {
                 const cal = this.calories.find(c => c.range === val);
                 if (cal) this.updateNutrition(cal);
@@ -580,22 +762,34 @@ function planDetail() {
         },
 
         onDurationChange(dur) {
-            // Price from API is already VAT-inclusive
-            const priceInclVat = dur.price;
-            this.displayPrice = priceInclVat;
-            // Extract VAT from inclusive price for display
-            this.vatAmount = Math.round((priceInclVat - (priceInclVat / (1 + this.vatRate))) * 100) / 100;
+            if (!dur) return;
+            const price = dur.price || 0;
+            const offer = dur.offer_price || 0;
+            if (offer > 0 && offer < price) {
+                this.displayPrice = offer;
+                this.originalPrice = price;
+            } else {
+                this.displayPrice = price;
+                this.originalPrice = 0;
+            }
+            const incl = this.displayPrice;
+            this.vatAmount = Math.round((incl - (incl / (1 + this.vatRate))) * 100) / 100;
         },
 
         subscribeNow() {
             let url = '{{ route('checkout.index') }}?plan_id={{ $plan->id }}' +
-                '&meal_type=' + this.selectedMeal +
-                '&calories=' + this.selectedCalories;
+                '&calories=' + encodeURIComponent(this.selectedCalories);
             if (this.selectedDurationId) {
-                url += '&duration_id=' + this.selectedDurationId;
+                url += '&duration_id=' + encodeURIComponent(this.selectedDurationId);
             }
+            if (this.hasSubscriptionPlans && this.selectedSubscriptionPlanId) {
+                url += '&subscription_plan_id=' + encodeURIComponent(this.selectedSubscriptionPlanId);
+            } else {
+                url += '&meal_type=' + encodeURIComponent(this.selectedMeal);
+            }
+            url += '&plan_total=' + encodeURIComponent(String(this.displayPrice));
             window.location.href = url;
-        }
+        },
     };
 }
 </script>

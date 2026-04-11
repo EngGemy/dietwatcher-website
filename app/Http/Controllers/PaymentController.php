@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\PaymentStatus;
+use App\Livewire\Cart\CartManager;
 use App\Models\Payment;
 use App\Services\Payment\MoyasarPaymentService;
 use App\Services\SmsService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
-use Illuminate\Http\RedirectResponse;
 
 class PaymentController extends Controller
 {
@@ -28,7 +29,7 @@ class PaymentController extends Controller
             ->whereIn('status', [PaymentStatus::PENDING, PaymentStatus::FAILED])
             ->first();
 
-        if (!$payment) {
+        if (! $payment) {
             return redirect()->route('checkout.index')
                 ->with('error', __('payment.session_expired'));
         }
@@ -73,8 +74,9 @@ class PaymentController extends Controller
         // Find payment by order number
         $payment = Payment::where('order_number', $orderNumber)->first();
 
-        if (!$payment) {
+        if (! $payment) {
             Log::error('Payment not found for callback', ['order' => $orderNumber]);
+
             return redirect()->route('checkout.index')
                 ->with('error', __('payment.errors.generic'));
         }
@@ -103,7 +105,7 @@ class PaymentController extends Controller
         // Verify payment with Moyasar API
         $response = $this->paymentService->verify($moyasarId);
 
-        if (!$response) {
+        if (! $response) {
             Log::error('Could not verify payment with Moyasar', [
                 'moyasar_id' => $moyasarId,
             ]);
@@ -129,7 +131,8 @@ class PaymentController extends Controller
 
         // Clear cart and send confirmation SMS on successful payment
         if ($payment->status === PaymentStatus::PAID) {
-            session()->forget('cart');
+            session()->forget(CartManager::SESSION_MARKET);
+            session()->forget(CartManager::SESSION_SUBSCRIPTION);
 
             try {
                 $message = __('sms.order_confirmed', [
@@ -156,7 +159,7 @@ class PaymentController extends Controller
     {
         $payment = Payment::where('order_number', $request->query('order'))->first();
 
-        if (!$payment) {
+        if (! $payment) {
             return redirect()->route('home');
         }
 

@@ -12,8 +12,8 @@
                 </p>
             </header>
 
-            <div class="mx-auto max-w-4xl rounded-md bg-white p-6 md:p-10">
-                <div class="prose prose-gray max-w-none">
+            <div class="mx-auto max-w-4xl rounded-md bg-white p-6 md:p-10 text-start">
+                <div class="legal-body max-w-none space-y-5 text-gray-800 [&_h3]:mt-8 [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-gray-900 [&_h4]:mt-4 [&_h4]:font-semibold [&_h4]:text-gray-900 [&_p]:mb-3 [&_p]:leading-relaxed [&_ul]:my-3 [&_ul]:list-disc [&_ul]:ps-5 [&_li]:my-1 [&_a]:text-blue-600 [&_a]:underline">
 
                     <h3>{{ __('Acceptance of Terms') }}</h3>
                     <p>{{ __('By accessing or using the Diet Watchers website and mobile application, you agree to be bound by these Terms & Conditions. If you do not agree to these terms, please do not use our services.') }}</p>
@@ -22,7 +22,7 @@
                     <p>{{ __('Diet Watchers provides personalized meal plan subscriptions and individual meal orders delivered to your location. Our services include:') }}</p>
                     <ul>
                         <li>{{ __('Customized meal plans based on your dietary goals') }}</li>
-                        <li>{{ __('Individual meal orders from our store') }}</li>
+                        <li>{{ __('Individual meal orders from our Market') }}</li>
                         <li>{{ __('Nutritional guidance and meal recommendations') }}</li>
                         <li>{{ __('Scheduled meal delivery services') }}</li>
                     </ul>

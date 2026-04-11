@@ -8,13 +8,17 @@ $firstItem = collect($cart)->first();
 $planName = $firstItem['name'] ?? __('Order');
 $cartCount = collect($cart)->sum('quantity');
 $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['duration_days']));
+$firstPlanForPrice = $hasPlanItems ? collect($cart)->first(fn($item) => !empty($item['options']['duration_days'])) : null;
+$planDurationDays = (int) ($firstPlanForPrice['options']['duration_days'] ?? 28);
+$planLinePrice = (float) ($firstPlanForPrice['price'] ?? 0);
+$planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 0;
 @endphp
 
 @section('title', __('Checkout') . ' | ' . $siteName)
 @section('description', __('Complete your order to start your healthy journey'))
 
 @section('content')
-<section class="bg-gray-200 pt-10 pb-28">
+<section class="checkout-page bg-gray-200 pt-10 pb-32 min-h-[60vh]">
     <div class="container max-w-[1420px]">
         {{-- Breadcrumb --}}
         <ol class="breadcrumb">
@@ -44,12 +48,16 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
             </li>
         </ol>
 
-        <form action="{{ route('checkout.store') }}" method="POST" x-data="checkoutPage()" @submit.prevent="submitForm($event)">
+        <form action="{{ route('checkout.store') }}" method="POST" class="checkout-page__form"
+              x-data="checkoutPage()"
+              @address-selected.window="handleAddressFromMap($event)"
+              @submit.prevent="submitForm($event)">
             @csrf
 
-            <div class="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                {{-- ── Left Column: Options & Info ─────────────────── --}}
-                <div>
+            {{-- Desktop: 50/50 two-column layout (matches Figma / static checkout) --}}
+            <div class="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start lg:gap-x-10">
+                {{-- Left: form steps --}}
+                <div class="order-1 min-w-0">
                     {{-- Select Options --}}
                     <div class="rounded-md border border-gray-200 bg-white p-5">
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Select Options') }}</h3>
@@ -87,54 +95,96 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                 @enderror
                             </div>
 
-                            {{-- Duration (only for meal plan subscriptions) --}}
+                            {{-- Duration: subscription = selectable cards (server + client fetch + cart fallback); meals = weekly/monthly radios --}}
                             @if($hasPlanItems)
-                            <div>
-                                <p class="mb-3 text-lg md:text-xl">{{ __('Duration') }}</p>
-                                <div class="choice-group">
-                                    <div class="choice-group__item">
-                                        <input type="radio" name="duration" id="weekly" class="choice-group__input"
-                                               value="weekly" {{ old('duration') === 'weekly' ? 'checked' : '' }}
-                                               x-model="duration">
-                                        <label for="weekly" class="choice-group__label">
-                                            <div class="choice-group__content">
-                                                <span class="choice-group__title">{{ __('Weekly') }}</span>
-                                            </div>
-                                            <span class="choice-group__icon"></span>
-                                        </label>
-                                    </div>
-                                    <div class="choice-group__item">
-                                        <input type="radio" name="duration" id="monthly" class="choice-group__input"
-                                               value="monthly" {{ old('duration', 'monthly') === 'monthly' ? 'checked' : '' }}
-                                               x-model="duration">
-                                        <label for="monthly" class="choice-group__label">
-                                            <div class="choice-group__content">
-                                                <span class="choice-group__title">{{ __('Monthly') }}</span>
-                                            </div>
-                                            <span class="choice-group__icon"></span>
-                                        </label>
-                                    </div>
-                                    <div class="choice-group__item">
-                                        <input type="radio" name="duration" id="3months" class="choice-group__input"
-                                               value="3months" {{ old('duration') === '3months' ? 'checked' : '' }}
-                                               x-model="duration">
-                                        <label for="3months" class="choice-group__label">
-                                            <div class="choice-group__content">
-                                                <span class="choice-group__title">{{ __('3 Months') }}</span>
-                                            </div>
-                                            <span class="choice-group__icon"></span>
-                                        </label>
-                                    </div>
-                                </div>
-                                @error('duration')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
-                            </div>
-                            @else
                                 <input type="hidden" name="duration" value="once" />
+                                <div>
+                                    <p class="mb-3 text-lg md:text-xl">{{ __('Duration') }}</p>
+                                    <p x-show="durationsLoading" x-cloak class="mb-3 text-sm text-gray-500">{{ __('Loading...') }}</p>
+                                    <div x-show="! durationsLoading && planDurations.length" x-cloak class="choice-group flex-wrap gap-3">
+                                        <template x-for="(d, idx) in planDurations" :key="'pd-' + idx + '-' + (d.id ?? 'x')">
+                                            <div class="min-w-[140px] flex-1">
+                                                <div x-show="Number(d.id) > 0" class="choice-group__item">
+                                                    <input
+                                                        type="radio"
+                                                        name="plan_duration_id"
+                                                        class="choice-group__input"
+                                                        :id="'plan-dur-' + d.id"
+                                                        :value="String(d.id)"
+                                                        x-model="selectedPlanDurationId"
+                                                    />
+                                                    <label class="choice-group__label min-h-[4.5rem]" :for="'plan-dur-' + d.id">
+                                                        <div class="choice-group__content">
+                                                            <span class="choice-group__title" x-text="durationCardTitle(d)"></span>
+                                                            <span class="choice-group__subtext" x-show="(d.price_per_day || 0) > 0"><span x-text="'SAR ' + Number(d.price_per_day).toFixed(2)"></span> / {{ __('day') }}</span>
+                                                        </div>
+                                                        <span class="choice-group__icon"></span>
+                                                    </label>
+                                                </div>
+                                                <div x-show="Number(d.id) <= 0" class="flex min-h-[4.5rem] items-start justify-between gap-3 rounded-xl border-2 border-blue bg-gradient-to-br from-blue to-[#1a8ae0] px-4 py-3 text-white shadow-md">
+                                                    <div class="min-w-0">
+                                                        <p class="text-base font-semibold leading-snug" x-text="durationCardTitle(d)"></p>
+                                                        <p class="mt-1 text-sm font-semibold text-white/90" x-show="(d.price_per_day || 0) > 0"><span x-text="'SAR ' + Number(d.price_per_day).toFixed(2)"></span> / {{ __('day') }}</p>
+                                                    </div>
+                                                    <span class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2 border-white">
+                                                        <span class="size-2 rounded-full bg-white"></span>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <p x-show="! durationsLoading && ! planDurations.length" x-cloak class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                        {{ __('Could not load duration options. Please return to the meal plan and try again.') }}
+                                    </p>
+                                    @error('plan_duration_id')
+                                        <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                                    @enderror
+                                </div>
+                            @else
+                                <div>
+                                    <p class="mb-3 text-lg md:text-xl">{{ __('Duration') }}</p>
+                                    <div class="choice-group">
+                                        <div class="choice-group__item">
+                                            <input type="radio" name="duration" id="weekly" class="choice-group__input"
+                                                   value="weekly" {{ old('duration') === 'weekly' ? 'checked' : '' }}
+                                                   x-model="duration">
+                                            <label for="weekly" class="choice-group__label">
+                                                <div class="choice-group__content">
+                                                    <span class="choice-group__title">{{ __('Weekly') }}</span>
+                                                </div>
+                                                <span class="choice-group__icon"></span>
+                                            </label>
+                                        </div>
+                                        <div class="choice-group__item">
+                                            <input type="radio" name="duration" id="monthly" class="choice-group__input"
+                                                   value="monthly" {{ old('duration', 'monthly') === 'monthly' ? 'checked' : '' }}
+                                                   x-model="duration">
+                                            <label for="monthly" class="choice-group__label">
+                                                <div class="choice-group__content">
+                                                    <span class="choice-group__title">{{ __('Monthly') }}</span>
+                                                </div>
+                                                <span class="choice-group__icon"></span>
+                                            </label>
+                                        </div>
+                                        <div class="choice-group__item">
+                                            <input type="radio" name="duration" id="3months" class="choice-group__input"
+                                                   value="3months" {{ old('duration') === '3months' ? 'checked' : '' }}
+                                                   x-model="duration">
+                                            <label for="3months" class="choice-group__label">
+                                                <div class="choice-group__content">
+                                                    <span class="choice-group__title">{{ __('3 Months') }}</span>
+                                                </div>
+                                                <span class="choice-group__icon"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    @error('duration')
+                                        <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                                    @enderror
+                                </div>
                             @endif
 
-                            {{-- Delivery Preference --}}
+                            {{-- Delivery preference (same card as reference / Figma) --}}
                             <div>
                                 <p class="mb-3 text-lg md:text-xl">{{ __('Delivery Preference') }}</p>
                                 <div class="choice-group choice-group--two">
@@ -164,42 +214,6 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                 @error('delivery_type')
                                     <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
                                 @enderror
-
-                                {{-- Branch selector — shown right under the pickup option --}}
-                                <div x-show="deliveryType === 'pickup'" x-transition class="mt-4">
-                                    <template x-if="branchesLoading">
-                                        <p class="text-sm text-gray-500">{{ __('Loading branches...') }}</p>
-                                    </template>
-                                    <template x-if="!branchesLoading">
-                                        <div class="space-y-3">
-                                            <select name="branch_id" class="form-control" x-model="selectedBranchId">
-                                                <option value="">{{ __('Select pickup branch') }}</option>
-                                                <template x-for="branch in branches" :key="branch.id">
-                                                    <option :value="branch.id" x-text="(typeof branch.name === 'object' ? (branch.name['{{ app()->getLocale() }}'] || branch.name['en'] || '') : branch.name) + (branch.address ? ' — ' + branch.address : '')"></option>
-                                                </template>
-                                            </select>
-
-                                            {{-- Selected branch detail card --}}
-                                            <template x-if="selectedBranchId">
-                                                <div class="rounded-lg bg-blue-50 p-3">
-                                                    <template x-for="branch in branches.filter(b => String(b.id) === String(selectedBranchId))" :key="branch.id">
-                                                        <div class="flex items-start gap-3">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" style="width:20px;height:20px;flex-shrink:0;margin-top:2px;color:#279ff9" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
-                                                            </svg>
-                                                            <div>
-                                                                <p class="font-semibold text-sm" x-text="typeof branch.name === 'object' ? (branch.name['{{ app()->getLocale() }}'] || branch.name['en'] || '') : branch.name"></p>
-                                                                <p class="text-xs text-gray-600" x-show="branch.address" x-text="branch.address"></p>
-                                                                <p class="text-xs text-gray-600" x-show="branch.phone" dir="ltr" x-text="branch.phone"></p>
-                                                            </div>
-                                                        </div>
-                                                    </template>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </template>
-                                </div>
                             </div>
 
                             {{-- Coupon Code --}}
@@ -270,82 +284,113 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                 @enderror
                             </div>
 
-                            <div>
-                                <input type="email" name="email" class="form-control @error('email') border-red-500 @enderror"
-                                       placeholder="{{ __('Add your email') }}" value="{{ old('email') }}" required dir="ltr"
-                                       x-model="email" />
-                                @error('email')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
-                            </div>
                         </div>
                     </div>
 
-                    {{-- Delivery Address --}}
-                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-show="deliveryType === 'home'" x-transition>
+                    {{-- Delivery address: map (home) or branch (pickup) — toggles live in Select Options --}}
+                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5">
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Delivery Address') }}</h3>
 
-                        <div class="space-y-4">
+                        {{-- Pickup: choose branch → search list → confirmed --}}
+                        <div x-show="deliveryType === 'pickup'" x-transition class="space-y-4">
+                            <input type="hidden" name="branch_id" :value="selectedBranchId" :disabled="deliveryType === 'home'" />
 
-                            {{-- Zone (kept for delivery-fee calculation) --}}
-                            <div>
-                                <select name="zone_id" class="form-control @error('zone_id') border-red-500 @enderror"
-                                        x-model="selectedZoneId" @change="onZoneChange()">
-                                    <option value="">{{ __('Select Zone') }}</option>
-                                    @foreach($zones as $zone)
-                                        @if($zone['is_active'] ?? true)
-                                        <option value="{{ $zone['id'] }}" {{ old('zone_id') == $zone['id'] ? 'selected' : '' }}>
-                                            {{ is_array($zone['name']) ? ($zone['name'][app()->getLocale()] ?? $zone['name']['en'] ?? '') : $zone['name'] }}
-                                        </option>
-                                        @endif
-                                    @endforeach
-                                </select>
-                                @error('zone_id')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
+                            <p x-show="branchesLoading" class="text-sm text-gray-500">{{ __('Loading branches...') }}</p>
+
+                            <div x-show="!branchesLoading && pickupPhase === 'cta'" x-transition>
+                                <button type="button" class="btn btn--primary btn--md w-full py-4 text-base font-semibold" @click="openBranchPicker()">
+                                    {{ __('Choose Branch') }}
+                                </button>
                             </div>
 
-                            {{-- Google Maps Address Picker --}}
-                            <div
-                                x-data="{
-                                    streetVal: '{{ old('street') }}',
-                                    buildingVal: '{{ old('building') }}',
-                                    onAddressSelected(detail) {
-                                        this.streetVal   = detail.description || '';
-                                        this.buildingVal = detail.description || '';
-                                    }
-                                }"
-                                @address-selected.window="onAddressSelected($event.detail)"
-                            >
-                                {{-- Map picker trigger --}}
-                                <x-google-map-picker
-                                    field-prefix="delivery"
-                                    :placeholder="__('Pick delivery location on map')"
-                                />
+                            <div x-show="!branchesLoading && pickupPhase === 'list'" x-cloak x-transition class="space-y-3">
+                                <input type="search" class="form-control w-full" x-model="branchSearch"
+                                       placeholder="{{ __('Search branches') }}" autocomplete="off" />
+                                <ul class="checkout-branch-list max-h-80 space-y-2 overflow-y-auto pe-1">
+                                    <template x-for="branch in filterBranches()" :key="branch.id">
+                                        <li>
+                                            <button type="button" class="checkout-branch-list__item" @click="selectBranch(branch.id)">
+                                                <span class="checkout-branch-list__name" x-text="branchLabel(branch)"></span>
+                                                <span class="checkout-branch-list__addr" x-show="branch.address" x-text="branch.address"></span>
+                                                <span class="checkout-branch-list__phone" x-show="branch.phone" dir="ltr" x-text="branch.phone"></span>
+                                            </button>
+                                        </li>
+                                    </template>
+                                </ul>
+                                <p x-show="!branchesLoading && filterBranches().length === 0" class="text-sm text-gray-500">{{ __('No branches match your search.') }}</p>
+                            </div>
 
-                                {{-- Hidden fields sent to CheckoutController --}}
-                                <input type="hidden" name="street"   x-model="streetVal" />
-                                <input type="hidden" name="building" x-model="buildingVal" />
+                            <div x-show="!branchesLoading && pickupPhase === 'done' && selectedBranchId" x-cloak x-transition>
+                                <div class="checkout-branch-selected">
+                                    <div class="checkout-branch-selected__head">
+                                        <p class="font-semibold text-gray-900" x-text="branchLabel(selectedBranchObj())"></p>
+                                        <button type="button" class="text-sm font-bold text-blue-600 hover:underline" @click="editBranchSelection()">{{ __('Edit') }}</button>
+                                    </div>
+                                    <template x-if="selectedBranchObj()">
+                                        <div>
+                                            <p class="mt-1 text-sm text-gray-600" x-show="selectedBranchObj().address" x-text="selectedBranchObj().address"></p>
+                                            <p class="mt-1 text-sm text-gray-600" x-show="selectedBranchObj().phone" dir="ltr" x-text="selectedBranchObj().phone"></p>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                            @error('branch_id')
+                                <p class="text-red-500 text-sm">{{ $message }}</p>
+                            @enderror
+                        </div>
 
-                                {{-- Editable confirmation of picked address --}}
-                                <div x-show="streetVal" x-transition class="mt-3">
-                                    <label class="block text-sm font-medium text-gray-600 mb-1">{{ __('Address Notes') }}</label>
-                                    <input
-                                        type="text"
-                                        x-model="buildingVal"
-                                        @input="streetVal = buildingVal"
-                                        class="form-control"
-                                        placeholder="{{ __('Apartment, floor, landmark…') }}"
-                                    />
+                        {{-- Home: city + inline map + address — no x-transition (can leave map invisible); x-show keeps block in DOM --}}
+                        <div x-show="deliveryType === 'home'" class="space-y-4">
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('City') }}</label>
+                                    <select name="zone_id" class="form-control @error('zone_id') border-red-500 @enderror"
+                                            x-model="selectedZoneId" @change="onZoneChange()"
+                                            :disabled="deliveryType === 'pickup'"
+                                            :required="deliveryType === 'home'">
+                                        <option value="">{{ __('Select city') }}</option>
+                                        @foreach($zones as $zone)
+                                            @if($zone['is_active'] ?? true)
+                                            <option value="{{ $zone['id'] }}" {{ old('zone_id') == $zone['id'] ? 'selected' : '' }}>
+                                                {{ is_array($zone['name']) ? ($zone['name'][app()->getLocale()] ?? $zone['name']['en'] ?? '') : $zone['name'] }}
+                                            </option>
+                                            @endif
+                                        @endforeach
+                                    </select>
+                                    @error('zone_id')
+                                        <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                                    @enderror
                                 </div>
 
-                                @error('street')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
-                                @error('building')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
-                            </div>
+                                <div class="space-y-3">
+                                    <p class="text-sm text-gray-600">{{ __('Search below, use Locate Me, then confirm your pin — your address will fill in under the map.') }}</p>
+                                    <div class="checkout-map-embed relative z-[1] min-h-[360px] w-full overflow-hidden rounded-xl border border-gray-200 bg-white">
+                                        <x-google-map-picker
+                                            field-prefix="delivery"
+                                            variant="inline"
+                                            :placeholder="__('Search for an address')"
+                                        />
+                                    </div>
+                                    @unless(config('services.google_maps.key'))
+                                        <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                            {{ __('Add GOOGLE_MAPS_API_KEY to your .env file to load the live map.') }}
+                                        </p>
+                                    @endunless
+
+                                    <div>
+                                        <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Address') }}</label>
+                                        <textarea name="street" rows="3"
+                                                  class="form-control @error('street') border-red-500 @enderror"
+                                                  placeholder="{{ __('Street, district, details…') }}"
+                                                  x-model="addressStreet"
+                                                  :required="deliveryType === 'home'"
+                                                  :disabled="deliveryType === 'pickup'"></textarea>
+                                        @error('street')
+                                            <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                                        @enderror
+                                    </div>
+
+                                    <input type="hidden" name="building" :value="buildingNotes" :disabled="deliveryType === 'pickup'" />
+                                </div>
                         </div>
                     </div>
 
@@ -364,10 +409,10 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                     </div>
                 </div>
 
-                {{-- ── Right Column: Order Summary ──────────────────── --}}
-                <div class="space-y-6">
-                    <div class="rounded-md border border-gray-200 bg-white p-5">
-                        <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Order Summary') }}</h3>
+                {{-- Right: Plan summary (sticky on desktop — matches Figma) --}}
+                <div class="order-2 min-w-0 space-y-6">
+                    <div class="rounded-md border border-gray-200 bg-white p-5 lg:sticky lg:top-24 lg:z-10">
+                        <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Plan Summary') }}</h3>
 
                         <div class="space-y-4">
                             {{-- Cart Items --}}
@@ -389,8 +434,15 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                                 <span class="mx-1">&bull;</span> {{ $item['options']['calories'] }} {{ __('Kcal') }}
                                             @endif
                                         </p>
+                                        @if($hasPlanItems)
+                                            <p class="mt-1 text-sm text-gray-600" x-show="!durationsLoading && planDurationSummaryLabel()" x-text="planDurationSummaryLabel()"></p>
+                                        @endif
                                     </div>
-                                    <span class="font-bold text-gray-900 whitespace-nowrap">SAR {{ number_format($item['price'] * $item['quantity'], 2) }}</span>
+                                    @if($hasPlanItems)
+                                        <span class="font-bold text-gray-900 whitespace-nowrap" x-text="'SAR ' + subtotalInclVat().toFixed(2)"></span>
+                                    @else
+                                        <span class="font-bold text-gray-900 whitespace-nowrap">SAR {{ number_format($item['price'] * $item['quantity'], 2) }}</span>
+                                    @endif
                                 </div>
                             @endforeach
 
@@ -401,7 +453,7 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
 
                                     <div class="space-y-2">
                                         <div class="flex items-center justify-between">
-                                            <span class="text-gray-600">{{ __('Items Total') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></span>
+                                            <span class="text-gray-600">{{ $hasPlanItems ? __('Plan Price') : __('Items Total') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></span>
                                             <span class="font-bold text-gray-900">SAR <span x-text="subtotalInclVat().toFixed(2)"></span></span>
                                         </div>
                                         <div class="flex items-center justify-between">
@@ -764,7 +816,8 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
         color: #ccc !important;
     }
 
-    [x-cloak] { display: none !important; }
+    /* Only hide cloaked nodes inside checkout — avoids stuck hidden UI if Alpine loads late */
+    .checkout-page [x-cloak] { display: none !important; }
 
     /* ─── OTP Modal ─────────────────────────────────── */
     .otp-overlay {
@@ -968,6 +1021,24 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
         }
         .otp-modal__digits { gap: 8px; }
     }
+
+    /* Pickup branch list (checkout) */
+    .checkout-branch-list { list-style: none; margin: 0; padding: 0; }
+    .checkout-branch-list__item {
+        display: block; width: 100%; text-align: start;
+        border: 1px solid #e5e7eb; border-radius: 12px; padding: 0.85rem 1rem;
+        background: #fff; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+    }
+    .checkout-branch-list__item:hover {
+        border-color: #279ff9; box-shadow: 0 2px 8px rgba(39,159,249,.12);
+    }
+    .checkout-branch-list__name { display: block; font-weight: 700; color: #111827; }
+    .checkout-branch-list__addr { display: block; font-size: 0.8rem; color: #6b7280; margin-top: 0.2rem; }
+    .checkout-branch-list__phone { display: block; font-size: 0.8rem; color: #6b7280; margin-top: 0.15rem; }
+    .checkout-branch-selected {
+        border: 2px solid #bfdbfe; border-radius: 12px; background: #eff6ff; padding: 1rem 1.1rem;
+    }
+    .checkout-branch-selected__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
 </style>
 @endpush
 
@@ -981,24 +1052,33 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
         return {
             // Reactive state
             baseSubtotal: {{ $baseSubtotal }},
-            duration: '{{ old('duration', 'monthly') }}',
+            isPlanCheckout: @json($hasPlanItems),
+            duration: @json($hasPlanItems ? 'once' : old('duration', 'monthly')),
+            selectedPlanDurationId: @json((string) ($preferredPlanDurationId ?? '')),
+            planDurationPrices: @json($planDurationPrices ?? []),
             deliveryType: '{{ old('delivery_type', 'home') }}',
             vatRate: {{ $vatRate }},
             deliveryFeeAmount: {{ $deliveryFeeAmount }},
             discount: 0,
-            email: '{{ old('email', '') }}',
+            addressStreet: @json(old('street', '')),
+            buildingNotes: @json(old('building', '')),
 
             // Zone state
             selectedZoneId: '{{ old('zone_id', '') }}',
             zones: @json($zones),
 
-            // Plan durations from API
+            checkoutProgramId: {{ (int) ($checkoutProgramId ?? 0) }},
+            cartDurationFallback: @json($cartDurationFallback ?? null),
+            durationsLoading: @json($hasPlanItems),
+            // Plan durations (filled from server, client fetch, or cart fallback)
             planDurations: @json($planDurations ?? []),
 
             // Branch pickup state
             selectedBranchId: '{{ old('branch_id', '') }}',
             branches: [],
             branchesLoading: true,
+            pickupPhase: @json(old('branch_id') && old('delivery_type') === 'pickup' ? 'done' : 'cta'),
+            branchSearch: '',
 
             // Duration multiplier map from backend
             durationMultipliers: @json($durationMultipliers),
@@ -1023,8 +1103,147 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
             // ─── PRICES FROM API ARE VAT-INCLUSIVE (like mobile app) ───
             // The baseSubtotal already includes VAT. We extract VAT for display only.
 
-            // Computed: subtotal with duration multiplier (VAT-inclusive price from API)
+            durationCardTitle(d) {
+                if (! d) {
+                    return '';
+                }
+                let label = d.label;
+                if (typeof label === 'object' && label !== null && ! Array.isArray(label)) {
+                    label = label['{{ $locale }}'] || label['en'] || '';
+                }
+                if (label) {
+                    return String(label);
+                }
+                if (d.days) {
+                    return String(d.days) + ' {{ __('days') }}';
+                }
+
+                return '';
+            },
+
+            normalizeDurationRow(row) {
+                const p = parseFloat(row.price) || 0;
+                const o = parseFloat(row.offer_price) || 0;
+                const eff = parseFloat(row.effective_price);
+                const effective = ! Number.isNaN(eff) && eff > 0
+                    ? eff
+                    : (o > 0 && o < p ? o : p);
+                const days = parseInt(row.days, 10) || 0;
+                const ppd = days > 0 ? Math.round((effective / days) * 100) / 100 : (parseFloat(row.price_per_day) || 0);
+
+                return { ...row, effective_price: effective, price_per_day: ppd };
+            },
+
+            async hydratePlanDurations() {
+                let list = Array.isArray(this.planDurations) ? [...this.planDurations] : [];
+                list = list.map((row) => this.normalizeDurationRow(row));
+                if (list.length === 0 && this.checkoutProgramId) {
+                    try {
+                        const res = await fetch('{{ url('/api/plan') }}/' + this.checkoutProgramId + '/durations');
+                        const data = await res.json();
+                        const raw = Array.isArray(data) ? data : [];
+                        list = raw.map((row) => this.normalizeDurationRow(row));
+                    } catch (e) {}
+                }
+                if (list.length === 0 && this.cartDurationFallback) {
+                    list = [this.normalizeDurationRow(this.cartDurationFallback)];
+                }
+                this.planDurations = list;
+                this.planDurationPrices = {};
+                list.forEach((row) => {
+                    const id = String(row.id);
+                    const eff = parseFloat(row.effective_price) || 0;
+                    this.planDurationPrices[id] = eff;
+                });
+                const ids = list.map((r) => String(r.id));
+                let sel = @json((string) old('plan_duration_id', $preferredPlanDurationId ?? ''));
+                if (! sel || ! ids.includes(sel)) {
+                    const def = list.find((r) => r.is_default && Number(r.id) > 0) || list.find((r) => Number(r.id) > 0);
+                    sel = def ? String(def.id) : (list[0] ? String(list[0].id) : '');
+                }
+                this.selectedPlanDurationId = sel;
+                if (sel !== '' && this.planDurationPrices[sel] != null) {
+                    this.baseSubtotal = Math.round(this.planDurationPrices[sel] * 100) / 100;
+                }
+                this.durationsLoading = false;
+            },
+
+            planDurationSummaryLabel() {
+                const id = this.selectedPlanDurationId;
+                const row = (this.planDurations || []).find((d) => String(d.id) === String(id));
+                if (! row) {
+                    return '';
+                }
+                let label = row.label;
+                if (typeof label === 'object' && label !== null && ! Array.isArray(label)) {
+                    label = label['{{ $locale }}'] || label['en'] || '';
+                }
+                const days = row.days ? ` · ${row.days} {{ __('days') }}` : '';
+
+                return (label || '') + days;
+            },
+
+            handleAddressFromMap(event) {
+                const d = event.detail || {};
+                if (d.description) {
+                    this.addressStreet = d.description;
+                }
+                this.buildingNotes = d.building_notes || '';
+            },
+
+            branchLabel(branch) {
+                if (!branch) return '';
+                if (typeof branch.name === 'object' && branch.name !== null) {
+                    return branch.name['{{ app()->getLocale() }}'] || branch.name['en'] || '';
+                }
+                return branch.name || '';
+            },
+
+            filterBranches() {
+                const q = (this.branchSearch || '').trim().toLowerCase();
+                if (!q) return this.branches;
+                return this.branches.filter((b) => {
+                    const name = this.branchLabel(b).toLowerCase();
+                    const addr = (b.address || '').toLowerCase();
+                    const phone = (b.phone || '').toLowerCase();
+                    return name.includes(q) || addr.includes(q) || phone.includes(q);
+                });
+            },
+
+            selectedBranchObj() {
+                if (!this.selectedBranchId) return null;
+                return this.branches.find((b) => String(b.id) === String(this.selectedBranchId)) || null;
+            },
+
+            openBranchPicker() {
+                this.pickupPhase = 'list';
+                this.branchSearch = '';
+            },
+
+            selectBranch(id) {
+                this.selectedBranchId = String(id);
+                this.pickupPhase = 'done';
+            },
+
+            editBranchSelection() {
+                this.pickupPhase = 'list';
+                this.branchSearch = '';
+            },
+
+            syncPickupPhase() {
+                if (this.deliveryType !== 'pickup') return;
+                if (this.selectedBranchId) {
+                    this.pickupPhase = 'done';
+                } else {
+                    this.pickupPhase = 'cta';
+                }
+            },
+
+            // Computed: subscription line total is fixed; meals use duration multiplier
             subtotal() {
+                if (this.isPlanCheckout) {
+                    return Math.round(this.baseSubtotal * 100) / 100;
+                }
                 const multiplier = this.durationMultipliers[this.duration] || 1;
                 return Math.round(this.baseSubtotal * multiplier * 100) / 100;
             },
@@ -1084,7 +1303,7 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                         body: JSON.stringify({
                             code: this.couponCode.trim(),
                             subtotal: this.subtotal(),
-                            identifier: this.email || '',
+                            identifier: this.phone || '',
                         }),
                     });
 
@@ -1283,17 +1502,48 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
             },
 
             // Watch for duration changes to re-validate coupon
-            init() {
+            async init() {
+                if (this.isPlanCheckout) {
+                    await this.hydratePlanDurations();
+                } else {
+                    this.durationsLoading = false;
+                }
+                this.$watch('selectedPlanDurationId', (id) => {
+                    if (! this.isPlanCheckout || id === undefined || id === null) {
+                        return;
+                    }
+                    const p = this.planDurationPrices[String(id)];
+                    if (p != null) {
+                        this.baseSubtotal = Math.round(p * 100) / 100;
+                        this.revalidateCoupon();
+                    }
+                });
                 this.$watch('duration', () => this.revalidateCoupon());
+                this.$watch('deliveryType', (v) => {
+                    if (v === 'pickup') {
+                        this.syncPickupPhase();
+                    }
+                    if (v === 'home') {
+                        setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 300);
+                    }
+                });
+                if (this.deliveryType === 'home') {
+                    setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 500);
+                }
 
-                // Fetch branches for pickup option
                 fetch('{{ route('api.branches') }}')
                     .then(r => r.json())
-                    .then(data => { this.branches = data; this.branchesLoading = false; })
+                    .then(data => {
+                        this.branches = data;
+                        this.branchesLoading = false;
+                        this.syncPickupPhase();
+                    })
                     .catch(() => { this.branches = []; this.branchesLoading = false; });
             }
         }
     }
+
+    window.checkoutPage = checkoutPage;
 
     document.addEventListener('DOMContentLoaded', function() {
         const locale = '{{ $locale }}';
