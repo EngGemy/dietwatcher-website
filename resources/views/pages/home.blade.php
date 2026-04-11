@@ -241,13 +241,13 @@
                     @endphp
                     <div class="meal-card">
                         <div class="meal-card__thumbnail">
-                            <a href="{{ route('meals.index') }}">
+                            <a href="{{ route('store.show', $meal['id']) }}">
                                 <img src="{{ $mealImageUrl }}" alt="{{ $meal['name'] }}" onerror="this.src='{{ $mealFallback }}'" />
                             </a>
                         </div>
 
                         <div class="meal-card__body">
-                            <a href="{{ route('meals.index') }}" class="meal-card__title-link">
+                            <a href="{{ route('store.show', $meal['id']) }}" class="meal-card__title-link">
                                 <h3 class="meal-card__title">{{ $meal['name'] }}</h3>
                             </a>
 
