@@ -756,5 +756,13 @@
     "District": "District",
     "Floor": "Floor",
     "Door": "Door",
-    "e.g. Gym, Clinic, Parents…": "e.g. Gym, Clinic, Parents…"
+    "e.g. Gym, Clinic, Parents…": "e.g. Gym, Clinic, Parents…",
+
+    "market.agree_terms_prefix": "I agree with the ",
+    "market.buy_now": "Buy it now",
+    "market.product_code": "Product code",
+    "market.category_label": "Category",
+    "market.tag_label": "Tag",
+    "market.sharing": "Sharing",
+    "market.related_products": "Related products"
 }

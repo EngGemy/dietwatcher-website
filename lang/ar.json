@@ -1036,5 +1036,13 @@
     "District": "الحي",
     "Floor": "الطابق",
     "Door": "الباب",
-    "e.g. Gym, Clinic, Parents…": "مثل: نادي، عيادة، منزل الوالدين…"
+    "e.g. Gym, Clinic, Parents…": "مثل: نادي، عيادة، منزل الوالدين…",
+
+    "market.agree_terms_prefix": "أوافق على ",
+    "market.buy_now": "اشترِ الآن",
+    "market.product_code": "رمز المنتج",
+    "market.category_label": "التصنيف",
+    "market.tag_label": "الوسم",
+    "market.sharing": "مشاركة",
+    "market.related_products": "منتجات ذات صلة"
 }

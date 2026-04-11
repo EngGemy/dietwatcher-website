@@ -550,6 +550,89 @@ class ExternalDataService
     }
 
     /**
+     * Fetch a single shop meal by ID. Tries GET /meals/{id}, then scans cached /meals list.
+     */
+    public function getMeal(int $id): ?array
+    {
+        try {
+            $response = $this->http()->get("{$this->baseUrl}/meals/{$id}");
+            if ($response->successful()) {
+                $payload = $response->json();
+                $data = $payload['data'] ?? null;
+                if (is_array($data) && isset($data['id'])) {
+                    return $this->transformMeal($data);
+                }
+                if (is_array($payload) && isset($payload['id'])) {
+                    return $this->transformMeal($payload);
+                }
+            }
+        } catch (\Exception $e) {
+            Log::debug("External API /meals/{$id} failed: ".$e->getMessage());
+        }
+
+        foreach ($this->getAllMeals(null) as $meal) {
+            if ((int) ($meal['id'] ?? 0) === $id) {
+                return $meal;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Other meals for the detail page (same group when possible).
+     *
+     * @return array<int, array>
+     */
+    public function getRelatedMeals(int $excludeId, ?int $groupId, int $limit = 8): array
+    {
+        $seen = [$excludeId => true];
+        $out = [];
+
+        $push = function (array $rows) use (&$out, &$seen, $limit): bool {
+            foreach ($rows as $m) {
+                $mid = (int) ($m['id'] ?? 0);
+                if ($mid === 0 || isset($seen[$mid])) {
+                    continue;
+                }
+                $seen[$mid] = true;
+                $out[] = $m;
+                if (count($out) >= $limit) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        if ($groupId) {
+            $r = $this->getMeals(['page' => 1, 'group_id' => $groupId]);
+            if ($push($r['data'] ?? [])) {
+                return $out;
+            }
+            $last = (int) ($r['meta']['lastPage'] ?? 1);
+            if ($last > 1) {
+                $r2 = $this->getMeals(['page' => 2, 'group_id' => $groupId]);
+                if ($push($r2['data'] ?? [])) {
+                    return $out;
+                }
+            }
+        }
+
+        $r = $this->getMeals(['page' => 1]);
+        if ($push($r['data'] ?? [])) {
+            return $out;
+        }
+        $last = (int) ($r['meta']['lastPage'] ?? 1);
+        if ($last > 1) {
+            $r2 = $this->getMeals(['page' => 2]);
+            $push($r2['data'] ?? []);
+        }
+
+        return array_slice($out, 0, $limit);
+    }
+
+    /**
      * Transform raw API meal data into the format the frontend expects.
      */
     protected function transformMeal(array $meal): array
@@ -558,6 +641,15 @@ class ExternalDataService
         $offerPrice = $meal['offer_price'] ?? [];
         $priceAmount = is_array($price) ? ($price['amount'] ?? 0) : $price;
         $offerPriceAmount = is_array($offerPrice) ? ($offerPrice['amount'] ?? 0) : $offerPrice;
+
+        $nutrition = is_array($meal['nutrition'] ?? null) ? $meal['nutrition'] : [];
+
+        $groupId = $meal['group_id'] ?? $meal['menu_id'] ?? data_get($meal, 'group.id');
+        if ($groupId !== null && $groupId !== '') {
+            $groupId = (int) $groupId;
+        } else {
+            $groupId = null;
+        }
 
         return [
             'id' => $meal['id'],
@@ -571,7 +663,32 @@ class ExternalDataService
             'tags' => $meal['tags'] ?? [],
             'tag_name' => $meal['tags'][0]['name'] ?? '',
             'ingredients' => $meal['ingredients'] ?? [],
+            'benefits' => $meal['benefits'] ?? $meal['health_benefits'] ?? '',
+            'group_id' => $groupId,
+            'calories' => $this->nutritionFloat($meal, 'calories', $nutrition),
+            'protein' => $this->nutritionFloat($meal, 'protein', $nutrition),
+            'carbs' => $this->nutritionFloat($meal, 'carbs', $nutrition),
+            'fat' => $this->nutritionFloat($meal, 'fat', $nutrition),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $nutrition
+     */
+    protected function nutritionFloat(array $meal, string $key, array $nutrition): ?float
+    {
+        $v = $meal[$key] ?? $nutrition[$key] ?? null;
+        if ($v === null || $v === '') {
+            return null;
+        }
+        if (is_numeric($v)) {
+            return (float) $v;
+        }
+        if (is_string($v) && preg_match('/([\d.]+)/', $v, $m)) {
+            return (float) $m[1];
+        }
+
+        return null;
     }
 
     // ─── Orders ──────────────────────────────────────────────────

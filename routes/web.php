@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\BlogController;
+use App\Http\Controllers\MarketMealController;
 use App\Http\Controllers\MealPlanController;
 use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
@@ -13,16 +14,16 @@ Route::get('/', function () {
         ->orderBy('published_at', 'desc')
         ->take(4)
         ->get();
-    
+
     $testimonials = \App\Models\Testimonial::active()
         ->orderBy('order_column')
         ->take(6)
         ->get();
-    
+
     $howItWorksSteps = \App\Models\HowItWorksStep::active()
         ->ordered()
         ->get();
-    
+
     // Fetch programs from external API (shown as meal plan categories on homepage)
     $externalDataService = app(\App\Services\ExternalDataService::class);
     $mealPlanCategories = collect($externalDataService->getCategoriesForDisplay())->take(6);
@@ -35,13 +36,13 @@ Route::get('/', function () {
 
 Route::get('/locale/{locale}', function (string $locale) {
     // Validate locale
-    if (!in_array($locale, ['en', 'ar'])) {
+    if (! in_array($locale, ['en', 'ar'])) {
         abort(404);
     }
-    
+
     // Store in session
     session(['locale' => $locale]);
-    
+
     // Redirect back
     return redirect()->back();
 })->name('locale.switch');
@@ -63,7 +64,13 @@ Route::get('/meal-plans/{id}', [MealPlanController::class, 'show'])->name('meal-
 
 // Meals (products) route — also accessible as /store (Market link)
 Route::get('/store', fn () => view('pages.meals'))->name('store.index');
+Route::get('/store/{meal}', [MarketMealController::class, 'show'])
+    ->whereNumber('meal')
+    ->name('store.show');
 Route::get('/meals', fn () => view('pages.meals'))->name('meals.index');
+Route::get('/meals/{meal}', [MarketMealController::class, 'show'])
+    ->whereNumber('meal')
+    ->name('meals.show');
 
 // Checkout routes
 Route::get('/checkout', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('checkout.index');
@@ -77,21 +84,25 @@ Route::get('/subscriptions/{id}', [SubscriptionController::class, 'show'])->name
 // AJAX: get plan durations/calories/zones for dynamic checkout
 Route::get('/api/plan/{id}/durations', function (int $id) {
     $service = app(\App\Services\ExternalDataService::class);
+
     return response()->json($service->getPlanDurations($id));
 })->name('api.plan.durations');
 
 Route::get('/api/plan/{id}/calories', function (int $id) {
     $service = app(\App\Services\ExternalDataService::class);
+
     return response()->json($service->getPlanCalories($id));
 })->name('api.plan.calories');
 
 Route::get('/api/zones', function () {
     $service = app(\App\Services\ExternalDataService::class);
+
     return response()->json($service->getZones());
 })->name('api.zones');
 
 Route::get('/api/branches', function () {
     $service = app(\App\Services\ExternalDataService::class);
+
     return response()->json($service->getBranches());
 })->name('api.branches');
 
