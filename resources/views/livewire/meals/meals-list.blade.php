@@ -37,16 +37,16 @@
 .meals-info__count strong{color:#2e2e30;font-weight:700}
 
 /* Grid */
-.meals-grid{display:grid;gap:1.5rem;grid-template-columns:1fr}
+.meals-grid{display:grid;align-items:stretch;gap:1.5rem;grid-template-columns:1fr}
 @media(min-width:640px){.meals-grid{grid-template-columns:repeat(2,1fr)}}
 @media(min-width:1024px){.meals-grid{grid-template-columns:repeat(3,1fr)}}
 @media(min-width:1280px){.meals-grid{grid-template-columns:repeat(4,1fr)}}
 
 /* ─── Card ─────────────────────────────────────────── */
-.mcard{background:#fff;border-radius:16px;overflow:hidden;transition:all .3s cubic-bezier(.25,.46,.45,.94);border:1px solid transparent;position:relative}
+.mcard{background:#fff;border-radius:16px;overflow:hidden;transition:all .3s cubic-bezier(.25,.46,.45,.94);border:1px solid transparent;position:relative;display:flex;flex-direction:column;height:100%}
 .mcard:hover{transform:translateY(-4px);box-shadow:0 12px 32px rgba(0,0,0,.1);border-color:rgba(39,159,249,.15)}
 
-.mcard__img-wrap{position:relative;aspect-ratio:4/3;overflow:hidden;background:#f0f0f5;cursor:pointer}
+.mcard__img-wrap{position:relative;aspect-ratio:4/3;overflow:hidden;background:#f0f0f5;cursor:pointer;flex-shrink:0}
 .mcard__img{width:100%;height:100%;object-fit:cover;transition:transform .4s ease}
 .mcard:hover .mcard__img{transform:scale(1.06)}
 
@@ -62,12 +62,12 @@
 .mcard__rating{position:absolute;top:10px;inset-inline-end:10px;display:inline-flex;align-items:center;gap:3px;padding:.2rem .5rem;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);border-radius:100px;font-size:.7rem;font-weight:700;color:#fff;pointer-events:none}
 .mcard__star{color:#FFC400}
 
-.mcard__body{padding:.9rem 1rem 1rem}
+.mcard__body{padding:.9rem 1rem 1rem;flex:1;display:flex;flex-direction:column;min-height:0}
 .mcard__tag{display:inline-block;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#279ff9;margin-bottom:.3rem}
-.mcard__name{font-size:.92rem;font-weight:700;color:#2e2e30;line-height:1.35;margin-bottom:.65rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.5em;cursor:pointer}
+.mcard__name{font-size:.92rem;font-weight:700;color:#2e2e30;line-height:1.35;margin-bottom:.5rem;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:calc(1.35em * 3);cursor:pointer;flex-shrink:0}
 .mcard__name:hover{color:#279ff9}
 
-.mcard__footer{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+.mcard__footer{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:auto;flex-shrink:0;padding-top:.35rem}
 .mcard__price-wrap{display:flex;align-items:baseline;gap:.3rem;flex-wrap:wrap}
 .mcard__price{font-size:1.05rem;font-weight:800;color:#2e2e30}
 .mcard__currency{font-size:.72rem;font-weight:600;color:#999}
@@ -238,7 +238,7 @@
             $effectivePrice = ($meal['offer_price'] ?? 0) > 0 && $meal['offer_price'] < $meal['price'] ? $meal['offer_price'] : $meal['price'];
             $hasOffer   = ($meal['offer_price'] ?? 0) > 0 && $meal['offer_price'] < $meal['price'];
             $category   = $meal['categories'][0] ?? null;
-            $cartQty    = $cartItems['plan_' . $meal['id']]['quantity'] ?? 0;
+            $cartQty    = $cartItems['meal_' . $meal['id']]['quantity'] ?? 0;
             $discount   = $hasOffer ? round((1 - $meal['offer_price'] / $meal['price']) * 100) : 0;
 
             // Data passed to the Alpine modal
@@ -324,7 +324,7 @@
                     @if($cartQty > 0)
                         <div class="mcard__qty">
                             <button type="button" class="mcard__qty-btn"
-                                wire:click="$dispatch('decrement-cart-item', { planId: {{ $meal['id'] }} })"
+                                wire:click="$dispatch('decrement-cart-item', { mealId: {{ $meal['id'] }} })"
                                 title="{{ $cartQty === 1 ? __('Remove') : __('Decrease') }}">
                                 @if($cartQty === 1)
                                     {{-- Trash icon when removing last item --}}
@@ -339,7 +339,7 @@
                             </button>
                             <span class="mcard__qty-val">{{ $cartQty }}</span>
                             <button type="button" class="mcard__qty-btn"
-                                wire:click="$dispatch('add-to-cart', { planId: {{ $meal['id'] }}, name: '{{ addslashes($meal['name']) }}', price: {{ $effectivePrice }}, image: '{{ addslashes($mealImgUrl) }}' })"
+                                wire:click="$dispatch('add-to-cart', { mealId: {{ $meal['id'] }}, name: '{{ addslashes($meal['name']) }}', price: {{ $effectivePrice }}, image: '{{ addslashes($mealImgUrl) }}' })"
                                 title="{{ __('Increase') }}">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
@@ -348,7 +348,7 @@
                         </div>
                     @else
                         <button type="button" class="mcard__cart-btn"
-                            wire:click="$dispatch('add-to-cart', { planId: {{ $meal['id'] }}, name: '{{ addslashes($meal['name']) }}', price: {{ $effectivePrice }}, image: '{{ addslashes($mealImgUrl) }}' })"
+                            wire:click="$dispatch('add-to-cart', { mealId: {{ $meal['id'] }}, name: '{{ addslashes($meal['name']) }}', price: {{ $effectivePrice }}, image: '{{ addslashes($mealImgUrl) }}' })"
                             title="{{ __('Add to Cart') }}">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
@@ -567,7 +567,7 @@ function mealModal() {
             // Dispatch qty times (add-to-cart increments by 1 each call)
             for (var i = 0; i < this.qty; i++) {
                 this.$dispatch('add-to-cart', {
-                    planId: this.meal.id,
+                    mealId: this.meal.id,
                     name:   this.meal.name,
                     price:  this.meal.price,
                     image:  this.meal.image,

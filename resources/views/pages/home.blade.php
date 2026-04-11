@@ -222,11 +222,20 @@
                 </p>
             </header>
 
-            <div class="grid gap-8 md:grid-cols-2 md:gap-12 lg:grid-cols-4">
+            <div class="grid items-stretch gap-8 md:grid-cols-2 md:gap-12 lg:grid-cols-4">
                 @forelse($instantMeals as $meal)
                     @php
                         $mealImage = $meal['image_url'] ?? '';
-                        $mealImageUrl = str_starts_with($mealImage, 'http') ? $mealImage : ($mealImage ? asset($mealImage) : asset('assets/images/meal-' . ($loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3) . '.png'));
+                        $mealImageTrim = trim((string) $mealImage);
+                        if ($mealImageTrim === '') {
+                            $mealImageUrl = asset('assets/images/meal-' . ($loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3) . '.png');
+                        } elseif (str_starts_with($mealImageTrim, '//')) {
+                            $mealImageUrl = 'https:'.$mealImageTrim;
+                        } elseif (str_starts_with($mealImageTrim, 'http://') || str_starts_with($mealImageTrim, 'https://')) {
+                            $mealImageUrl = $mealImageTrim;
+                        } else {
+                            $mealImageUrl = asset(ltrim($mealImageTrim, '/'));
+                        }
                         $mealFallback = asset('assets/images/meal-' . ($loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3) . '.png');
                         $effectivePrice = ($meal['offer_price'] ?? 0) > 0 && ($meal['offer_price'] < $meal['price']) ? $meal['offer_price'] : $meal['price'];
                     @endphp
@@ -238,29 +247,33 @@
                         </div>
 
                         <div class="meal-card__body">
-                            <a href="{{ route('meals.index') }}">
+                            <a href="{{ route('meals.index') }}" class="meal-card__title-link">
                                 <h3 class="meal-card__title">{{ $meal['name'] }}</h3>
                             </a>
 
-                            <div class="meal-card__footer">
-                                @if(($meal['offer_price'] ?? 0) > 0 && $meal['offer_price'] < $meal['price'])
-                                    <span class="meal-card__price">
-                                        <span class="line-through text-gray-600 text-sm">{{ __('SAR') }} {{ number_format($meal['price'], 0) }}</span>
-                                        {{ __('SAR') }} {{ number_format($meal['offer_price'], 0) }}
-                                    </span>
-                                @else
-                                    <span class="meal-card__price">{{ __('SAR') }} {{ number_format($meal['price'], 0) }}</span>
-                                @endif
-                                @if(!empty($meal['tag_name']))
-                                    <span class="meal-card__category">{{ $meal['tag_name'] }}</span>
-                                @endif
-                            </div>
+                            <div class="meal-card__lower">
+                                <div class="meal-card__footer">
+                                    @if(! empty($meal['tag_name']))
+                                        <span class="meal-card__category">{{ $meal['tag_name'] }}</span>
+                                    @endif
+                                    <div class="meal-card__price-wrap">
+                                        @if(($meal['offer_price'] ?? 0) > 0 && $meal['offer_price'] < $meal['price'])
+                                            <span class="meal-card__price">
+                                                <span class="line-through text-gray-600 text-sm">{{ __('SAR') }} {{ number_format($meal['price'], 0) }}</span>
+                                                {{ __('SAR') }} {{ number_format($meal['offer_price'], 0) }}
+                                            </span>
+                                        @else
+                                            <span class="meal-card__price">{{ __('SAR') }} {{ number_format($meal['price'], 0) }}</span>
+                                        @endif
+                                    </div>
+                                </div>
 
-                            <button type="button"
-                                    class="meal-card__btn"
-                                    onclick="Livewire.dispatch('add-to-cart', { planId: {{ $meal['id'] }}, name: '{{ addslashes($meal['name']) }}', price: {{ $effectivePrice }}, image: '{{ addslashes($mealImageUrl) }}' })">
-                                {{ __('Add to Cart') }}
-                            </button>
+                                <button type="button"
+                                        class="meal-card__btn"
+                                        onclick="Livewire.dispatch('add-to-cart', { mealId: {{ $meal['id'] }}, name: '{{ addslashes($meal['name']) }}', price: {{ $effectivePrice }}, image: '{{ addslashes($mealImageUrl) }}' })">
+                                    {{ __('Add to Cart') }}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 @empty

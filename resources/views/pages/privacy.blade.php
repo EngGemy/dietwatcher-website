@@ -12,8 +12,8 @@
                 </p>
             </header>
 
-            <div class="mx-auto max-w-4xl rounded-md bg-white p-6 md:p-10">
-                <div class="prose prose-gray max-w-none">
+            <div class="mx-auto max-w-4xl rounded-md bg-white p-6 md:p-10 text-start">
+                <div class="legal-body max-w-none space-y-5 text-gray-800 [&_h3]:mt-8 [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-gray-900 [&_h4]:mt-4 [&_h4]:font-semibold [&_h4]:text-gray-900 [&_p]:mb-3 [&_p]:leading-relaxed [&_ul]:my-3 [&_ul]:list-disc [&_ul]:ps-5 [&_li]:my-1 [&_a]:text-blue-600 [&_a]:underline">
 
                     <h3>{{ __('Introduction') }}</h3>
                     <p>{{ __('Diet Watchers ("we", "us", or "our") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our website and mobile application.') }}</p>

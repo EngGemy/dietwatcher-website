@@ -55,10 +55,11 @@
 
     <script src="https://cdn.jsdelivr.net/npm/preline/dist/preline.min.js"></script>
 
-    {{-- Livewire Scripts --}}
-    @livewireScripts
-
+    {{-- Page scripts first so globals (e.g. checkoutPage) exist before Alpine boots via Livewire --}}
     @stack('scripts')
+
+    {{-- Livewire (includes Alpine.js) --}}
+    @livewireScripts
 </body>
 
 </html>

@@ -1,13 +1,5 @@
 {{--
-  Google Maps Location Picker Component
-  Expert-app UX: fixed crosshair + draggable map (Uber/Careem/Talabat style)
-
-  Props:
-    $fieldPrefix  — prefix for hidden input names (e.g. "delivery" → delivery_lat, delivery_lng …)
-    $placeholder  — text shown in the trigger input
-    $initialLat   — starting map latitude  (default: 24.7136 — Riyadh)
-    $initialLng   — starting map longitude (default: 46.6753)
-    $districts    — pre-loaded districts array (optional, lazy-loaded if empty)
+  Google Maps Location Picker — modal (default) or embedded inline (checkout).
 --}}
 @props([
     'fieldPrefix' => 'location',
@@ -15,12 +7,14 @@
     'initialLat'  => 24.7136,
     'initialLng'  => 46.6753,
     'districts'   => [],
+    'variant'     => 'modal',
 ])
 
 @php
     $placeholder ??= __('Pick location on map');
     $mapsKey = config('services.google_maps.key', '');
     $uid = 'gmp_' . uniqid();
+    $isInline = ($variant ?? 'modal') === 'inline';
 @endphp
 
 <div
@@ -29,12 +23,17 @@
         initialLat:  {{ $initialLat }},
         initialLng:  {{ $initialLng }},
         districts:   {{ json_encode($districts) }},
+        variant:     @json($variant ?? 'modal'),
+        mapsKeyPresent: @json(filled($mapsKey)),
     })"
-    @open-map-picker.window="openModal()"
-    class="gmp-wrapper"
+    @open-map-picker.window="variant === 'modal' && openModal()"
+    @class([
+        'gmp-wrapper',
+        'gmp-wrapper--inline' => $isInline,
+        'gmp-wrapper--missing-api-key' => $isInline && ! filled($mapsKey),
+    ])
 >
-
-    {{-- ─── Trigger Input ──────────────────────────────────── --}}
+    @if(!$isInline)
     <div class="gmp-trigger" @click="openModal()">
         <span class="gmp-trigger__icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20" style="width:20px;height:20px;flex-shrink:0">
@@ -54,34 +53,35 @@
             </svg>
         </span>
     </div>
+    @endif
 
-    {{-- ─── Hidden Inputs ──────────────────────────────────── --}}
     <input type="hidden" :name="prefix + '_lat'"         :value="form.latitude" />
     <input type="hidden" :name="prefix + '_lng'"         :value="form.longitude" />
     <input type="hidden" :name="prefix + '_description'" :value="form.description" />
     <input type="hidden" :name="prefix + '_type'"        :value="form.type" />
     <input type="hidden" :name="prefix + '_district_id'" :value="form.district_id" />
 
-    {{-- ─── Full-screen Modal ──────────────────────────────── --}}
-    <div
-        x-show="isOpen"
-        x-transition:enter="transition ease-out duration-200"
-        x-transition:enter-start="opacity-0"
-        x-transition:enter-end="opacity-100"
-        x-transition:leave="transition ease-in duration-150"
-        x-transition:leave-start="opacity-100"
-        x-transition:leave-end="opacity-0"
-        class="gmp-modal"
-        style="display:none"
-        @keydown.escape.window="closeModal()"
-    >
-        {{-- Top bar --}}
+    @if($isInline)
+        {{-- Inline (checkout): never use Alpine x-show on this panel — it can stay display:none after transitions --}}
+        <div
+            class="gmp-modal gmp-modal--inline-embed"
+            @keydown.escape.window.stop=""
+        >
+    @else
+        <div
+            x-show="isOpen"
+            x-transition
+            class="gmp-modal"
+            @keydown.escape.window="closeModal()"
+        >
+    @endif
         <div class="gmp-topbar">
-            <button type="button" @click="closeModal()" class="gmp-topbar__back">
+            <button type="button" x-show="variant === 'modal'" @click="closeModal()" class="gmp-topbar__back">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:20px;height:20px">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/>
                 </svg>
             </button>
+            <span class="gmp-topbar__back-spacer" x-show="variant === 'inline'" aria-hidden="true"></span>
             <div class="gmp-topbar__search-wrap">
                 <svg class="gmp-topbar__search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
@@ -94,18 +94,29 @@
                     autocomplete="off"
                 />
             </div>
-            <button type="button" @click="useMyLocation()" class="gmp-topbar__gps" title="{{ __('Use my location') }}">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px">
-                    <path fill-rule="evenodd" d="M11.54 22.351... M12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
+            <button type="button" @click="useMyLocation()" class="gmp-topbar__gps" :class="{ 'gmp-topbar__gps--wide': variant === 'inline' }" title="{{ __('Use my location') }}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;flex-shrink:0">
+                    <path fill-rule="evenodd" d="M11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.07-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-2.003 3.5-4.697 3.5-8.327a8 8 0 0 0-16 0c0 3.63 1.556 6.326 3.5 8.327a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.144.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
                     <path d="M12 2.25a.75.75 0 0 1 .75.75v1.549a8.253 8.253 0 0 1 6.944 6.944H21.75a.75.75 0 0 1 0 1.5h-2.056a8.253 8.253 0 0 1-6.944 6.944V21.75a.75.75 0 0 1-1.5 0v-2.056a8.253 8.253 0 0 1-6.944-6.944H2.25a.75.75 0 0 1 0-1.5h2.056A8.253 8.253 0 0 1 11.25 4.306V3a.75.75 0 0 1 .75-.75Z"/>
                 </svg>
+                <span x-show="variant === 'inline'" class="gmp-topbar__gps-label">{{ __('Locate Me') }}</span>
             </button>
         </div>
 
-        {{-- Map container --}}
+        @if(filled($mapsKey))
         <div id="{{ $uid }}_map" class="gmp-map"></div>
+        @else
+        <div class="gmp-map gmp-map--placeholder flex min-h-[280px] flex-col items-center justify-center gap-2 border border-dashed border-gray-300 bg-slate-100 p-4 text-center text-sm text-gray-600">
+            <svg xmlns="http://www.w3.org/2000/svg" class="size-10 text-blue" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+            </svg>
+            <span>{{ __('Add GOOGLE_MAPS_API_KEY in .env to show the interactive map.') }}</span>
+        </div>
+        @endif
 
-        {{-- Fixed crosshair pin in center --}}
+        <p class="gmp-map-hint" x-show="variant === 'inline' && !inlineConfirmed">{{ __('Click on the map or drag it to set your delivery location.') }}</p>
+
         <div class="gmp-pin" aria-hidden="true">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#279ff9" class="gmp-pin__svg" width="44" height="44" style="width:44px;height:44px">
                 <path fill-rule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.07-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-2.003 3.5-4.697 3.5-8.327a8 8 0 0 0-16 0c0 3.63 1.556 6.326 3.5 8.327a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.144.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
@@ -113,16 +124,12 @@
             <div class="gmp-pin__shadow"></div>
         </div>
 
-        {{-- Loading address indicator --}}
         <div class="gmp-geocoding" x-show="geocoding" x-transition>
             <span class="gmp-geocoding__spinner"></span>
             {{ __('Finding address…') }}
         </div>
 
-        {{-- ─── Bottom Sheet ────────────────────────────────── --}}
-        <div class="gmp-sheet" x-show="isOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-full" x-transition:enter-end="translate-y-0">
-
-            {{-- Address text (editable) --}}
+        <div class="gmp-sheet" x-show="variant !== 'inline' || !inlineConfirmed" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-full" x-transition:enter-end="translate-y-0">
             <div class="gmp-sheet__field">
                 <label class="gmp-sheet__label">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:15px;height:15px"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/></svg>
@@ -136,26 +143,29 @@
                 ></textarea>
             </div>
 
-            {{-- Address type chips --}}
+            <div class="gmp-sheet__row3">
+                <input type="text" x-model="form.building_num" class="gmp-sheet__input gmp-sheet__input--sm" placeholder="{{ __('Building') }}" inputmode="numeric" />
+                <input type="text" x-model="form.floor" class="gmp-sheet__input gmp-sheet__input--sm" placeholder="{{ __('Floor') }}" inputmode="numeric" />
+                <input type="text" x-model="form.door" class="gmp-sheet__input gmp-sheet__input--sm" placeholder="{{ __('Door') }}" inputmode="numeric" />
+            </div>
+
             <div class="gmp-sheet__types">
                 <button type="button" class="gmp-type-chip" :class="{ 'gmp-type-chip--active': form.type === 'home' }" @click="form.type = 'home'">
                     🏠 {{ __('Home') }}
                 </button>
                 <button type="button" class="gmp-type-chip" :class="{ 'gmp-type-chip--active': form.type === 'work' }" @click="form.type = 'work'">
-                    💼 {{ __('Work') }}
+                    💼 {{ __('Office') }}
                 </button>
                 <button type="button" class="gmp-type-chip" :class="{ 'gmp-type-chip--active': form.type === 'other' }" @click="form.type = 'other'">
                     📍 {{ __('Other') }}
                 </button>
             </div>
 
-            {{-- Custom title (only when type = other) --}}
             <div class="gmp-sheet__field" x-show="form.type === 'other'" x-transition>
                 <input type="text" x-model="form.title" class="gmp-sheet__input"
                     placeholder="{{ __('e.g. Gym, Clinic, Parents…') }}" />
             </div>
 
-            {{-- District dropdown --}}
             <div class="gmp-sheet__field">
                 <label class="gmp-sheet__label">{{ __('District') }}</label>
                 <div class="gmp-select-wrap">
@@ -170,7 +180,6 @@
 
             <p class="gmp-sheet__error" x-show="sheetError" x-text="sheetError" x-transition></p>
 
-            {{-- Confirm button --}}
             <button
                 type="button"
                 @click="confirmLocation()"
@@ -183,13 +192,85 @@
                 {{ __('Confirm Location') }}
             </button>
         </div>
+
+        <div
+            class="gmp-inline-confirmed"
+            x-show="variant === 'inline' && inlineConfirmed"
+            x-transition
+            x-cloak
+        >
+            <div class="gmp-inline-confirmed__head">
+                <div class="gmp-inline-confirmed__title">
+                    <span class="gmp-inline-confirmed__check" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd"/></svg>
+                    </span>
+                    <span>{{ __('Address Confirmed') }}</span>
+                </div>
+                <button type="button" class="gmp-inline-confirmed__edit" @click="editInlineAddress()">{{ __('Edit') }}</button>
+            </div>
+            <p class="gmp-inline-confirmed__addr" x-text="confirmedAddressText"></p>
+            <p class="gmp-inline-confirmed__meta" x-show="confirmedBuildingLine" x-text="confirmedBuildingLine"></p>
+            <p class="gmp-inline-confirmed__meta"><span class="opacity-80">{{ __('Location') }}:</span> <span x-text="confirmedLocationLabel"></span></p>
+        </div>
     </div>
 </div>
 
-{{-- ─── Styles ──────────────────────────────────────────────── --}}
 <style>
-/* Trigger */
 .gmp-wrapper { position:relative; }
+.gmp-wrapper--inline { width:100%; min-height:360px; position:relative; z-index:2; isolation:isolate; }
+.gmp-wrapper--inline .gmp-modal,
+.gmp-modal--inline-embed {
+    position:relative !important;
+    inset:auto !important;
+    display:flex !important;
+    flex-direction:column !important;
+    width:100% !important;
+    min-height:min(480px, 78vh) !important;
+    height:auto !important;
+    max-height:680px;
+    z-index:1;
+    flex-shrink:0;
+    border-radius:12px;
+    border:1px solid #e5e7eb;
+    overflow:hidden;
+    background:#fff;
+    opacity:1 !important;
+    visibility:visible !important;
+}
+.gmp-wrapper--inline .gmp-topbar { position:relative; box-shadow:none; border-bottom:1px solid #eef0f4; flex-wrap:nowrap; }
+.gmp-topbar__back-spacer { width:38px; flex-shrink:0; }
+.gmp-wrapper--inline .gmp-map { flex:1 1 auto; margin-top:0; min-height:240px; min-width:100%; background:#e8eaed; }
+.gmp-wrapper--inline .gmp-sheet { transition: none !important; }
+/* No API key: show only the placeholder block (hide search UI shell) */
+.gmp-wrapper--missing-api-key .gmp-modal { display:block !important; min-height:auto !important; max-height:none !important; }
+.gmp-wrapper--missing-api-key .gmp-modal > *:not(.gmp-map--placeholder) { display:none !important; }
+.gmp-wrapper--missing-api-key .gmp-modal .gmp-map--placeholder { margin-top:0 !important; min-height:min(360px,70vh) !important; }
+.gmp-map-hint { margin:0; padding:.35rem .75rem .5rem; font-size:.78rem; color:#6b7280; text-align:center; background:#fafafa; border-bottom:1px solid #eef0f4; }
+.gmp-wrapper--inline .gmp-pin { transform:translate(-50%, calc(-100% + 28px)); }
+.gmp-wrapper--inline .gmp-geocoding { top:120px; }
+
+.gmp-topbar__gps--wide { width:auto !important; min-width:38px; padding-inline:.65rem !important; gap:.4rem; }
+.gmp-topbar__gps-label { font-size:.8rem; font-weight:700; white-space:nowrap; }
+
+.gmp-inline-confirmed {
+    margin:0;
+    padding:1rem 1.1rem;
+    background:#f0fdf4;
+    border-top:1px solid #bbf7d0;
+    color:#166534;
+    font-size:.88rem;
+}
+.gmp-inline-confirmed__head { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.5rem; }
+.gmp-inline-confirmed__title { display:flex; align-items:center; gap:.5rem; font-weight:700; }
+.gmp-inline-confirmed__check {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; border-radius:999px; background:#22c55e; color:#fff;
+}
+.gmp-inline-confirmed__edit { background:none; border:none; color:#15803d; font-weight:700; cursor:pointer; font-size:.88rem; padding:0; }
+.gmp-inline-confirmed__edit:hover { text-decoration:underline; }
+.gmp-inline-confirmed__addr { font-weight:600; line-height:1.45; margin:0 0 .35rem; }
+.gmp-inline-confirmed__meta { margin:.15rem 0 0; font-size:.82rem; }
+
 .gmp-trigger { display:flex; align-items:center; gap:.6rem; padding:.7rem 1rem; border:2px solid #e8c84a; border-radius:10px; background:#fff; cursor:pointer; transition:border .2s, box-shadow .2s; }
 .gmp-trigger:hover { border-color:#279ff9; box-shadow:0 0 0 3px rgba(39,159,249,.1); }
 .gmp-trigger__icon { color:#e8c84a; flex-shrink:0; }
@@ -198,10 +279,8 @@
 .gmp-trigger__input::placeholder { color:#aaa; }
 .gmp-trigger__arrow { color:#ccc; flex-shrink:0; }
 
-/* Modal */
 .gmp-modal { position:fixed; inset:0; z-index:9980; display:flex; flex-direction:column; background:#fff; }
 
-/* Top bar */
 .gmp-topbar { position:absolute; top:0; inset-inline:0; z-index:10; display:flex; align-items:center; gap:.5rem; padding:.75rem .75rem; background:#fff; box-shadow:0 2px 12px rgba(0,0,0,.1); }
 .gmp-topbar__back { width:38px; height:38px; border:none; background:#f5f5fa; border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; color:#2e2e30; transition:background .2s; }
 .gmp-topbar__back:hover { background:#e0e0e8; }
@@ -213,20 +292,15 @@
 .gmp-topbar__gps { width:38px; height:38px; border:none; background:#279ff9; border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; color:#fff; transition:background .2s; }
 .gmp-topbar__gps:hover { background:#1e8de0; }
 
-/* Map */
 .gmp-map { flex:1; width:100%; margin-top:64px; }
-
-/* Crosshair pin */
 .gmp-pin { position:absolute; top:50%; left:50%; transform:translate(-50%, calc(-100% + 32px)); z-index:5; pointer-events:none; }
 .gmp-pin__svg { width:44px; height:44px; filter:drop-shadow(0 3px 6px rgba(0,0,0,.3)); }
 .gmp-pin__shadow { width:16px; height:6px; background:rgba(0,0,0,.2); border-radius:50%; margin:0 auto; }
 
-/* Geocoding indicator */
 .gmp-geocoding { position:absolute; top:76px; left:50%; transform:translateX(-50%); z-index:8; background:rgba(255,255,255,.95); backdrop-filter:blur(6px); border-radius:100px; padding:.4rem 1rem; font-size:.8rem; font-weight:600; color:#555; display:flex; align-items:center; gap:.5rem; box-shadow:0 2px 12px rgba(0,0,0,.1); }
 .gmp-geocoding__spinner { width:14px; height:14px; border:2px solid #e0e0e8; border-top-color:#279ff9; border-radius:50%; animation:gmp-spin .6s linear infinite; }
 @keyframes gmp-spin { to { transform:rotate(360deg); } }
 
-/* Bottom Sheet */
 .gmp-sheet { position:absolute; bottom:0; inset-inline:0; z-index:9; background:#fff; border-radius:20px 20px 0 0; padding:1.25rem 1.25rem 1.5rem; box-shadow:0 -4px 24px rgba(0,0,0,.12); display:flex; flex-direction:column; gap:.85rem; max-height:55vh; overflow-y:auto; }
 .gmp-sheet::before { content:''; display:block; width:40px; height:4px; background:#e0e0e8; border-radius:100px; margin:0 auto .75rem; }
 .gmp-sheet__label { font-size:.78rem; font-weight:600; color:#555; display:flex; align-items:center; gap:.3rem; margin-bottom:.3rem; }
@@ -235,12 +309,13 @@
 .gmp-sheet__input { width:100%; padding:.65rem .85rem; border:1.5px solid #e0e0e8; border-radius:10px; font-size:.88rem; color:#2e2e30; outline:none; transition:border .2s; }
 .gmp-sheet__input:focus { border-color:#279ff9; box-shadow:0 0 0 3px rgba(39,159,249,.1); }
 .gmp-sheet__field { display:flex; flex-direction:column; }
+.gmp-sheet__row3 { display:grid; grid-template-columns:repeat(3, 1fr); gap:.5rem; }
+.gmp-sheet__input--sm { font-size:.82rem !important; padding:.5rem .55rem !important; }
 .gmp-select-wrap { position:relative; }
 .gmp-sheet__select { width:100%; padding:.65rem .85rem; border:1.5px solid #e0e0e8; border-radius:10px; font-size:.88rem; color:#2e2e30; outline:none; background:#fff; appearance:none; cursor:pointer; transition:border .2s; }
 .gmp-sheet__select:focus { border-color:#279ff9; }
 .gmp-select-wrap::after { content:'▾'; position:absolute; top:50%; inset-inline-end:.85rem; transform:translateY(-50%); pointer-events:none; color:#aaa; font-size:.8rem; }
 
-/* Type chips */
 .gmp-sheet__types { display:flex; gap:.5rem; flex-wrap:wrap; }
 .gmp-type-chip { padding:.4rem .9rem; border-radius:100px; border:1.5px solid #e0e0e8; background:#fff; font-size:.82rem; font-weight:600; cursor:pointer; transition:all .2s; color:#555; }
 .gmp-type-chip:hover { border-color:#279ff9; color:#279ff9; }
@@ -250,7 +325,6 @@
 .gmp-sheet__error { font-size:.78rem; color:#ff707a; text-align:center; }
 </style>
 
-{{-- ─── Google Maps Script (loaded once) ──────────────────── --}}
 @once
 @if($mapsKey)
 <script>
@@ -269,15 +343,26 @@ window.initGoogleMaps = function() {
 @endif
 @endonce
 
-{{-- ─── Alpine Component ────────────────────────────────────── --}}
 <script>
 (function() {
 const UID = '{{ $uid }}';
 
 function googleMapPicker(opts) {
+    const L_BUILD = @json(__('Building'));
+    const L_FLOOR = @json(__('Floor'));
+    const L_DOOR = @json(__('Door'));
+    const L_HOME = @json(__('Home'));
+    const L_WORK = @json(__('Office'));
+    const L_OTHER = @json(__('Other'));
+
     return {
         prefix:          opts.prefix || 'location',
+        variant:         opts.variant || 'modal',
         isOpen:          false,
+        inlineConfirmed: false,
+        confirmedAddressText: '',
+        confirmedBuildingLine: '',
+        confirmedLocationLabel: '',
         geocoding:       false,
         selectedAddress: '',
         sheetError:      '',
@@ -289,27 +374,87 @@ function googleMapPicker(opts) {
             type:        'home',
             district_id: '',
             title:       '',
+            building_num: '',
+            floor:       '',
+            door:        '',
         },
         _map:       null,
         _geocoder:  null,
         _autocomplete: null,
         _center:    { lat: opts.initialLat || 24.7136, lng: opts.initialLng || 46.6753 },
         _dragTimeout: null,
+        mapsKeyPresent: opts.mapsKeyPresent !== false,
+
+        init() {
+            if (this.variant === 'inline') {
+                this.isOpen = true;
+                this.sheetError = '';
+                if (!this.districts.length) this.loadDistricts();
+                if (this.mapsKeyPresent) {
+                    this.$nextTick(() => this.initMap());
+                }
+                window.addEventListener('checkout-home-map-refresh', () => {
+                    this.$nextTick(() => {
+                        if (! this.mapsKeyPresent) {
+                            return;
+                        }
+                        if (this._map && window.google && window.google.maps) {
+                            window.google.maps.event.trigger(this._map, 'resize');
+                        } else {
+                            this.initMap();
+                        }
+                        [80, 400].forEach((ms) => setTimeout(() => {
+                            if (this._map && window.google && window.google.maps) {
+                                window.google.maps.event.trigger(this._map, 'resize');
+                            }
+                        }, ms));
+                    });
+                });
+            }
+        },
+
+        buildingLine() {
+            const p = [];
+            if (this.form.building_num && String(this.form.building_num).trim() !== '') {
+                p.push(L_BUILD + ': ' + String(this.form.building_num).trim());
+            }
+            if (this.form.floor && String(this.form.floor).trim() !== '') {
+                p.push(L_FLOOR + ': ' + String(this.form.floor).trim());
+            }
+            if (this.form.door && String(this.form.door).trim() !== '') {
+                p.push(L_DOOR + ': ' + String(this.form.door).trim());
+            }
+            return p.join(', ');
+        },
+
+        locationTypeLabel() {
+            if (this.form.type === 'work') return L_WORK;
+            if (this.form.type === 'other') return (this.form.title && this.form.title.trim()) ? this.form.title.trim() : L_OTHER;
+            return L_HOME;
+        },
 
         openModal() {
+            if (this.variant === 'inline') return;
             this.isOpen = true;
             document.body.style.overflow = 'hidden';
             this.sheetError = '';
-
-            // Load districts if not already loaded
             if (!this.districts.length) this.loadDistricts();
-
             this.$nextTick(() => this.initMap());
         },
 
         closeModal() {
+            if (this.variant === 'inline') return;
             this.isOpen = false;
             document.body.style.overflow = '';
+        },
+
+        editInlineAddress() {
+            this.inlineConfirmed = false;
+            this.$nextTick(() => {
+                if (this._map && window.google && window.google.maps) {
+                    window.google.maps.event.trigger(this._map, 'resize');
+                }
+            });
         },
 
         async loadDistricts() {
@@ -317,29 +462,40 @@ function googleMapPicker(opts) {
                 const res = await fetch('/api/districts');
                 const data = await res.json();
                 this.districts = data.data || data || [];
-            } catch(e) {}
+            } catch (e) {}
         },
 
         initMap() {
+            if (!this.mapsKeyPresent) return;
             const mapEl = document.getElementById(UID + '_map');
             if (!mapEl) return;
 
             const doInit = () => {
                 if (this._map) return;
+                if (!window.google || !window.google.maps) return;
 
-                this._map     = new google.maps.Map(mapEl, {
-                    center:            this._center,
-                    zoom:              15,
-                    disableDefaultUI:  true,
-                    zoomControl:       true,
-                    gestureHandling:   'greedy',
+                this._map = new google.maps.Map(mapEl, {
+                    center: this._center,
+                    zoom: 15,
+                    disableDefaultUI: true,
+                    zoomControl: true,
+                    gestureHandling: 'greedy',
                 });
                 this._geocoder = new google.maps.Geocoder();
-
-                // Reverse geocode initial position
                 this.reverseGeocode(this._center);
 
-                // On drag end → reverse geocode map center
+                const resizeMap = () => {
+                    if (!this._map || !window.google || !window.google.maps) return;
+                    window.google.maps.event.trigger(this._map, 'resize');
+                    this._map.setCenter(this._center);
+                };
+                this.$nextTick(() => resizeMap());
+                [50, 200, 500].forEach((ms) => setTimeout(() => resizeMap(), ms));
+                if (!this._gmpResizeBound) {
+                    this._gmpResizeBound = true;
+                    window.addEventListener('resize', resizeMap);
+                }
+
                 this._map.addListener('dragend', () => {
                     clearTimeout(this._dragTimeout);
                     this._dragTimeout = setTimeout(() => {
@@ -349,7 +505,13 @@ function googleMapPicker(opts) {
                     }, 400);
                 });
 
-                // Places Autocomplete
+                this._map.addListener('click', (e) => {
+                    const loc = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+                    this._center = loc;
+                    this._map.panTo(loc);
+                    this.reverseGeocode(loc);
+                });
+
                 const searchInput = document.getElementById(UID + '_search');
                 if (searchInput) {
                     this._autocomplete = new google.maps.places.Autocomplete(searchInput, {
@@ -378,10 +540,12 @@ function googleMapPicker(opts) {
         reverseGeocode(latlng) {
             if (!this._geocoder) return;
             this.geocoding = true;
-            this.form.latitude  = latlng.lat;
-            this.form.longitude = latlng.lng;
+            const lat = typeof latlng.lat === 'function' ? latlng.lat() : latlng.lat;
+            const lng = typeof latlng.lng === 'function' ? latlng.lng() : latlng.lng;
+            this.form.latitude = lat;
+            this.form.longitude = lng;
 
-            this._geocoder.geocode({ location: latlng }, (results, status) => {
+            this._geocoder.geocode({ location: { lat, lng } }, (results, status) => {
                 this.geocoding = false;
                 if (status === 'OK' && results[0]) {
                     this.form.description = results[0].formatted_address;
@@ -423,16 +587,29 @@ function googleMapPicker(opts) {
             }
 
             this.selectedAddress = this.form.description;
+            const building_notes = this.buildingLine();
+            const payload = {
+                ...this.form,
+                building_notes,
+                location_label: this.locationTypeLabel(),
+            };
 
-            // Emit to parent (profile page, checkout, etc.)
-            this.$dispatch('address-selected', { ...this.form });
+            if (this.variant === 'inline') {
+                this.confirmedAddressText = this.form.description;
+                this.confirmedBuildingLine = building_notes;
+                this.confirmedLocationLabel = this.locationTypeLabel();
+                this.inlineConfirmed = true;
+            }
 
-            this.closeModal();
+            this.$dispatch('address-selected', payload);
+
+            if (this.variant !== 'inline') {
+                this.closeModal();
+            }
         },
     };
 }
 
-// Register globally for Alpine
 if (window.Alpine) {
     window.Alpine.data('googleMapPicker', googleMapPicker);
 } else {

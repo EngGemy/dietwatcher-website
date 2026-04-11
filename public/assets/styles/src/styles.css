@@ -556,22 +556,18 @@
   }
 }
 
-/* Meal Card */
+/* Meal Card (home / store preview — RTL-safe, footer + button pinned to bottom) */
 @layer components {
   .meal-card {
-    @apply overflow-hidden text-black/70;
+    @apply flex h-full flex-col overflow-hidden rounded-xl bg-white p-3 text-black/70 shadow-sm ring-1 ring-black/5;
   }
 
   .meal-card__thumbnail {
-    @apply relative;
-  }
-
-  .meal-card__thumbnail {
-    @apply mb-4 block w-full;
+    @apply relative mb-3 block w-full flex-shrink-0 overflow-hidden rounded-lg;
   }
 
   .meal-card__thumbnail img {
-    @apply h-[390px] w-full rounded-xl object-cover object-center;
+    @apply aspect-[4/3] h-auto max-h-[220px] w-full object-cover object-center sm:max-h-[260px] md:max-h-[280px];
   }
 
   .meal-card__overlay-link {
@@ -582,24 +578,45 @@
     }
   }
 
+  .meal-card__body {
+    @apply flex min-h-0 flex-1 flex-col px-0.5;
+  }
+
+  .meal-card__title-link {
+    @apply block w-full shrink-0;
+  }
+
   .meal-card__title {
-    @apply mb-3 text-xl text-black;
+    @apply mb-2 line-clamp-3 min-h-[3.6em] text-start text-lg leading-snug text-black md:text-xl;
+  }
+
+  .meal-card__lower {
+    @apply mt-auto flex w-full flex-col gap-2.5;
   }
 
   .meal-card__footer {
-    @apply flex items-center justify-between border-t border-gray-600/30 pt-2;
+    @apply flex w-full shrink-0 items-center gap-3 border-t border-gray-600/20 pt-2.5;
+    justify-content: space-between;
+  }
+
+  .meal-card__footer:not(:has(.meal-card__category)) {
+    justify-content: flex-end;
   }
 
   .meal-card__category {
-    @apply hover:text-blue font-semibold text-black/70 hover:underline;
+    @apply min-w-0 max-w-[58%] truncate text-start text-sm font-semibold text-black/60 hover:text-blue hover:underline;
+  }
+
+  .meal-card__price-wrap {
+    @apply shrink-0 text-end;
   }
 
   .meal-card__price {
-    @apply text-green text-lg font-semibold;
+    @apply text-green text-lg font-semibold whitespace-nowrap;
   }
 
   .meal-card__btn {
-    @apply border-blue bg-blue/10 hover:bg-blue aria-pressed:bg-blue aria-pressed:border-blue text-blue mt-3 w-full cursor-pointer rounded-md border py-2 font-medium transition-colors hover:text-white aria-pressed:text-white;
+    @apply border-blue bg-blue/10 hover:bg-blue aria-pressed:bg-blue aria-pressed:border-blue text-blue w-full shrink-0 cursor-pointer rounded-md border py-2.5 text-center text-sm font-medium transition-colors hover:text-white aria-pressed:text-white md:text-base;
 
     &:hover {
       box-shadow: 0px 11px 25px rgba(23, 125, 201, 0.25);
