@@ -114,6 +114,20 @@ Route::get('/terms-and-conditions', fn () => view('pages.terms'))->name('terms')
 Route::post('/otp/send', [\App\Http\Controllers\OtpController::class, 'send'])->name('otp.send');
 Route::post('/otp/verify', [\App\Http\Controllers\OtpController::class, 'verify'])->name('otp.verify');
 
+Route::post('/checkout/moyasar-session', [\App\Http\Controllers\CheckoutController::class, 'moyasarSession'])
+    ->name('checkout.moyasar-session');
+
+Route::get('/checkout/moyasar-preview-callback', [\App\Http\Controllers\CheckoutController::class, 'moyasarPreviewCallback'])
+    ->name('checkout.moyasar-preview-callback');
+
+Route::post('/checkout/sync-address', [\App\Http\Controllers\CheckoutController::class, 'syncExternalAddress'])
+    ->middleware('throttle:30,1')
+    ->name('checkout.sync-address');
+
+Route::get('/checkout/customer-state', [\App\Http\Controllers\CheckoutController::class, 'customerState'])
+    ->middleware('throttle:60,1')
+    ->name('checkout.customer-state');
+
 // Payment routes (Moyasar)
 Route::get('/payment', [\App\Http\Controllers\PaymentController::class, 'form'])->name('payment.form');
 Route::get('/payment/callback', [\App\Http\Controllers\PaymentController::class, 'callback'])->name('payment.callback');

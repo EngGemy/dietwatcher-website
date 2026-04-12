@@ -607,6 +607,9 @@
     "Fat": "الدهون",
     "Payment Summary": "ملخص الدفع",
     "Plan Price": "سعر الخطة",
+    "Avg. per day": "متوسط لليوم",
+    "per day": "في اليوم",
+    "Offer": "عرض",
     "Delivery fees": "رسوم التوصيل",
     "Sub total": "المجموع الفرعي",
     "Incl. Vat": "شامل ضريبة القيمة المضافة",
@@ -737,6 +740,13 @@
     "payment.secure_checkout": "الدفع الآمن",
     "payment.methods_available": "بطاقة ائتمان، Apple Pay، STC Pay — سيتم اختيار طريقة الدفع في الخطوة التالية",
     "payment.proceed": "المتابعة للدفع",
+    "payment.verify_phone_to_pay": "يُرجى التحقق من رقم الجوال لتفعيل الدفع بالبطاقة.",
+    "payment.verify_phone_before_payment": "يُرجى التحقق من رقم الجوال في صفحة الطلب قبل إتمام الدفع. إذا تمت محاولة خصم، تواصل مع الدعم مع إيصالك.",
+    "payment.preview_checkout_description": "Diet Watchers — إتمام الطلب (أكمل التحقق من الجوال لإنشاء الطلب)",
+    "payment.form_visible_verify_to_pay": "نموذج الدفع أدناه للمعاينة. أكمل التحقق من الجوال لتفعيل الدفع.",
+    "payment.pay_with_moyasar": "الدفع عبر Moyasar (بطاقة، Apple Pay، STC Pay)",
+    "payment.moyasar_load_failed": "تعذر تحميل نموذج الدفع. حدّث الصفحة أو تحقق من الاتصال.",
+    "payment.fill_delivery_first": "اختر المددة، المدينة، والعنوان على الخريطة حتى يتطابق المبلغ قبل الدفع.",
 
     "payment.success_title": "تم الدفع بنجاح",
     "payment.success_heading": "تم الدفع بنجاح!",
@@ -759,6 +769,23 @@
     "payment.errors.service_error": "حدث خلل مؤقت في الخدمة. يُرجى المحاولة لاحقاً.",
     "payment.errors.generic": "يُرجى المحاولة مرة أخرى لاحقاً أو التواصل مع فريق الدعم.",
     "payment.errors.verification_failed": "تعذر التحقق من عملية الدفع. يُرجى التواصل مع الدعم.",
+
+    "Hand it to me": "سلِّمني يدًا بيد",
+    "Leave at the spot": "اتركه في الموضع",
+    "Add any special instructions…": "أضف أي تعليمات خاصة…",
+    "Confirm Address": "تأكيد العنوان",
+    "Delivery instructions": "تعليمات التوصيل",
+
+    "checkout.map_address_hint": "ابحث أو حرّك الدبوس — يتعبأ حقل العنوان أسفل الصفحة تلقائياً. ثم اختر الحي واضغط تأكيد العنوان.",
+    "google_maps.api_error_hint": "تعذّر تحميل خرائط Google. تحقق من GOOGLE_MAPS_API_KEY: تفعيل Maps JavaScript API والفوترة، وإضافة رابط موقعك في قيود المُحيل HTTP للمفتاح.",
+
+    "Building no.": "رقم المبنى",
+    "Floor no.": "رقم الطابق",
+    "Door no.": "رقم الباب",
+    "address.save_failed": "تعذّر حفظ العنوان على الخادم. يمكنك متابعة الطلب.",
+
+    "checkout.saved_addresses_title": "عناوينك المحفوظة",
+    "checkout.saved_addresses_hint": "اضغط على عنوان لملء التوصيل لهذا الطلب، أو حدد موقعاً جديداً على الخريطة أدناه.",
 
     "admin.payments.navigation_label": "المدفوعات",
     "admin.payments.title": "المدفوعات",

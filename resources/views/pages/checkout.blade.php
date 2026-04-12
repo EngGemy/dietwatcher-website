@@ -12,6 +12,11 @@ $firstPlanForPrice = $hasPlanItems ? collect($cart)->first(fn($item) => !empty($
 $planDurationDays = (int) ($firstPlanForPrice['options']['duration_days'] ?? 28);
 $planLinePrice = (float) ($firstPlanForPrice['price'] ?? 0);
 $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 0;
+
+$sessionVerifiedPhone = session('phone_verified');
+$oldPhone = old('phone', '');
+$phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
+    && str_replace(' ', '', (string) $sessionVerifiedPhone) === str_replace(' ', '', (string) $oldPhone);
 @endphp
 
 @section('title', __('Checkout') . ' | ' . $siteName)
@@ -49,8 +54,10 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
         </ol>
 
         <form action="{{ route('checkout.store') }}" method="POST" class="checkout-page__form"
+              x-ref="checkoutForm"
               x-data="checkoutPage()"
               @address-selected.window="handleAddressFromMap($event)"
+              @map-address-draft.window="handleMapAddressDraft($event)"
               @submit.prevent="submitForm($event)">
             @csrf
 
@@ -101,34 +108,32 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                                 <div>
                                     <p class="mb-3 text-lg md:text-xl">{{ __('Duration') }}</p>
                                     <p x-show="durationsLoading" x-cloak class="mb-3 text-sm text-gray-500">{{ __('Loading...') }}</p>
-                                    <div x-show="! durationsLoading && planDurations.length" x-cloak class="choice-group flex-wrap gap-3">
+                                    <div x-show="! durationsLoading && planDurations.length" x-cloak class="duration-pills">
                                         <template x-for="(d, idx) in planDurations" :key="'pd-' + idx + '-' + (d.id ?? 'x')">
-                                            <div class="min-w-[140px] flex-1">
-                                                <div x-show="Number(d.id) > 0" class="choice-group__item">
+                                            <div class="duration-pills__item">
+                                                <div x-show="Number(d.id) > 0">
                                                     <input
                                                         type="radio"
                                                         name="plan_duration_id"
-                                                        class="choice-group__input"
+                                                        class="duration-pills__input"
                                                         :id="'plan-dur-' + d.id"
                                                         :value="String(d.id)"
                                                         x-model="selectedPlanDurationId"
                                                     />
-                                                    <label class="choice-group__label min-h-[4.5rem]" :for="'plan-dur-' + d.id">
-                                                        <div class="choice-group__content">
-                                                            <span class="choice-group__title" x-text="durationCardTitle(d)"></span>
-                                                            <span class="choice-group__subtext" x-show="(d.price_per_day || 0) > 0"><span x-text="'SAR ' + Number(d.price_per_day).toFixed(2)"></span> / {{ __('day') }}</span>
-                                                        </div>
-                                                        <span class="choice-group__icon"></span>
+                                                    <label class="duration-pills__face" :for="'plan-dur-' + d.id">
+                                                        <span class="duration-pills__offer-badge" x-show="durationPlanHasOffer(d)" x-cloak>{{ __('Offer') }}</span>
+                                                        <span class="duration-pills__title" x-text="durationCardTitle(d)"></span>
+                                                        <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="'{{ __('SAR') }} ' + durationPlanListTotalStr(d)"></span>
+                                                        <span class="duration-pills__total-line" x-text="'{{ __('SAR') }} ' + durationPlanEffectiveTotalStr(d)"></span>
+                                                        <span class="duration-pills__avg" x-show="durationPlanAvgLine(d)" x-text="durationPlanAvgLine(d)"></span>
                                                     </label>
                                                 </div>
-                                                <div x-show="Number(d.id) <= 0" class="flex min-h-[4.5rem] items-start justify-between gap-3 rounded-xl border-2 border-blue bg-gradient-to-br from-blue to-[#1a8ae0] px-4 py-3 text-white shadow-md">
-                                                    <div class="min-w-0">
-                                                        <p class="text-base font-semibold leading-snug" x-text="durationCardTitle(d)"></p>
-                                                        <p class="mt-1 text-sm font-semibold text-white/90" x-show="(d.price_per_day || 0) > 0"><span x-text="'SAR ' + Number(d.price_per_day).toFixed(2)"></span> / {{ __('day') }}</p>
-                                                    </div>
-                                                    <span class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2 border-white">
-                                                        <span class="size-2 rounded-full bg-white"></span>
-                                                    </span>
+                                                <div x-show="Number(d.id) <= 0" class="duration-pills__face duration-pills__face--static">
+                                                    <span class="duration-pills__offer-badge" x-show="durationPlanHasOffer(d)" x-cloak>{{ __('Offer') }}</span>
+                                                    <span class="duration-pills__title" x-text="durationCardTitle(d)"></span>
+                                                    <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="'{{ __('SAR') }} ' + durationPlanListTotalStr(d)"></span>
+                                                    <span class="duration-pills__total-line" x-text="'{{ __('SAR') }} ' + durationPlanEffectiveTotalStr(d)"></span>
+                                                    <span class="duration-pills__avg" x-show="durationPlanAvgLine(d)" x-text="durationPlanAvgLine(d)"></span>
                                                 </div>
                                             </div>
                                         </template>
@@ -184,38 +189,6 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                                 </div>
                             @endif
 
-                            {{-- Delivery preference (same card as reference / Figma) --}}
-                            <div>
-                                <p class="mb-3 text-lg md:text-xl">{{ __('Delivery Preference') }}</p>
-                                <div class="choice-group choice-group--two">
-                                    <div class="choice-group__item">
-                                        <input type="radio" name="delivery_type" id="home" class="choice-group__input"
-                                               value="home" {{ old('delivery_type', 'home') === 'home' ? 'checked' : '' }}
-                                               x-model="deliveryType">
-                                        <label for="home" class="choice-group__label">
-                                            <div class="choice-group__content">
-                                                <span class="choice-group__title">{{ __('Home Delivery') }}</span>
-                                            </div>
-                                            <span class="choice-group__icon"></span>
-                                        </label>
-                                    </div>
-                                    <div class="choice-group__item">
-                                        <input type="radio" name="delivery_type" id="pickup" class="choice-group__input"
-                                               value="pickup" {{ old('delivery_type') === 'pickup' ? 'checked' : '' }}
-                                               x-model="deliveryType">
-                                        <label for="pickup" class="choice-group__label">
-                                            <div class="choice-group__content">
-                                                <span class="choice-group__title">{{ __('Pickup from Branch') }}</span>
-                                            </div>
-                                            <span class="choice-group__icon"></span>
-                                        </label>
-                                    </div>
-                                </div>
-                                @error('delivery_type')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
-                            </div>
-
                             {{-- Coupon Code --}}
                             <div>
                                 <p class="mb-3 text-lg md:text-xl">
@@ -248,13 +221,13 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                     </div>
 
                     {{-- User Information --}}
-                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5">
+                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-ref="checkoutUserCard">
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('User Information') }}</h3>
 
                         <div class="space-y-4">
                             <div>
                                 <input type="text" name="name" class="form-control @error('name') border-red-500 @enderror"
-                                       placeholder="{{ __('Add your name') }}" value="{{ old('name') }}" required />
+                                       placeholder="{{ __('Add your name') }}" x-model="customerName" required />
                                 @error('name')
                                     <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
                                 @enderror
@@ -264,7 +237,8 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                                 <div class="form-input-action">
                                     <input type="tel" name="phone" class="form-control @error('phone') border-red-500 @enderror"
                                            placeholder="{{ __('Add your phone number') }}" value="{{ old('phone') }}" required dir="ltr"
-                                           x-model="phone" :disabled="phoneVerified" />
+                                           x-model="phone" :readonly="phoneVerified"
+                                           :class="phoneVerified ? 'bg-gray-50 cursor-default' : ''" />
                                     <template x-if="!phoneVerified">
                                         <button type="button" class="form-input-action__btn"
                                                 @click="openOtpModal()" :disabled="otpLoading || !phone.trim()">
@@ -284,12 +258,61 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                                 @enderror
                             </div>
 
+                            <div x-show="phoneVerified && savedAddresses.length > 0" x-cloak class="rounded-lg border border-blue-100 bg-blue-50/80 p-4">
+                                <p class="mb-2 text-sm font-semibold text-gray-900">{{ __('checkout.saved_addresses_title') }}</p>
+                                <p class="mb-3 text-xs text-gray-600">{{ __('checkout.saved_addresses_hint') }}</p>
+                                <ul class="max-h-64 space-y-2 overflow-y-auto">
+                                    <template x-for="addr in savedAddresses" :key="addr.id">
+                                        <li>
+                                            <button type="button"
+                                                    class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left text-sm text-gray-800 transition hover:border-blue-400 hover:bg-blue-50/50"
+                                                    @click="applySavedAddress(addr)">
+                                                <span class="line-clamp-2" x-text="addr.description || addr.title || ''"></span>
+                                                <span class="mt-1 block text-xs text-gray-500" x-text="savedAddressDistrict(addr)"></span>
+                                            </button>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </div>
+
                         </div>
                     </div>
 
                     {{-- Delivery address: map (home) or branch (pickup) — toggles live in Select Options --}}
                     <div class="mt-6 rounded-md border border-gray-200 bg-white p-5">
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Delivery Address') }}</h3>
+
+                        {{-- Delivery preference (under heading — matches reference layout) --}}
+                        <div class="mb-6">
+                            <p class="mb-3 text-lg md:text-xl">{{ __('Delivery Preference') }}</p>
+                            <div class="choice-group choice-group--two">
+                                <div class="choice-group__item">
+                                    <input type="radio" name="delivery_type" id="home" class="choice-group__input"
+                                           value="home" {{ old('delivery_type', 'home') === 'home' ? 'checked' : '' }}
+                                           x-model="deliveryType">
+                                    <label for="home" class="choice-group__label">
+                                        <div class="choice-group__content">
+                                            <span class="choice-group__title">{{ __('Home Delivery') }}</span>
+                                        </div>
+                                        <span class="choice-group__icon"></span>
+                                    </label>
+                                </div>
+                                <div class="choice-group__item">
+                                    <input type="radio" name="delivery_type" id="pickup" class="choice-group__input"
+                                           value="pickup" {{ old('delivery_type') === 'pickup' ? 'checked' : '' }}
+                                           x-model="deliveryType">
+                                    <label for="pickup" class="choice-group__label">
+                                        <div class="choice-group__content">
+                                            <span class="choice-group__title">{{ __('Pickup from Branch') }}</span>
+                                        </div>
+                                        <span class="choice-group__icon"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            @error('delivery_type')
+                                <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
 
                         {{-- Pickup: choose branch → search list → confirmed --}}
                         <div x-show="deliveryType === 'pickup'" x-transition class="space-y-4">
@@ -362,7 +385,7 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                                 </div>
 
                                 <div class="space-y-3">
-                                    <p class="text-sm text-gray-600">{{ __('Search below, use Locate Me, then confirm your pin — your address will fill in under the map.') }}</p>
+                                    <p class="text-sm text-gray-600">{{ __('checkout.map_address_hint') }}</p>
                                     <div class="checkout-map-embed relative z-[1] min-h-[360px] w-full overflow-hidden rounded-xl border border-gray-200 bg-white">
                                         <x-google-map-picker
                                             field-prefix="delivery"
@@ -389,22 +412,72 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                                         @enderror
                                     </div>
 
+                                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3" x-show="deliveryType === 'home'" x-cloak>
+                                        <div>
+                                            <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Building') }}</label>
+                                            <input type="text" class="form-control" autocomplete="section-shipping address-line2"
+                                                   placeholder="{{ __('Building no.') }}"
+                                                   x-model="deliveryBuilding"
+                                                   @input.debounce.300ms="composeBuildingNotes()"
+                                                   :disabled="deliveryType === 'pickup'" />
+                                        </div>
+                                        <div>
+                                            <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Floor') }}</label>
+                                            <input type="text" class="form-control" inputmode="numeric" autocomplete="off"
+                                                   placeholder="{{ __('Floor no.') }}"
+                                                   x-model="deliveryFloor"
+                                                   @input.debounce.300ms="composeBuildingNotes()"
+                                                   :disabled="deliveryType === 'pickup'" />
+                                        </div>
+                                        <div>
+                                            <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Door') }}</label>
+                                            <input type="text" class="form-control" inputmode="numeric" autocomplete="off"
+                                                   placeholder="{{ __('Door no.') }}"
+                                                   x-model="deliveryDoor"
+                                                   @input.debounce.300ms="composeBuildingNotes()"
+                                                   :disabled="deliveryType === 'pickup'" />
+                                        </div>
+                                    </div>
+
                                     <input type="hidden" name="building" :value="buildingNotes" :disabled="deliveryType === 'pickup'" />
                                 </div>
                         </div>
                     </div>
 
-                    {{-- Payment Info --}}
+                    {{-- Payment: Moyasar (unlock after phone OTP; amount synced from form) --}}
                     <div class="mt-6 rounded-md border border-gray-200 bg-white p-5">
-                        <h3 class="mb-4 text-2xl font-semibold md:text-2xl">{{ __('Payment') }}</h3>
-                        <div class="flex items-center gap-3 rounded-lg bg-blue-50 p-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-blue flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <h3 class="mb-2 text-2xl font-semibold md:text-2xl">{{ __('Payment') }}</h3>
+                        <p class="mb-4 text-sm text-gray-600">{{ __('payment.pay_with_moyasar') }}</p>
+
+                        <div class="mb-3 flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3">
+                            <svg x-show="phoneVerified" xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                            </svg>
+                            <svg x-show="!phoneVerified" x-cloak xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                             </svg>
                             <div>
                                 <p class="text-sm font-semibold text-gray-800">{{ __('payment.secure_checkout') }}</p>
-                                <p class="text-xs text-gray-500 mt-0.5">{{ __('payment.methods_available') }}</p>
+                                <p class="text-xs text-gray-500">{{ __('payment.secure_note') }}</p>
                             </div>
+                        </div>
+
+                        <div x-show="moyasarError" x-cloak class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" x-text="moyasarError"></div>
+
+                        <div class="relative min-h-[160px] rounded-xl border border-gray-200 bg-gray-50 p-4">
+                            <div
+                                x-show="!phoneVerified"
+                                x-cloak
+                                class="pointer-events-auto absolute inset-0 z-10 flex flex-col items-center justify-end gap-1 rounded-xl bg-slate-900/15 px-4 pb-4 pt-10 text-center backdrop-blur-[1px]"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-9 w-9 text-gray-700" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                </svg>
+                                <p class="max-w-sm text-sm font-semibold text-gray-900">{{ __('payment.verify_phone_to_pay') }}</p>
+                                <p class="max-w-sm text-xs text-gray-700">{{ __('payment.form_visible_verify_to_pay') }}</p>
+                            </div>
+
+                            <div id="moyasar-form-checkout" class="relative z-[1] min-h-[120px] w-full"></div>
                         </div>
                     </div>
                 </div>
@@ -455,6 +528,10 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                                         <div class="flex items-center justify-between">
                                             <span class="text-gray-600">{{ $hasPlanItems ? __('Plan Price') : __('Items Total') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></span>
                                             <span class="font-bold text-gray-900">SAR <span x-text="subtotalInclVat().toFixed(2)"></span></span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-sm" x-show="isPlanCheckout && planSelectedAvgPerDayAmount()" x-cloak>
+                                            <span class="text-gray-600">{{ __('Avg. per day') }} <span class="text-xs text-gray-400">({{ __('Incl. VAT') }})</span></span>
+                                            <span class="font-semibold text-gray-800" x-text="planSelectedAvgPerDayAmount()"></span>
                                         </div>
                                         <div class="flex items-center justify-between">
                                             <span class="text-gray-600">{{ __('Delivery fees') }}</span>
@@ -608,6 +685,10 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
     </div>
 </section>
 @endsection
+
+@push('head')
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/moyasar-payment-form/dist/moyasar.css" />
+@endpush
 
 @push('styles')
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -1039,10 +1120,20 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
         border: 2px solid #bfdbfe; border-radius: 12px; background: #eff6ff; padding: 1rem 1.1rem;
     }
     .checkout-branch-selected__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+
+    #moyasar-form-checkout .mysr-form {
+        font-family: inherit !important;
+    }
+    #moyasar-form-checkout .mysr-form button[type="submit"],
+    #moyasar-form-checkout .mysr-form .mysr-form-button {
+        background: #279ff9 !important;
+        border-radius: 10px !important;
+    }
 </style>
 @endpush
 
 @push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/moyasar-payment-form/dist/moyasar.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 @if($locale === 'ar')
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ar.js"></script>
@@ -1062,12 +1153,35 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
             discount: 0,
             addressStreet: @json(old('street', '')),
             buildingNotes: @json(old('building', '')),
+            customerName: @json(old('name', '')),
+            savedAddresses: [],
+            deviceId: (function () {
+                try {
+                    const k = 'dw_checkout_device_id';
+                    let v = localStorage.getItem(k);
+                    if (! v && typeof crypto !== 'undefined' && crypto.randomUUID) {
+                        v = 'web-' + crypto.randomUUID();
+                        localStorage.setItem(k, v);
+                    }
+
+                    return v || 'web-checkout-device';
+                } catch (e) {
+                    return 'web-checkout-device';
+                }
+            })(),
+            deliveryBuilding: '',
+            deliveryFloor: '',
+            deliveryDoor: '',
+            addressConfirmedForSync: false,
+            _syncExtTimer: null,
 
             // Zone state
             selectedZoneId: '{{ old('zone_id', '') }}',
             zones: @json($zones),
 
             checkoutProgramId: {{ (int) ($checkoutProgramId ?? 0) }},
+            /** Matches cart line duration_days — used when API duration_id differs from list ids */
+            cartDurationDaysHint: {{ (int) ($planDurationDays ?? 0) }},
             cartDurationFallback: @json($cartDurationFallback ?? null),
             durationsLoading: @json($hasPlanItems),
             // Plan durations (filled from server, client fetch, or cart fallback)
@@ -1085,7 +1199,7 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
 
             // Phone / OTP state
             phone: '{{ old('phone', '') }}',
-            phoneVerified: false,
+            phoneVerified: @json($phoneVerifiedFromSession ?? false),
             otpModalOpen: false,
             otpSent: false,
             otpDigits: ['', '', '', ''],
@@ -1099,6 +1213,9 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
             couponApplied: false,
             couponLoading: false,
             couponMessage: '',
+
+            moyasarError: '',
+            _moyasarTimer: null,
 
             // ─── PRICES FROM API ARE VAT-INCLUSIVE (like mobile app) ───
             // The baseSubtotal already includes VAT. We extract VAT for display only.
@@ -1121,6 +1238,94 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                 return '';
             },
 
+            /** Total SAR when available (matches meal-plan duration chips); else price / day */
+            durationPillPriceLine(d) {
+                if (! d) {
+                    return '';
+                }
+                const total = parseFloat(d.effective_price) || 0;
+                if (total > 0) {
+                    const n = Math.round(total * 100) / 100;
+
+                    return 'SAR ' + (Number.isInteger(n) ? String(n) : n.toFixed(2));
+                }
+                const ppd = parseFloat(d.price_per_day) || 0;
+                if (ppd > 0) {
+                    return 'SAR ' + ppd.toFixed(2) + ' / {{ __('day') }}';
+                }
+
+                return '';
+            },
+
+            durationPlanHasOffer(d) {
+                if (! d) {
+                    return false;
+                }
+                if (d.has_offer === true) {
+                    return true;
+                }
+                const p = parseFloat(d.price) || 0;
+                const o = parseFloat(d.offer_price) || 0;
+
+                return o > 0 && o < p;
+            },
+
+            durationPlanListTotalStr(d) {
+                const lp = parseFloat(d.list_price);
+                const raw = ! Number.isNaN(lp) && lp > 0 ? lp : parseFloat(d.price) || 0;
+                const n = Math.round(raw * 100) / 100;
+
+                return Number.isInteger(n) ? String(n) : n.toFixed(2);
+            },
+
+            durationPlanEffectiveTotal(d) {
+                const eff = parseFloat(d.effective_price);
+                if (! Number.isNaN(eff) && eff > 0) {
+                    return eff;
+                }
+                const p = parseFloat(d.price) || 0;
+                const o = parseFloat(d.offer_price) || 0;
+
+                return o > 0 && o < p ? o : p;
+            },
+
+            durationPlanEffectiveTotalStr(d) {
+                const n = Math.round(this.durationPlanEffectiveTotal(d) * 100) / 100;
+
+                return Number.isInteger(n) ? String(n) : n.toFixed(2);
+            },
+
+            durationPlanAvgLine(d) {
+                const days = parseInt(d.days, 10) || 0;
+                const e = this.durationPlanEffectiveTotal(d);
+                if (days <= 0 || e <= 0) {
+                    return '';
+                }
+                const avg = Math.round((e / days) * 100) / 100;
+                const ns = Number.isInteger(avg) ? String(avg) : avg.toFixed(2);
+
+                return '{{ __('SAR') }} ' + ns + ' · {{ __('per day') }}';
+            },
+
+            planSelectedAvgPerDayAmount() {
+                if (! this.isPlanCheckout) {
+                    return '';
+                }
+                const id = this.selectedPlanDurationId;
+                const row = (this.planDurations || []).find((r) => String(r.id) === String(id));
+                if (! row) {
+                    return '';
+                }
+                const days = parseInt(row.days, 10) || 0;
+                const e = this.durationPlanEffectiveTotal(row);
+                if (days <= 0 || e <= 0) {
+                    return '';
+                }
+                const avg = Math.round((e / days) * 100) / 100;
+
+                return '{{ __('SAR') }} ' + (Number.isInteger(avg) ? String(avg) : avg.toFixed(2));
+            },
+
             normalizeDurationRow(row) {
                 const p = parseFloat(row.price) || 0;
                 const o = parseFloat(row.offer_price) || 0;
@@ -1130,8 +1335,9 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                     : (o > 0 && o < p ? o : p);
                 const days = parseInt(row.days, 10) || 0;
                 const ppd = days > 0 ? Math.round((effective / days) * 100) / 100 : (parseFloat(row.price_per_day) || 0);
+                const hasOffer = o > 0 && o < p;
 
-                return { ...row, effective_price: effective, price_per_day: ppd };
+                return { ...row, effective_price: effective, price_per_day: ppd, list_price: p, has_offer: hasOffer };
             },
 
             async hydratePlanDurations() {
@@ -1155,11 +1361,16 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                     const eff = parseFloat(row.effective_price) || 0;
                     this.planDurationPrices[id] = eff;
                 });
-                const ids = list.map((r) => String(r.id));
+                const idOk = (s) => s && list.some((r) => String(r.id) === String(s));
                 let sel = @json((string) old('plan_duration_id', $preferredPlanDurationId ?? ''));
-                if (! sel || ! ids.includes(sel)) {
-                    const def = list.find((r) => r.is_default && Number(r.id) > 0) || list.find((r) => Number(r.id) > 0);
-                    sel = def ? String(def.id) : (list[0] ? String(list[0].id) : '');
+                if (! idOk(sel)) {
+                    let pick = this.cartDurationDaysHint > 0
+                        ? list.find((r) => parseInt(r.days, 10) === this.cartDurationDaysHint)
+                        : null;
+                    if (! pick) {
+                        pick = list.find((r) => r.is_default && Number(r.id) > 0) || list.find((r) => Number(r.id) > 0);
+                    }
+                    sel = pick ? String(pick.id) : (list[0] ? String(list[0].id) : '');
                 }
                 this.selectedPlanDurationId = sel;
                 if (sel !== '' && this.planDurationPrices[sel] != null) {
@@ -1178,9 +1389,61 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                 if (typeof label === 'object' && label !== null && ! Array.isArray(label)) {
                     label = label['{{ $locale }}'] || label['en'] || '';
                 }
-                const days = row.days ? ` · ${row.days} {{ __('days') }}` : '';
+                const labelStr = String(label || '').trim();
+                const daysNum = parseInt(row.days, 10) || 0;
+                if (labelStr && daysNum > 0 && labelStr.includes(String(daysNum))) {
+                    return labelStr;
+                }
+                if (! labelStr && daysNum > 0) {
+                    return `${daysNum} {{ __('days') }}`;
+                }
+                if (labelStr && daysNum > 0) {
+                    return labelStr + ` · ${daysNum} {{ __('days') }}`;
+                }
 
-                return (label || '') + days;
+                return labelStr;
+            },
+
+            composeBuildingNotes() {
+                const p = [];
+                const b = (this.deliveryBuilding || '').trim();
+                const f = (this.deliveryFloor || '').trim();
+                const d = (this.deliveryDoor || '').trim();
+                if (b) {
+                    p.push('{{ __("Building") }}: ' + b);
+                }
+                if (f) {
+                    p.push('{{ __("Floor") }}: ' + f);
+                }
+                if (d) {
+                    p.push('{{ __("Door") }}: ' + d);
+                }
+                this.buildingNotes = p.join(', ');
+                if (this.addressConfirmedForSync) {
+                    clearTimeout(this._syncExtTimer);
+                    this._syncExtTimer = setTimeout(() => this.syncExternalAddress(), 1200);
+                }
+            },
+
+            async syncExternalAddress() {
+                if (this.deliveryType !== 'home') {
+                    return;
+                }
+                const form = this.$refs.checkoutForm;
+                if (! form) {
+                    return;
+                }
+                const fd = new FormData(form);
+                try {
+                    await fetch('{{ route('checkout.sync-address') }}', {
+                        method: 'POST',
+                        body: fd,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+                        },
+                    });
+                } catch (e) {}
             },
 
             handleAddressFromMap(event) {
@@ -1188,7 +1451,84 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                 if (d.description) {
                     this.addressStreet = d.description;
                 }
-                this.buildingNotes = d.building_notes || '';
+                this.deliveryBuilding = d.building_num != null && d.building_num !== '' ? String(d.building_num) : '';
+                this.deliveryFloor = d.floor != null && d.floor !== '' ? String(d.floor) : '';
+                this.deliveryDoor = d.door != null && d.door !== '' ? String(d.door) : '';
+                if (d.building_notes) {
+                    this.buildingNotes = d.building_notes;
+                } else {
+                    this.composeBuildingNotes();
+                }
+                this.addressConfirmedForSync = true;
+                this.$nextTick(() => this.syncExternalAddress());
+            },
+
+            handleMapAddressDraft(event) {
+                const d = event.detail || {};
+                if (d.description) {
+                    this.addressStreet = d.description;
+                }
+            },
+
+            savedAddressDistrict(addr) {
+                if (! addr || ! addr.district) {
+                    return '';
+                }
+                const d = addr.district;
+                if (typeof d.name === 'string') {
+                    return d.name;
+                }
+                if (d.name && typeof d.name === 'object') {
+                    return d.name['{{ $locale }}'] || d.name['en'] || '';
+                }
+
+                return '';
+            },
+
+            applySavedAddress(addr) {
+                if (! addr || this.deliveryType !== 'home') {
+                    return;
+                }
+                const districtId = addr.district?.id ?? addr.district_id;
+                let pickup = 'hand_it_to_me';
+                const pt = addr.pickupType;
+                if (pt && typeof pt === 'object') {
+                    const id = String(pt.id ?? '').toLowerCase();
+                    const tx = String(pt.text ?? '').toLowerCase();
+                    if (id.includes('leave') || tx.includes('leave') || tx.includes('door')) {
+                        pickup = 'leave_at_door';
+                    }
+                }
+                window.dispatchEvent(new CustomEvent('gmp-external-address-apply', {
+                    detail: {
+                        latitude: addr.latitude,
+                        longitude: addr.longitude,
+                        description: addr.description || '',
+                        district_id: districtId,
+                        type: addr.type || 'residential',
+                        title: addr.title || '',
+                        pickup_type: pickup,
+                    },
+                }));
+                if (addr.description) {
+                    this.addressStreet = addr.description;
+                }
+            },
+
+            async refreshCustomerFromServer() {
+                try {
+                    const res = await fetch('{{ route('checkout.customer-state') }}', {
+                        headers: { 'Accept': 'application/json' },
+                    });
+                    const d = await res.json().catch(() => ({}));
+                    if (! d.success) {
+                        return;
+                    }
+                    this.savedAddresses = Array.isArray(d.addresses) ? d.addresses : [];
+                    if (d.profile && d.profile.name && ! (this.customerName || '').trim()) {
+                        this.customerName = String(d.profile.name);
+                    }
+                } catch (e) {}
             },
 
             branchLabel(branch) {
@@ -1374,7 +1714,6 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                     });
 
                     const data = await response.json();
-                    // Show OTP in message for testing (backend sends it in non-production)
                     this.otpMessage = data.otp
                         ? data.message + ' (Code: ' + data.otp + ')'
                         : data.message;
@@ -1414,6 +1753,7 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                         body: JSON.stringify({
                             phone: this.phone.trim(),
                             otp: code,
+                            device_id: this.deviceId,
                         }),
                     });
 
@@ -1423,7 +1763,15 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                         this.phoneVerified = true;
                         this.otpMessageType = 'success';
                         this.otpMessage = data.message;
+                        this.savedAddresses = Array.isArray(data.addresses) ? data.addresses : [];
+                        if (data.profile && data.profile.name) {
+                            this.customerName = String(data.profile.name);
+                        }
+                        if (data.is_continue) {
+                            this.$nextTick(() => this.$refs.checkoutUserCard?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                        }
                         setTimeout(() => { this.otpModalOpen = false; }, 800);
+                        this.$nextTick(() => this.scheduleMoyasarRefresh());
                     } else {
                         this.otpMessageType = 'error';
                         this.otpMessage = data.message;
@@ -1501,6 +1849,160 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                 event.target.submit();
             },
 
+            scheduleMoyasarRefresh() {
+                clearTimeout(this._moyasarTimer);
+                this._moyasarTimer = setTimeout(() => {
+                    if (this.phoneVerified) {
+                        this.bootstrapMoyasar();
+                    } else {
+                        this.bootstrapMoyasarPreview();
+                    }
+                }, 450);
+            },
+
+            async bootstrapMoyasarPreview() {
+                if (this.phoneVerified) {
+                    return;
+                }
+                const hasSdk = await this.waitForMoyasar();
+                if (! hasSdk) {
+                    this.moyasarError = '{{ __('payment.moyasar_load_failed') }}';
+
+                    return;
+                }
+                const form = this.$refs.checkoutForm;
+                if (! form) {
+                    return;
+                }
+                this.moyasarError = '';
+                const fd = new FormData(form);
+                fd.append('preview_only', '1');
+                try {
+                    const res = await fetch('{{ route('checkout.moyasar-session') }}', {
+                        method: 'POST',
+                        body: fd,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+                        },
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (this.phoneVerified) {
+                        return;
+                    }
+                    if (! res.ok || ! data.success) {
+                        this.moyasarError = data.message || '{{ __('payment.fill_delivery_first') }}';
+                        const el = document.getElementById('moyasar-form-checkout');
+                        if (el) {
+                            el.innerHTML = '';
+                        }
+
+                        return;
+                    }
+                    this.initMoyasarWidget(data);
+                } catch (e) {
+                    this.moyasarError = '{{ __('An error occurred. Please try again.') }}';
+                }
+            },
+
+            waitForMoyasar(maxMs = 8000) {
+                return new Promise((resolve) => {
+                    if (typeof Moyasar !== 'undefined') {
+                        resolve(true);
+
+                        return;
+                    }
+                    const start = Date.now();
+                    const tick = () => {
+                        if (typeof Moyasar !== 'undefined') {
+                            resolve(true);
+
+                            return;
+                        }
+                        if (Date.now() - start >= maxMs) {
+                            resolve(false);
+
+                            return;
+                        }
+                        setTimeout(tick, 100);
+                    };
+                    tick();
+                });
+            },
+
+            async bootstrapMoyasar() {
+                if (! this.phoneVerified) {
+                    return;
+                }
+                const hasSdk = await this.waitForMoyasar();
+                if (! hasSdk) {
+                    this.moyasarError = '{{ __('payment.moyasar_load_failed') }}';
+
+                    return;
+                }
+                const form = this.$refs.checkoutForm;
+                if (! form) {
+                    return;
+                }
+                this.moyasarError = '';
+                const fd = new FormData(form);
+                try {
+                    const res = await fetch('{{ route('checkout.moyasar-session') }}', {
+                        method: 'POST',
+                        body: fd,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+                        },
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (! this.phoneVerified) {
+                        return;
+                    }
+                    if (! res.ok || ! data.success) {
+                        this.moyasarError = data.message || '{{ __('payment.fill_delivery_first') }}';
+                        const el = document.getElementById('moyasar-form-checkout');
+                        if (el) {
+                            el.innerHTML = '';
+                        }
+
+                        return;
+                    }
+                    this.initMoyasarWidget(data);
+                } catch (e) {
+                    this.moyasarError = '{{ __('An error occurred. Please try again.') }}';
+                }
+            },
+
+            initMoyasarWidget(data) {
+                const el = document.getElementById('moyasar-form-checkout');
+                if (! el || typeof Moyasar === 'undefined') {
+                    return;
+                }
+                el.innerHTML = '';
+                let cb = (data.callback_url || '').trim();
+                if (data.order_number) {
+                    const sep = cb.includes('?') ? '&' : '?';
+                    cb = cb + sep + 'order=' + encodeURIComponent(data.order_number);
+                }
+                Moyasar.init({
+                    element: '#moyasar-form-checkout',
+                    amount: data.amount_halalas,
+                    currency: data.currency || 'SAR',
+                    description: data.description || '',
+                    publishable_api_key: data.publishable_key,
+                    callback_url: cb,
+                    methods: ['creditcard', 'applepay', 'stcpay'],
+                    supported_networks: ['visa', 'mastercard', 'mada'],
+                    apple_pay: {
+                        country: 'SA',
+                        label: 'Diet Watchers',
+                        validate_merchant_url: 'https://api.moyasar.com/v1/applepay/initiate',
+                    },
+                    language: '{{ $locale }}',
+                });
+            },
+
             // Watch for duration changes to re-validate coupon
             async init() {
                 if (this.isPlanCheckout) {
@@ -1517,8 +2019,10 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                         this.baseSubtotal = Math.round(p * 100) / 100;
                         this.revalidateCoupon();
                     }
+                    this.scheduleMoyasarRefresh();
                 });
                 this.$watch('duration', () => this.revalidateCoupon());
+                this.$watch('selectedZoneId', () => this.scheduleMoyasarRefresh());
                 this.$watch('deliveryType', (v) => {
                     if (v === 'pickup') {
                         this.syncPickupPhase();
@@ -1526,7 +2030,9 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                     if (v === 'home') {
                         setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 300);
                     }
+                    this.scheduleMoyasarRefresh();
                 });
+                this.$watch('couponApplied', () => this.scheduleMoyasarRefresh());
                 if (this.deliveryType === 'home') {
                     setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 500);
                 }
@@ -1539,6 +2045,11 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
                         this.syncPickupPhase();
                     })
                     .catch(() => { this.branches = []; this.branchesLoading = false; });
+
+                if (this.phoneVerified) {
+                    await this.refreshCustomerFromServer();
+                }
+                this.scheduleMoyasarRefresh();
             }
         }
     }

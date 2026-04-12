@@ -131,6 +131,7 @@ class PaymentController extends Controller
 
         // Clear cart and send confirmation SMS on successful payment
         if ($payment->status === PaymentStatus::PAID) {
+            session()->forget('checkout_moyasar_order');
             session()->forget(CartManager::SESSION_MARKET);
             session()->forget(CartManager::SESSION_SUBSCRIPTION);
 
