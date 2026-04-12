@@ -14,7 +14,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@300;400;700;800&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="{{ asset('assets/styles/main.css') }}" />
-    
+    <link rel="stylesheet" href="{{ asset('assets/styles/duration-pills.css') }}" />
+
     {{-- Livewire Styles --}}
     @livewireStyles
     

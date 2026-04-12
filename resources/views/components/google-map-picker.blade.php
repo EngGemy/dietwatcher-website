@@ -37,7 +37,7 @@
     <div class="gmp-trigger" @click="openModal()">
         <span class="gmp-trigger__icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20" style="width:20px;height:20px;flex-shrink:0">
-                <path fill-rule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.07-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-2.003 3.5-4.697 3.5-8.327a8 8 0 0 0-16 0c0 3.63 1.556 6.326 3.5 8.327a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.144.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
+                <path fill-rule="evenodd" d="M11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.07-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-2.003 3.5-4.697 3.5-8.327a8 8 0 0 0-16 0c0 3.63 1.556 6.326 3.5 8.327a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.144.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
             </svg>
         </span>
         <input
@@ -60,6 +60,8 @@
     <input type="hidden" :name="prefix + '_description'" :value="form.description" />
     <input type="hidden" :name="prefix + '_type'"        :value="form.type" />
     <input type="hidden" :name="prefix + '_district_id'" :value="form.district_id" />
+    <input type="hidden" :name="prefix + '_pickup_type'" :value="form.pickup_type" />
+    <input type="hidden" :name="prefix + '_title'"       :value="form.title" />
 
     @if($isInline)
         {{-- Inline (checkout): never use Alpine x-show on this panel — it can stay display:none after transitions --}}
@@ -94,16 +96,20 @@
                     autocomplete="off"
                 />
             </div>
-            <button type="button" @click="useMyLocation()" class="gmp-topbar__gps" :class="{ 'gmp-topbar__gps--wide': variant === 'inline' }" title="{{ __('Use my location') }}">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;flex-shrink:0">
+            <button type="button" @click="useMyLocation()" class="gmp-topbar__gps @if($isInline) gmp-topbar__gps--wide @endif" title="{{ __('Use my location') }}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;flex-shrink:0" aria-hidden="true">
                     <path fill-rule="evenodd" d="M11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.07-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-2.003 3.5-4.697 3.5-8.327a8 8 0 0 0-16 0c0 3.63 1.556 6.326 3.5 8.327a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.144.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
                     <path d="M12 2.25a.75.75 0 0 1 .75.75v1.549a8.253 8.253 0 0 1 6.944 6.944H21.75a.75.75 0 0 1 0 1.5h-2.056a8.253 8.253 0 0 1-6.944 6.944V21.75a.75.75 0 0 1-1.5 0v-2.056a8.253 8.253 0 0 1-6.944-6.944H2.25a.75.75 0 0 1 0-1.5h2.056A8.253 8.253 0 0 1 11.25 4.306V3a.75.75 0 0 1 .75-.75Z"/>
                 </svg>
-                <span x-show="variant === 'inline'" class="gmp-topbar__gps-label">{{ __('Locate Me') }}</span>
+                @if($isInline)
+                    <span class="gmp-topbar__gps-label">{{ __('Locate Me') }}</span>
+                @endif
             </button>
         </div>
 
+        <div class="gmp-map-stage @if($isInline) gmp-map-stage--inline @endif">
         @if(filled($mapsKey))
+        <p class="gmp-map-api-error" x-show="mapsAuthFailed" x-cloak>{{ __('google_maps.api_error_hint') }}</p>
         <div id="{{ $uid }}_map" class="gmp-map"></div>
         @else
         <div class="gmp-map gmp-map--placeholder flex min-h-[280px] flex-col items-center justify-center gap-2 border border-dashed border-gray-300 bg-slate-100 p-4 text-center text-sm text-gray-600">
@@ -119,7 +125,7 @@
 
         <div class="gmp-pin" aria-hidden="true">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#279ff9" class="gmp-pin__svg" width="44" height="44" style="width:44px;height:44px">
-                <path fill-rule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.07-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-2.003 3.5-4.697 3.5-8.327a8 8 0 0 0-16 0c0 3.63 1.556 6.326 3.5 8.327a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.144.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
+                <path fill-rule="evenodd" d="M11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.07-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-2.003 3.5-4.697 3.5-8.327a8 8 0 0 0-16 0c0 3.63 1.556 6.326 3.5 8.327a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.144.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd"/>
             </svg>
             <div class="gmp-pin__shadow"></div>
         </div>
@@ -128,8 +134,9 @@
             <span class="gmp-geocoding__spinner"></span>
             {{ __('Finding address…') }}
         </div>
+        </div>
 
-        <div class="gmp-sheet" x-show="variant !== 'inline' || !inlineConfirmed" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-full" x-transition:enter-end="translate-y-0">
+        <div class="gmp-sheet @if($isInline) gmp-sheet--static-inline @endif" x-show="variant !== 'inline' || !inlineConfirmed">
             <div class="gmp-sheet__field">
                 <label class="gmp-sheet__label">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:15px;height:15px"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/></svg>
@@ -140,6 +147,7 @@
                     class="gmp-sheet__textarea"
                     rows="2"
                     placeholder="{{ __('Street name, building number, landmarks…') }}"
+                    @input.debounce.400ms="dispatchAddressDraft()"
                 ></textarea>
             </div>
 
@@ -154,11 +162,23 @@
                     🏠 {{ __('Home') }}
                 </button>
                 <button type="button" class="gmp-type-chip" :class="{ 'gmp-type-chip--active': form.type === 'work' }" @click="form.type = 'work'">
-                    💼 {{ __('Office') }}
+                    🏢 {{ __('Office') }}
                 </button>
                 <button type="button" class="gmp-type-chip" :class="{ 'gmp-type-chip--active': form.type === 'other' }" @click="form.type = 'other'">
-                    📍 {{ __('Other') }}
+                    🏢 {{ __('Other') }}
                 </button>
+            </div>
+
+            <div class="gmp-sheet__field">
+                <label class="gmp-sheet__label">{{ __('Delivery instructions') }}</label>
+                <div class="gmp-sheet__types gmp-sheet__types--split">
+                    <button type="button" class="gmp-type-chip gmp-type-chip--wide" :class="{ 'gmp-type-chip--active': form.pickup_type === 'hand_it_to_me' }" @click="form.pickup_type = 'hand_it_to_me'">
+                        🤝 {{ __('Hand it to me') }}
+                    </button>
+                    <button type="button" class="gmp-type-chip gmp-type-chip--wide" :class="{ 'gmp-type-chip--active': form.pickup_type === 'leave_at_door' }" @click="form.pickup_type = 'leave_at_door'">
+                        📍 {{ __('Leave at the spot') }}
+                    </button>
+                </div>
             </div>
 
             <div class="gmp-sheet__field" x-show="form.type === 'other'" x-transition>
@@ -189,7 +209,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/>
                 </svg>
-                {{ __('Confirm Location') }}
+                {{ __('Confirm Address') }}
             </button>
         </div>
 
@@ -239,12 +259,34 @@
 }
 .gmp-wrapper--inline .gmp-topbar { position:relative; box-shadow:none; border-bottom:1px solid #eef0f4; flex-wrap:nowrap; }
 .gmp-topbar__back-spacer { width:38px; flex-shrink:0; }
-.gmp-wrapper--inline .gmp-map { flex:1 1 auto; margin-top:0; min-height:240px; min-width:100%; background:#e8eaed; }
+/* Map stage: pin + geocode anchored to map area only (checkout inline) */
+.gmp-map-stage { position:relative; width:100%; flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }
+.gmp-map-stage--inline { min-height:260px; isolation:isolate; }
+.gmp-map-stage--inline .gmp-map { flex:1 1 auto; margin-top:0; min-height:220px; min-width:100%; background:#e8eaed; position:relative; z-index:0; }
+.gmp-map-stage--inline .gmp-map-hint { flex-shrink:0; }
+.gmp-map-stage--inline .gmp-pin { top:42%; z-index:6; }
+.gmp-map-stage--inline .gmp-geocoding { top:38%; z-index:8; }
 .gmp-wrapper--inline .gmp-sheet { transition: none !important; }
+/* Checkout: form below map (not covered by map canvas) */
+.gmp-sheet--static-inline {
+    position: relative !important;
+    bottom: auto !important;
+    inset-inline: 0 !important;
+    max-height: min(560px, 62vh) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 0 0 12px 12px !important;
+    box-shadow: none !important;
+    border-top: 1px solid #eef0f4;
+    z-index: 2;
+}
+.gmp-sheet--static-inline::before { margin-bottom: 0.35rem; }
 /* No API key: show only the placeholder block (hide search UI shell) */
 .gmp-wrapper--missing-api-key .gmp-modal { display:block !important; min-height:auto !important; max-height:none !important; }
-.gmp-wrapper--missing-api-key .gmp-modal > *:not(.gmp-map--placeholder) { display:none !important; }
+.gmp-wrapper--missing-api-key .gmp-modal > *:not(.gmp-map-stage) { display:none !important; }
+.gmp-wrapper--missing-api-key .gmp-map-stage > *:not(.gmp-map--placeholder) { display:none !important; }
 .gmp-wrapper--missing-api-key .gmp-modal .gmp-map--placeholder { margin-top:0 !important; min-height:min(360px,70vh) !important; }
+.gmp-map-api-error { margin:0; padding:.65rem .85rem; font-size:.8rem; font-weight:600; color:#991b1b; background:#fef2f2; border-bottom:1px solid #fecaca; text-align:center; }
 .gmp-map-hint { margin:0; padding:.35rem .75rem .5rem; font-size:.78rem; color:#6b7280; text-align:center; background:#fafafa; border-bottom:1px solid #eef0f4; }
 .gmp-wrapper--inline .gmp-pin { transform:translate(-50%, calc(-100% + 28px)); }
 .gmp-wrapper--inline .gmp-geocoding { top:120px; }
@@ -289,7 +331,7 @@
 .gmp-topbar__search-input { width:100%; padding:.6rem .75rem .6rem 2.2rem; border:1.5px solid #e0e0e8; border-radius:10px; font-size:.88rem; outline:none; background:#f5f5fa; transition:border .2s; }
 [dir="rtl"] .gmp-topbar__search-input { padding:.6rem 2.2rem .6rem .75rem; }
 .gmp-topbar__search-input:focus { border-color:#279ff9; background:#fff; }
-.gmp-topbar__gps { width:38px; height:38px; border:none; background:#279ff9; border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; color:#fff; transition:background .2s; }
+.gmp-topbar__gps { width:38px; height:38px; border:none; background:#279ff9; border-radius:10px; display:flex; flex-direction:row; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; color:#fff; transition:background .2s; }
 .gmp-topbar__gps:hover { background:#1e8de0; }
 
 .gmp-map { flex:1; width:100%; margin-top:64px; }
@@ -317,6 +359,8 @@
 .gmp-select-wrap::after { content:'▾'; position:absolute; top:50%; inset-inline-end:.85rem; transform:translateY(-50%); pointer-events:none; color:#aaa; font-size:.8rem; }
 
 .gmp-sheet__types { display:flex; gap:.5rem; flex-wrap:wrap; }
+.gmp-sheet__types--split { display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+.gmp-type-chip--wide { width:100%; justify-content:center; }
 .gmp-type-chip { padding:.4rem .9rem; border-radius:100px; border:1.5px solid #e0e0e8; background:#fff; font-size:.82rem; font-weight:600; cursor:pointer; transition:all .2s; color:#555; }
 .gmp-type-chip:hover { border-color:#279ff9; color:#279ff9; }
 .gmp-type-chip--active { background:#279ff9; color:#fff; border-color:#279ff9; }
@@ -332,12 +376,19 @@ window._gmpLoaded = false;
 window._gmpCallbacks = [];
 window.initGoogleMaps = function() {
     window._gmpLoaded = true;
-    window._gmpCallbacks.forEach(fn => fn());
+    (window._gmpCallbacks || []).forEach(function(fn) {
+        try {
+            fn();
+        } catch (e) {}
+    });
     window._gmpCallbacks = [];
+};
+window.gm_authFailure = function() {
+    window.dispatchEvent(new CustomEvent('gmp-maps-auth-failed', { bubbles: true }));
 };
 </script>
 <script
-    src="https://maps.googleapis.com/maps/api/js?key={{ $mapsKey }}&libraries=places&callback=initGoogleMaps&loading=async"
+    src="https://maps.googleapis.com/maps/api/js?key={{ $mapsKey }}&libraries=places&v=weekly&language={{ app()->getLocale() }}&region=SA&callback=initGoogleMaps"
     async defer
 ></script>
 @endif
@@ -377,6 +428,7 @@ function googleMapPicker(opts) {
             building_num: '',
             floor:       '',
             door:        '',
+            pickup_type: 'hand_it_to_me',
         },
         _map:       null,
         _geocoder:  null,
@@ -384,12 +436,79 @@ function googleMapPicker(opts) {
         _center:    { lat: opts.initialLat || 24.7136, lng: opts.initialLng || 46.6753 },
         _dragTimeout: null,
         mapsKeyPresent: opts.mapsKeyPresent !== false,
+        mapsAuthFailed: false,
+
+        dispatchAddressDraft() {
+            if (this.variant !== 'inline') {
+                return;
+            }
+            const t = (this.form.description || '').trim();
+            if (! t) {
+                return;
+            }
+            this.$dispatch('map-address-draft', { description: t });
+        },
+
+        applyExternalAddressDetail(a) {
+            if (this.variant !== 'inline') {
+                return;
+            }
+            const lat = parseFloat(a.latitude);
+            const lng = parseFloat(a.longitude);
+            if (Number.isNaN(lat) || Number.isNaN(lng)) {
+                return;
+            }
+            this.form.latitude = lat;
+            this.form.longitude = lng;
+            this.form.description = (a.description || '').trim();
+            const rawType = String(a.type || 'residential').toLowerCase();
+            if (rawType === 'commercial' || rawType === 'work') {
+                this.form.type = 'work';
+            } else if (rawType === 'other' || rawType === 'others') {
+                this.form.type = 'other';
+            } else {
+                this.form.type = 'home';
+            }
+            this.form.district_id = a.district_id != null && a.district_id !== '' ? String(a.district_id) : '';
+            this.form.title = (a.title || '').trim();
+            if (a.pickup_type && (a.pickup_type === 'hand_it_to_me' || a.pickup_type === 'leave_at_door')) {
+                this.form.pickup_type = a.pickup_type;
+            }
+            this.form.building_num = '';
+            this.form.floor = '';
+            this.form.door = '';
+            this._center = { lat, lng };
+            if (this._map && window.google && window.google.maps) {
+                this._map.panTo(this._center);
+                this._map.setZoom(16);
+            }
+            const building_notes = this.buildingLine();
+            this.confirmedAddressText = this.form.description;
+            this.confirmedBuildingLine = building_notes;
+            this.confirmedLocationLabel = this.locationTypeLabel();
+            this.inlineConfirmed = true;
+            this.$dispatch('address-selected', {
+                ...this.form,
+                building_notes,
+                location_label: this.locationTypeLabel(),
+                pickup_type: this.form.pickup_type || 'hand_it_to_me',
+            });
+            this.dispatchAddressDraft();
+        },
 
         init() {
             if (this.variant === 'inline') {
                 this.isOpen = true;
                 this.sheetError = '';
                 if (!this.districts.length) this.loadDistricts();
+                this._onGmpAuthFail = () => {
+                    this.mapsAuthFailed = true;
+                };
+                window.addEventListener('gmp-maps-auth-failed', this._onGmpAuthFail);
+                this._boundApplyExternalAddress = (ev) => {
+                    this.applyExternalAddressDetail(ev.detail || {});
+                };
+                window.addEventListener('gmp-external-address-apply', this._boundApplyExternalAddress);
                 if (this.mapsKeyPresent) {
                     this.$nextTick(() => this.initMap());
                 }
@@ -410,6 +529,15 @@ function googleMapPicker(opts) {
                         }, ms));
                     });
                 });
+            }
+        },
+
+        destroy() {
+            if (this._boundApplyExternalAddress) {
+                window.removeEventListener('gmp-external-address-apply', this._boundApplyExternalAddress);
+            }
+            if (this._onGmpAuthFail) {
+                window.removeEventListener('gmp-maps-auth-failed', this._onGmpAuthFail);
             }
         },
 
@@ -534,6 +662,18 @@ function googleMapPicker(opts) {
             } else {
                 window._gmpCallbacks = window._gmpCallbacks || [];
                 window._gmpCallbacks.push(doInit);
+                const catchUp = () => {
+                    if (this._map) {
+                        return;
+                    }
+                    if (window._gmpLoaded && window.google && window.google.maps) {
+                        doInit();
+                    }
+                };
+                setTimeout(catchUp, 0);
+                setTimeout(catchUp, 150);
+                setTimeout(catchUp, 600);
+                setTimeout(catchUp, 2000);
             }
         },
 
@@ -549,6 +689,7 @@ function googleMapPicker(opts) {
                 this.geocoding = false;
                 if (status === 'OK' && results[0]) {
                     this.form.description = results[0].formatted_address;
+                    this.dispatchAddressDraft();
                 }
             });
         },
@@ -592,6 +733,7 @@ function googleMapPicker(opts) {
                 ...this.form,
                 building_notes,
                 location_label: this.locationTypeLabel(),
+                pickup_type: this.form.pickup_type || 'hand_it_to_me',
             };
 
             if (this.variant === 'inline') {

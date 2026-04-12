@@ -412,19 +412,22 @@ $totalPrice = $planPriceInclVat;
                 <div class="rounded-md border border-gray-200 bg-white p-5" x-show="durations.length > 0" x-cloak>
                     <p class="mb-3 text-lg md:text-xl">{{ __('Choose Duration') }}</p>
 
-                    <div class="selection-group">
+                    <div class="duration-pills">
                         <template x-for="(dur, index) in durations" :key="dur.id">
-                            <div class="selection-group__item">
+                            <div class="duration-pills__item">
                                 <input type="radio"
                                        name="duration"
                                        :id="'dur-' + index"
-                                       class="selection-group__input"
+                                       class="duration-pills__input"
                                        :value="dur.id"
                                        x-model="selectedDurationId"
                                        @change="onDurationChange(dur)">
-                                <label :for="'dur-' + index" class="selection-group__label">
-                                    <span x-text="dur.label || (dur.days + ' {{ __('Days') }}')"></span>
-                                    <span class="text-xs text-gray-500 block" x-text="'SAR ' + dur.price_incl_vat.toFixed(0)"></span>
+                                <label :for="'dur-' + index" class="duration-pills__face">
+                                    <span class="duration-pills__offer-badge" x-show="durationRowHasOffer(dur)" x-cloak>{{ __('Offer') }}</span>
+                                    <span class="duration-pills__title" x-text="dur.label || (dur.days + ' {{ __('Days') }}')"></span>
+                                    <span class="duration-pills__strike" x-show="durationRowHasOffer(dur)" x-text="'{{ __('SAR') }} ' + durationRowListStr(dur)"></span>
+                                    <span class="duration-pills__total-line" x-text="'{{ __('SAR') }} ' + durationRowEffectiveStr(dur)"></span>
+                                    <span class="duration-pills__avg" x-show="durationRowAvgLine(dur)" x-text="durationRowAvgLine(dur)"></span>
                                 </label>
                             </div>
                         </template>
@@ -439,6 +442,10 @@ $totalPrice = $planPriceInclVat;
                         <div class="flex items-center justify-between">
                             <p class="text-gray-600">{{ __('Plan Price') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></p>
                             <p>SAR <span x-text="displayPrice.toLocaleString()"></span></p>
+                        </div>
+                        <div class="flex items-center justify-between text-sm text-gray-600" x-show="selectedDurationDays > 0" x-cloak>
+                            <p>{{ __('Avg. per day') }} <span class="text-xs text-gray-400">({{ __('Incl. VAT') }})</span></p>
+                            <p class="font-semibold text-gray-800" x-text="avgPerDayAmount()"></p>
                         </div>
                         <template x-if="originalPrice > 0 && originalPrice !== displayPrice">
                             <div class="flex items-center justify-between">
@@ -605,6 +612,7 @@ function planDetail() {
         activeMenusDisplay: @json($hasSubscriptionPlans ? ($subscriptionPlans[0]['menus_display'] ?? []) : []),
         selectedCalories: @json($firstCalRange),
         selectedDurationId: '',
+        selectedDurationDays: 0,
         planPrice: {{ $planPrice }},
         vatRate: {{ $vatRate }},
         durations: [],
@@ -653,6 +661,61 @@ function planDetail() {
             }
         },
 
+        mapDurationRow(d) {
+            const p = parseFloat(d.price) || 0;
+            const o = parseFloat(d.offer_price) || 0;
+            const eff = o > 0 && o < p ? o : p;
+            return {
+                ...d,
+                price_incl_vat: eff,
+                list_price: p,
+                effective_total: eff,
+                has_offer: o > 0 && o < p,
+            };
+        },
+
+        durationRowHasOffer(dur) {
+            if (!dur) return false;
+            if (dur.has_offer) return true;
+            const p = parseFloat(dur.price) || 0;
+            const o = parseFloat(dur.offer_price) || 0;
+            return o > 0 && o < p;
+        },
+
+        durationRowListStr(dur) {
+            const lp = parseFloat(dur.list_price);
+            const raw = !Number.isNaN(lp) && lp > 0 ? lp : parseFloat(dur.price) || 0;
+            const n = Math.round(raw * 100) / 100;
+            return Number.isInteger(n) ? String(n) : n.toFixed(2);
+        },
+
+        durationRowEffectiveStr(dur) {
+            const p = parseFloat(dur.price) || 0;
+            const o = parseFloat(dur.offer_price) || 0;
+            const eff = o > 0 && o < p ? o : p;
+            const n = Math.round(eff * 100) / 100;
+            return Number.isInteger(n) ? String(n) : n.toFixed(2);
+        },
+
+        durationRowAvgLine(dur) {
+            const days = parseInt(dur.days, 10) || 0;
+            const p = parseFloat(dur.price) || 0;
+            const o = parseFloat(dur.offer_price) || 0;
+            const eff = o > 0 && o < p ? o : p;
+            if (days <= 0 || eff <= 0) return '';
+            const avg = Math.round((eff / days) * 100) / 100;
+            const ns = Number.isInteger(avg) ? String(avg) : avg.toFixed(2);
+            return '{{ __('SAR') }} ' + ns + ' · {{ __('per day') }}';
+        },
+
+        avgPerDayAmount() {
+            const days = Number(this.selectedDurationDays) || 0;
+            if (days <= 0) return '—';
+            const v = Number(this.displayPrice) / days;
+            const avg = Math.round(v * 100) / 100;
+            return '{{ __('SAR') }} ' + (Number.isInteger(avg) ? String(avg) : avg.toFixed(2));
+        },
+
         applySubscriptionPlan(plan) {
             if (!plan) return;
             this.heroImageErrorStage = 0;
@@ -660,10 +723,7 @@ function planDetail() {
             this.heroImage = variantUrl || this.defaultProgramImage;
             this.activeMenusDisplay = Array.isArray(plan.menus_display) ? plan.menus_display : [];
 
-            this.durations = (plan.durations || []).map(d => ({
-                ...d,
-                price_incl_vat: d.price,
-            }));
+            this.durations = (plan.durations || []).map((d) => this.mapDurationRow(d));
 
             this.calories = (plan.calories || []).map(c => ({
                 range: c.range,
@@ -701,10 +761,7 @@ function planDetail() {
                     const durRes = await fetch('{{ route('api.plan.durations', $plan->id) }}');
                     const durData = await durRes.json();
                     if (durData.length > 0) {
-                        this.durations = durData.map(d => ({
-                            ...d,
-                            price_incl_vat: d.price,
-                        }));
+                        this.durations = durData.map((d) => this.mapDurationRow(d));
                         const defaultDur = this.durations.find(d => d.is_default) || this.durations[0];
                         if (defaultDur) {
                             this.selectedDurationId = defaultDur.id;
@@ -763,6 +820,7 @@ function planDetail() {
 
         onDurationChange(dur) {
             if (!dur) return;
+            this.selectedDurationDays = parseInt(dur.days, 10) || 0;
             const price = dur.price || 0;
             const offer = dur.offer_price || 0;
             if (offer > 0 && offer < price) {
@@ -781,6 +839,10 @@ function planDetail() {
                 '&calories=' + encodeURIComponent(this.selectedCalories);
             if (this.selectedDurationId) {
                 url += '&duration_id=' + encodeURIComponent(this.selectedDurationId);
+                const dur = this.durations.find(d => String(d.id) === String(this.selectedDurationId));
+                if (dur && dur.days != null) {
+                    url += '&duration_days=' + encodeURIComponent(String(dur.days));
+                }
             }
             if (this.hasSubscriptionPlans && this.selectedSubscriptionPlanId) {
                 url += '&subscription_plan_id=' + encodeURIComponent(this.selectedSubscriptionPlanId);

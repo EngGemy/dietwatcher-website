@@ -7,6 +7,7 @@ namespace App\Services;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ExternalDataService
 {
@@ -294,11 +295,18 @@ class ExternalDataService
             $pr = $d['price'] ?? [];
             $ofr = $d['offer_price'] ?? [];
             $del = $d['delivery_price'] ?? [];
+            $prAmt = (float) (is_array($pr) ? ($pr['amount'] ?? 0) : $pr);
+            $ofrAmt = (float) (is_array($ofr) ? ($ofr['amount'] ?? 0) : $ofr);
+            $days = (int) ($d['days'] ?? 0);
+            $effective = ($ofrAmt > 0 && $ofrAmt < $prAmt) ? $ofrAmt : $prAmt;
             $durations[] = [
                 'id' => (int) ($d['id'] ?? 0),
-                'days' => (int) ($d['days'] ?? 0),
-                'price' => (float) (is_array($pr) ? ($pr['amount'] ?? 0) : $pr),
-                'offer_price' => (float) (is_array($ofr) ? ($ofr['amount'] ?? 0) : $ofr),
+                'days' => $days,
+                'price' => $prAmt,
+                'offer_price' => $ofrAmt,
+                'list_price' => $prAmt,
+                'effective_price' => $effective,
+                'has_offer' => $ofrAmt > 0 && $ofrAmt < $prAmt,
                 'delivery_price' => (float) (is_array($del) ? ($del['amount'] ?? 0) : $del),
                 'is_default' => (bool) ($d['is_default'] ?? false),
                 'label' => ($d['days'] ?? 0).' '.__('Days'),
@@ -906,12 +914,18 @@ class ExternalDataService
                 if ($response->successful()) {
                     return array_map(function ($d) {
                         $ofr = $d['offer_price'] ?? $d['offerPrice'] ?? [];
+                        $pr = (float) ($d['price']['amount'] ?? $d['price'] ?? 0);
+                        $of = (float) (is_array($ofr) ? ($ofr['amount'] ?? 0) : $ofr);
+                        $eff = $of > 0 && $of < $pr ? $of : $pr;
 
                         return [
                             'id' => $d['id'] ?? 0,
                             'days' => (int) ($d['days'] ?? 0),
-                            'price' => (float) ($d['price']['amount'] ?? $d['price'] ?? 0),
-                            'offer_price' => (float) (is_array($ofr) ? ($ofr['amount'] ?? 0) : $ofr),
+                            'price' => $pr,
+                            'offer_price' => $of,
+                            'list_price' => $pr,
+                            'effective_price' => $eff,
+                            'has_offer' => $of > 0 && $of < $pr,
                             'delivery_price' => (float) ($d['delivery_price']['amount'] ?? $d['delivery_price'] ?? $d['deliveryPrice'] ?? 0),
                             'is_default' => $d['is_default'] ?? $d['isDefault'] ?? false,
                             'label' => $d['label'] ?? ($d['days'] ?? 0).' '.__('Days'),
@@ -1016,6 +1030,42 @@ class ExternalDataService
 
             return [];
         });
+    }
+
+    /**
+     * POST /addresses — same auth as other external calls (EXTERNAL_API_TOKEN).
+     * Expected form fields: title, longitude, latitude, description, type, district_id, pickup_type.
+     *
+     * @param  array<string, string>  $fields
+     * @return array<string, mixed>
+     */
+    public function createAddress(array $fields): array
+    {
+        if (! $this->token) {
+            Log::info('ExternalDataService::createAddress skipped: EXTERNAL_API_TOKEN not set');
+
+            return ['success' => false, 'skipped' => true];
+        }
+
+        try {
+            $response = $this->http()->asForm()->post("{$this->baseUrl}/addresses", $fields);
+            $json = $response->json() ?? [];
+            $json['_http_ok'] = $response->successful();
+
+            if (! $response->successful()) {
+                Log::warning('ExternalDataService::createAddress HTTP error', [
+                    'status' => $response->status(),
+                    'body' => Str::limit($response->body(), 500),
+                ]);
+                $json['message'] = $json['message'] ?? __('address.save_failed');
+            }
+
+            return $json;
+        } catch (\Throwable $e) {
+            Log::error('ExternalDataService::createAddress failed', ['error' => $e->getMessage()]);
+
+            return ['_http_ok' => false, 'message' => __('address.save_failed')];
+        }
     }
 
     // ─── Cache ───────────────────────────────────────────────────

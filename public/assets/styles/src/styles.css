@@ -751,3 +751,64 @@
     }
   }
 }
+
+/* Duration pills (meal plan + checkout) — light gray idle, solid blue + shadow when selected */
+@layer components {
+  .duration-pills {
+    @apply flex flex-wrap gap-3;
+  }
+
+  .duration-pills__item {
+    @apply relative;
+  }
+
+  .duration-pills__input {
+    @apply sr-only;
+  }
+
+  .duration-pills__face {
+    @apply flex min-w-[120px] cursor-pointer flex-col items-start gap-1 rounded-lg border px-5 py-3 transition-all duration-200 sm:min-w-[130px];
+    border-color: #e0e0e0;
+    background-color: #f8f9fc;
+  }
+
+  .duration-pills__title {
+    @apply text-sm font-semibold text-gray-600;
+  }
+
+  .duration-pills__meta {
+    @apply text-xs font-medium text-gray-400;
+  }
+
+  .duration-pills__input:checked + .duration-pills__face {
+    @apply border-blue bg-blue text-white;
+    box-shadow: 0 4px 10px rgba(39, 159, 249, 0.35);
+  }
+
+  .duration-pills__input:checked + .duration-pills__face .duration-pills__title {
+    @apply text-white;
+  }
+
+  .duration-pills__input:checked + .duration-pills__face .duration-pills__meta {
+    color: rgb(255 255 255 / 0.92);
+  }
+
+  .duration-pills__input:focus-visible + .duration-pills__face {
+    @apply ring-2 ring-blue/50 ring-offset-2;
+  }
+
+  /* Fallback row (no numeric API id) — always “selected” look */
+  .duration-pills__face--static {
+    @apply border-blue bg-blue text-white;
+    box-shadow: 0 4px 10px rgba(39, 159, 249, 0.35);
+  }
+
+  .duration-pills__face--static .duration-pills__title,
+  .duration-pills__face--static .duration-pills__meta {
+    @apply text-white;
+  }
+
+  .duration-pills__face--static .duration-pills__meta {
+    color: rgb(255 255 255 / 0.92);
+  }
+}
