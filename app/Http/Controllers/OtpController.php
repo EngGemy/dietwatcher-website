@@ -26,6 +26,14 @@ class OtpController extends Controller
     }
 
     /**
+     * Whether external API is available (for profile/address hydration after local OTP).
+     */
+    private function hasExternalApi(): bool
+    {
+        return filled(config('services.external_api.url'));
+    }
+
+    /**
      * @param  array<string, mixed>  $body
      * @return array{token: string, is_continue: bool, profile: array<string, mixed>}
      */
@@ -40,6 +48,94 @@ class OtpController extends Controller
         }
 
         return ['token' => $token, 'is_continue' => $isContinue, 'profile' => $profile];
+    }
+
+    /**
+     * After local OTP verification, try to get external API token + profile + addresses
+     * by calling simple-register (creates account if new, or returns existing).
+     */
+    private function hydrateFromExternalApi(string $phone, ?string $deviceId = null): array
+    {
+        $result = [
+            'token' => '',
+            'profile' => [],
+            'addresses' => [],
+            'is_continue' => false,
+        ];
+
+        if (! $this->hasExternalApi()) {
+            return $result;
+        }
+
+        try {
+            // First try: send + verify OTP on external API to get a real token
+            // This handles existing users who already have accounts
+            $sendResult = $this->apiAuth->sendOtp($phone);
+
+            if ($sendResult['_http_ok'] ?? false) {
+                // In non-production, external API may return the OTP code directly
+                $externalOtp = $sendResult['otp'] ?? null;
+
+                if ($externalOtp) {
+                    $deviceId ??= 'web-checkout-' . Str::uuid()->toString();
+                    $verifyResult = $this->apiAuth->verifyOtp($phone, (string) $externalOtp, $deviceId);
+
+                    if ($verifyResult['_http_ok'] ?? false) {
+                        $parsed = $this->parseExternalVerifyBody($verifyResult);
+
+                        if ($parsed['token'] !== '') {
+                            $result['token'] = $parsed['token'];
+                            $result['profile'] = $parsed['profile'];
+                            $result['is_continue'] = $parsed['is_continue'];
+
+                            $addresses = $this->apiAuth->getAddresses($parsed['token']);
+                            $result['addresses'] = is_array($addresses) ? $addresses : [];
+
+                            return $result;
+                        }
+                    }
+                }
+            }
+
+            // Fallback: simple-register to create/find user and get token
+            $registerResult = $this->apiAuth->simpleRegister([
+                'name' => 'Customer',
+                'mobile' => $phone,
+                'email' => '',
+                'gender' => 'male',
+            ]);
+
+            $registerData = $registerResult['data'] ?? $registerResult;
+            $token = (string) ($registerData['token'] ?? $registerResult['token'] ?? '');
+
+            if ($token !== '') {
+                $profile = $registerData['profile'] ?? $registerResult['profile'] ?? [];
+                $customer = $registerData['customer'] ?? [];
+
+                // Build profile from customer data if profile is empty
+                if (empty($profile) && ! empty($customer)) {
+                    $profile = [
+                        'id' => $customer['id'] ?? null,
+                        'name' => $customer['name'] ?? '',
+                        'mobile' => $customer['mobile'] ?? $phone,
+                    ];
+                }
+
+                $result['token'] = $token;
+                $result['profile'] = is_array($profile) ? $profile : [];
+                $result['is_continue'] = false; // new registration
+
+                $addresses = $this->apiAuth->getAddresses($token);
+                $result['addresses'] = is_array($addresses) ? $addresses : [];
+            }
+        } catch (\Exception $e) {
+            Log::warning('OtpController: external API hydration failed', [
+                'phone' => $phone,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $result;
     }
 
     /**
@@ -95,6 +191,7 @@ class OtpController extends Controller
             return response()->json($response);
         }
 
+        // Local OTP: generate code and send via SMS provider (mshastra/connect)
         $otp = str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
 
         session([
@@ -175,6 +272,7 @@ class OtpController extends Controller
 
         $external = (bool) session('checkout_otp_external', false);
 
+        // ─── Path A: Fully external OTP (external API sent the code) ───
         if ($external) {
             $deviceId = $validated['device_id'] ?? null;
             if ($deviceId === null || $deviceId === '') {
@@ -209,7 +307,7 @@ class OtpController extends Controller
             ]);
             session()->forget(['otp_code', 'otp_phone', 'otp_expires_at', 'checkout_otp_external']);
 
-            $addresses = $this->apiAuth->getAddresses($parsed['token'], true);
+            $addresses = $this->apiAuth->getAddresses($parsed['token']);
             if (! is_array($addresses)) {
                 $addresses = [];
             }
@@ -223,6 +321,7 @@ class OtpController extends Controller
             ]);
         }
 
+        // ─── Path B: Local OTP (we sent the code via SMS) ──────────────
         $storedOtp = session('otp_code');
         if (! $storedOtp) {
             return response()->json([
@@ -238,25 +337,46 @@ class OtpController extends Controller
             ]);
         }
 
+        // Local OTP verified — now hydrate profile/addresses from external API
+        $deviceId = $validated['device_id'] ?? null;
+        if ($deviceId === null || $deviceId === '') {
+            $deviceId = 'web-checkout-' . Str::uuid()->toString();
+        }
+
+        $externalData = $this->hydrateFromExternalApi($validated['phone'], $deviceId);
+
         session([
             'phone_verified' => $validated['phone'],
         ]);
+
+        // Store external API data if we got a token
+        if ($externalData['token'] !== '') {
+            session([
+                'external_api_token' => $externalData['token'],
+                'external_api_profile' => $externalData['profile'],
+                'external_login_is_continue' => $externalData['is_continue'],
+            ]);
+        } else {
+            session()->forget([
+                'external_api_token',
+                'external_api_profile',
+                'external_login_is_continue',
+            ]);
+        }
+
         session()->forget([
             'otp_code',
             'otp_phone',
             'otp_expires_at',
             'checkout_otp_external',
-            'external_api_token',
-            'external_api_profile',
-            'external_login_is_continue',
         ]);
 
         return response()->json([
             'success' => true,
             'message' => __('otp.verified'),
-            'addresses' => [],
-            'profile' => [],
-            'is_continue' => false,
+            'addresses' => $externalData['addresses'],
+            'profile' => $externalData['profile'],
+            'is_continue' => $externalData['is_continue'],
         ]);
     }
 }
