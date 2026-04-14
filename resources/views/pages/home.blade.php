@@ -8,20 +8,20 @@
         <div class="relative container overflow-hidden rounded-md bg-gray-200 pt-12 md:pt-28">
             <div class="relative z-20 mx-auto grid w-full max-w-[1500px] gap-10 lg:grid-cols-2 lg:gap-0">
                 <div class="md:pb-28">
-                    <h1 class="mb-4 text-4xl font-bold md:mb-7 lg:text-6xl/tight">
+                    <h1 class="hero-title-anim mb-4 text-4xl font-bold md:mb-7 lg:text-6xl/tight">
                         <span class="text-green">{{ __('Healthy') }}</span> {{ __('Meals Delivered Daily. Designed for') }}
                         <br class="hidden lg:block" />{{ __('Your') }}
                         <span class="text-blue">{{ __('Goals.') }}</span>
                     </h1>
-                    <p class="mb-5 max-w-xl text-lg text-black/80 md:mb-12 lg:text-2xl">
+                    <p class="hero-desc-anim mb-5 max-w-xl text-lg text-black/80 md:mb-12 lg:text-2xl">
                         {{ __('Chef-made, calorie-smart meals delivered in Saudi Arabia. Plans online, managed via our app.') }}
                     </p>
 
-                    <a href="https://app.diet-watchers.sa/meal-plans" class="btn btn--primary mb-8 text-lg">
+                    <a href="https://app.diet-watchers.sa/meal-plans" class="hero-btn-anim btn btn--primary mb-8 text-lg">
                         {{ __('Choose Meal Plans') }}
                     </a>
 
-                    <div class="">
+                    <div class="hero-apps-anim">
                         <p class="mb-2 text-lg">{{ __('Download app') }}</p>
                         <div class="flex flex-wrap items-center gap-1.5">
                             <a href="{{ $playStoreUrl }}" target="_blank" rel="noopener">
@@ -36,7 +36,7 @@
 
                 <div class="relative mx-auto w-fit self-end">
                     <img src="{{ asset('assets/images/hero-img.png') }}"
-                        class="mx-auto w-full max-w-[600px] select-none md:max-w-[800px]" alt="{{ __('Hero') }}" />
+                        class="hero-img-anim hero-float mx-auto w-full max-w-[600px] select-none md:max-w-[800px]" alt="{{ __('Hero') }}" />
                 </div>
             </div>
 
@@ -49,7 +49,7 @@
     {{-- Meal Plans Section --}}
     <section class="py-20">
         <div class="container">
-            <header class="section-header section-header--center">
+            <header class="section-header section-header--center" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ __('Meal Plan') }}</h4>
                 <h2 class="section-header__title">{{ __('Meal Plans for Every Lifestyle') }}</h2>
                 <p class="section-header__desc">
@@ -57,7 +57,7 @@
                 </p>
             </header>
 
-            <div class="mb-10 grid grid-cols-1 gap-6 md:mb-14 md:grid-cols-2 lg:grid-cols-3">
+            <div class="mb-10 grid grid-cols-1 gap-6 md:mb-14 md:grid-cols-2 lg:grid-cols-3" data-anim-stagger>
                 @forelse($mealPlanCategories as $category)
                     @php
                         $catDesc = $category['description'] ?? '';
@@ -65,7 +65,7 @@
                         $cardImg = asset('assets/images/meal-plan-' . $imgIdx . '.png');
                     @endphp
                     <a href="{{ route('meal-plans.index', ['category' => $category['id']]) }}"
-                       class="rounded-xl border border-gray-300 p-3 block transition hover:shadow-md hover:border-blue/40">
+                       class="rounded-xl border border-gray-300 p-3 block transition hover:shadow-md hover:border-blue/40" data-anim="fade-up">
                         <img src="{{ $cardImg }}" class="mb-4 w-full rounded-lg" alt="" />
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
                             {{ $catDesc ?: '' }}
@@ -106,13 +106,13 @@
     {{-- How It Works Section --}}
     <section class="bg-gray-200 py-20">
         <div class="container">
-            <header class="section-header section-header--center">
+            <header class="section-header section-header--center" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ __('How It Works') }}</h4>
                 <h2 class="section-header__title">{{ __('3 Easy Steps For Happy Life') }}</h2>
             </header>
-            <div class="grid gap-8 lg:grid-cols-3">
+            <div class="grid gap-8 lg:grid-cols-3" data-anim-stagger>
                 @forelse($howItWorksSteps as $step)
-                    <div>
+                    <div data-anim="fade-up">
                         <img src="{{ $step->image_url }}" class="mb-8 rounded-lg w-full h-64 object-cover" alt="{{ $step->title() }}" />
                         <h3 class="mb-4 text-xl font-semibold md:text-2xl">{{ $step->title() }}</h3>
                         <p class="text-lg text-black/70 md:text-xl">
@@ -154,7 +154,7 @@
                 $whyChooseSection = \App\Models\WhyChooseSection::where('is_active', true)->first();
                 $features = \App\Models\Content\Feature::active()->orderBy('order')->get();
             @endphp
-            <header class="section-header section-header--center">
+            <header class="section-header section-header--center" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ $whyChooseSection?->badge_title() ?? __('Why Diet Watchers?') }}</h4>
                 <h2 class="section-header__title">{{ $whyChooseSection?->title() ?? __('Choosing Diet watchers') }}</h2>
                 <p class="section-header__desc">
@@ -163,7 +163,7 @@
             </header>
 
             <div class="mx-auto flex max-w-7xl flex-col items-center gap-6 md:flex-row">
-                <div class="relative flex-1">
+                <div class="relative flex-1" data-anim="fade-right">
                     <img id="why-choose-img" src="{{ $whyChooseSection?->image_url ?? asset('assets/images/why-1.png') }}"
                         class="relative z-20 mx-auto w-full max-w-[416px] transition-opacity duration-500" alt="" />
                     <div class="absolute inset-0 z-10 flex items-center justify-center">
@@ -183,7 +183,7 @@
                     </div>
                 </div>
 
-                <div id="why-choose-accordion" class="hs-accordion-group mx-auto flex-1 space-y-5 md:max-w-xl">
+                <div id="why-choose-accordion" class="hs-accordion-group mx-auto flex-1 space-y-5 md:max-w-xl" data-anim="fade-left">
                     @forelse ($features as $index => $feature)
                         <div class="hs-accordion {{ $index === 0 ? 'active' : '' }} [&.active]:border-blue border-s-[3px] border-gray-300"
                             id="why-choose-{{ $feature->id }}">
@@ -222,7 +222,7 @@
                 </p>
             </header>
 
-            <div class="grid items-stretch gap-8 md:grid-cols-2 md:gap-12 lg:grid-cols-4">
+            <div class="grid items-stretch gap-8 md:grid-cols-2 md:gap-12 lg:grid-cols-4" data-anim-stagger>
                 @forelse($instantMeals as $meal)
                     @php
                         $mealImage = $meal['image_url'] ?? '';
@@ -239,7 +239,7 @@
                         $mealFallback = asset('assets/images/meal-' . ($loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3) . '.png');
                         $effectivePrice = ($meal['offer_price'] ?? 0) > 0 && ($meal['offer_price'] < $meal['price']) ? $meal['offer_price'] : $meal['price'];
                     @endphp
-                    <div class="meal-card">
+                    <div class="meal-card" data-anim="fade-up">
                         <div class="meal-card__thumbnail">
                             <a href="{{ route('store.show', $meal['id']) }}">
                                 <img src="{{ $mealImageUrl }}" alt="{{ $meal['name'] }}" onerror="this.src='{{ $mealFallback }}'" />
@@ -299,7 +299,7 @@
             @php
                 $appDownloadSection = \App\Models\AppDownloadSection::where('is_active', true)->first();
             @endphp
-            <header class="section-header section-header--center">
+            <header class="section-header section-header--center" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ $appDownloadSection?->badge_title() ?? __('Download the App') }}</h4>
                 <h2 class="section-header__title">{{ $appDownloadSection?->title() ?? __('Your Meals. Your Control.') }}</h2>
                 <p class="section-header__desc">
@@ -307,7 +307,7 @@
                 </p>
             </header>
 
-            <div class="mb-10 flex flex-wrap items-center justify-center gap-1.5 md:mb-20">
+            <div class="mb-10 flex flex-wrap items-center justify-center gap-1.5 md:mb-20" data-anim="fade-up" data-anim-delay="100">
                 <a href="{{ $playStoreUrl }}" target="_blank" rel="noopener">
                     <img src="{{ asset('assets/images/play.png') }}" class="h-16" alt="{{ __('Google Play') }}" />
                 </a>
@@ -316,9 +316,9 @@
                 </a>
             </div>
 
-            <img src="{{ $appDownloadSection?->mobile_image_url ?? asset('assets/images/app-screens.png') }}" 
+            <img src="{{ $appDownloadSection?->mobile_image_url ?? asset('assets/images/app-screens.png') }}"
                 class="relative z-20 mx-auto w-full max-w-[630px]"
-                alt="{{ __('App Preview') }}" />
+                alt="{{ __('App Preview') }}" data-anim="zoom-in" />
         </div>
     </section>
 
@@ -328,7 +328,7 @@
             @php
                 $testimonialHeader = \App\Models\TestimonialSectionHeader::where('is_active', true)->first();
             @endphp
-            <header class="section-header section-header--center">
+            <header class="section-header section-header--center" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ $testimonialHeader?->badge_title() ?? __('Feedback') }}</h4>
                 <h2 class="section-header__title">{{ $testimonialHeader?->title() ?? __('What our customer say') }}</h2>
                 <p class="section-header__desc">
@@ -336,9 +336,9 @@
                 </p>
             </header>
 
-            <div class="grid gap-6 md:grid-cols-3 md:gap-10">
+            <div class="grid gap-6 md:grid-cols-3 md:gap-10" data-anim-stagger>
                 @forelse ($testimonials as $testimonial)
-                    <div class="hs-carousel-slide">
+                    <div class="hs-carousel-slide" data-anim="fade-up">
                         <div class="review-card">
                             <svg class="review-card__quote">
                                 <use href="{{ asset('assets/images/icons/sprite.svg#quote') }}"></use>
@@ -379,7 +379,7 @@
     {{-- Blog Section --}}
     <section class="py-20">
         <div class="container">
-            <header class="section-header section-header--center">
+            <header class="section-header section-header--center" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ __('Insightful') }}</h4>
                 <h2 class="section-header__title">{{ __('Insights for a Healthier You') }}</h2>
                 <p class="section-header__desc">
@@ -428,7 +428,7 @@
                 $faqHeader = \App\Models\FaqSectionHeader::where('is_active', true)->first();
                 $faqs = \App\Models\Faq::where('is_active', true)->orderBy('order_column')->get();
             @endphp
-            <header class="section-header section-header--center">
+            <header class="section-header section-header--center" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ $faqHeader?->badge_title() ?? __('Answers') }}</h4>
                 <h2 class="section-header__title">{{ $faqHeader?->title() ?? __('Frequently Asked Questions') }}</h2>
                 <p class="section-header__desc">
@@ -471,6 +471,120 @@
         </div>
     </section>
 @endsection
+
+@push('styles')
+<style>
+/* ─── Scroll-triggered Animations ──────────────────── */
+[data-anim] {
+    opacity: 0;
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: opacity, transform;
+}
+[data-anim="fade-up"]   { transform: translateY(40px); }
+[data-anim="fade-down"] { transform: translateY(-40px); }
+[data-anim="fade-left"] { transform: translateX(60px); }
+[data-anim="fade-right"]{ transform: translateX(-60px); }
+[data-anim="zoom-in"]   { transform: scale(0.9); }
+[data-anim="zoom-out"]  { transform: scale(1.08); }
+[data-anim="flip-up"]   { transform: perspective(800px) rotateX(8deg) translateY(30px); }
+
+[data-anim].is-visible {
+    opacity: 1;
+    transform: none;
+}
+
+/* Stagger children */
+[data-anim-stagger] > [data-anim] { transition-delay: calc(var(--anim-i, 0) * 0.08s); }
+
+/* Hero-specific entrance */
+.hero-title-anim {
+    opacity: 0;
+    transform: translateY(30px);
+    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards;
+}
+.hero-desc-anim {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.45s forwards;
+}
+.hero-btn-anim {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
+}
+.hero-apps-anim {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.75s forwards;
+}
+.hero-img-anim {
+    opacity: 0;
+    transform: translateX(40px) scale(0.95);
+    animation: heroImgIn 1s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
+}
+[dir="rtl"] .hero-img-anim {
+    transform: translateX(-40px) scale(0.95);
+}
+
+@keyframes heroSlideUp {
+    to { opacity: 1; transform: none; }
+}
+@keyframes heroImgIn {
+    to { opacity: 1; transform: none; }
+}
+
+/* Floating effect for hero image */
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+.hero-float {
+    animation: float 4s ease-in-out infinite;
+    animation-delay: 1.5s;
+}
+
+/* Section headers entrance */
+.section-header[data-anim] .section-header__subtitle {
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.5s ease 0.1s;
+}
+.section-header[data-anim] .section-header__title {
+    opacity: 0;
+    transform: translateY(15px);
+    transition: all 0.5s ease 0.2s;
+}
+.section-header[data-anim] .section-header__desc {
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.5s ease 0.35s;
+}
+.section-header[data-anim].is-visible .section-header__subtitle,
+.section-header[data-anim].is-visible .section-header__title,
+.section-header[data-anim].is-visible .section-header__desc {
+    opacity: 1;
+    transform: none;
+}
+
+/* Meal plan cards hover lift */
+.meal-card {
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.35s ease;
+}
+.meal-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.1);
+}
+
+/* Counter animation for stats */
+@keyframes countPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+</style>
+@endpush
 
 @push('scripts')
     <script>
@@ -519,5 +633,40 @@
 
             startLoop();
         });
+
+        /* ─── Scroll-triggered animation observer ───────── */
+        (function() {
+            var els = document.querySelectorAll('[data-anim]');
+            if (!els.length) return;
+
+            // Auto-assign stagger index to children
+            document.querySelectorAll('[data-anim-stagger]').forEach(function(parent) {
+                var children = parent.querySelectorAll('[data-anim]');
+                children.forEach(function(child, i) {
+                    child.style.setProperty('--anim-i', i);
+                });
+            });
+
+            var observer = new IntersectionObserver(function(entries) {
+                entries.forEach(function(entry) {
+                    if (entry.isIntersecting) {
+                        var delay = parseInt(entry.target.getAttribute('data-anim-delay') || '0', 10);
+                        if (delay > 0) {
+                            setTimeout(function() {
+                                entry.target.classList.add('is-visible');
+                            }, delay);
+                        } else {
+                            entry.target.classList.add('is-visible');
+                        }
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, {
+                rootMargin: '0px 0px -60px 0px',
+                threshold: 0.1
+            });
+
+            els.forEach(function(el) { observer.observe(el); });
+        })();
     </script>
 @endpush
