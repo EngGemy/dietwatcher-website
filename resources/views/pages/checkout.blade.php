@@ -225,13 +225,21 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('User Information') }}</h3>
 
                         <div class="space-y-4">
-                            <div>
+                            {{-- Name field: hidden initially, shown after OTP verification --}}
+                            <div x-show="phoneVerified && showNameField" x-cloak
+                                 x-transition:enter="transition ease-out duration-300"
+                                 x-transition:enter-start="opacity-0 -translate-y-2"
+                                 x-transition:enter-end="opacity-100 translate-y-0">
                                 <input type="text" name="name" class="form-control @error('name') border-red-500 @enderror"
                                        placeholder="{{ __('Add your name') }}" x-model="customerName" required />
                                 @error('name')
                                     <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
                                 @enderror
                             </div>
+                            {{-- Hidden name input when field is not shown (existing user with name already set) --}}
+                            <template x-if="phoneVerified && !showNameField && customerName">
+                                <input type="hidden" name="name" :value="customerName" />
+                            </template>
 
                             <div>
                                 <div class="form-input-action">
@@ -444,8 +452,10 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                         </div>
                     </div>
 
-                    {{-- Payment: Moyasar (unlock after phone OTP; amount synced from form) --}}
-                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5">
+                    {{-- Payment: Moyasar (fields visible, pay button disabled until phone verified) --}}
+                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5"
+                         :class="{ 'checkout-pay-locked': !phoneVerified }"
+                    >
                         <h3 class="mb-2 text-2xl font-semibold md:text-2xl">{{ __('Payment') }}</h3>
                         <p class="mb-4 text-sm text-gray-600">{{ __('payment.pay_with_moyasar') }}</p>
 
@@ -465,16 +475,19 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                         <div x-show="moyasarError" x-cloak class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" x-text="moyasarError"></div>
 
                         <div class="relative min-h-[160px] rounded-xl border border-gray-200 bg-gray-50 p-4">
+                            {{-- Info banner when phone not verified --}}
                             <div
                                 x-show="!phoneVerified"
                                 x-cloak
-                                class="pointer-events-auto absolute inset-0 z-10 flex flex-col items-center justify-end gap-1 rounded-xl bg-slate-900/15 px-4 pb-4 pt-10 text-center backdrop-blur-[1px]"
+                                x-transition:leave="transition ease-in duration-200"
+                                x-transition:leave-start="opacity-100 max-h-20"
+                                x-transition:leave-end="opacity-0 max-h-0"
+                                class="mb-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-9 w-9 text-gray-700" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
                                 </svg>
-                                <p class="max-w-sm text-sm font-semibold text-gray-900">{{ __('payment.verify_phone_to_pay') }}</p>
-                                <p class="max-w-sm text-xs text-gray-700">{{ __('payment.form_visible_verify_to_pay') }}</p>
+                                <span>{{ __('payment.verify_phone_to_pay') }}</span>
                             </div>
 
                             <div id="moyasar-form-checkout" class="relative z-[1] min-h-[120px] w-full"></div>
@@ -693,6 +706,28 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
 @push('styles')
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <style>
+    /* ─── Smooth Page Animations ───────────────────── */
+    .checkout-page .rounded-md {
+        animation: checkout-fade-up 0.5s ease both;
+    }
+    .checkout-page .rounded-md:nth-child(1) { animation-delay: 0s; }
+    .checkout-page .rounded-md:nth-child(2) { animation-delay: 0.1s; }
+    .checkout-page .rounded-md:nth-child(3) { animation-delay: 0.2s; }
+    .checkout-page .order-2 { animation: checkout-fade-up 0.5s ease 0.15s both; }
+
+    @keyframes checkout-fade-up {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Smooth transitions for interactive elements */
+    .choice-group__label,
+    .duration-pills__face,
+    .form-control,
+    .form-input-action__btn {
+        transition: all 0.25s ease !important;
+    }
+
     /* Breadcrumb styles */
     .breadcrumb {
         @apply flex flex-wrap items-center gap-1 text-sm text-gray-600 mb-6;
@@ -1128,6 +1163,15 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
     #moyasar-form-checkout .mysr-form .mysr-form-button {
         background: #279ff9 !important;
         border-radius: 10px !important;
+        transition: opacity 0.3s, filter 0.3s;
+    }
+    /* Disable pay button when phone not verified */
+    .checkout-pay-locked #moyasar-form-checkout .mysr-form button[type="submit"],
+    .checkout-pay-locked #moyasar-form-checkout .mysr-form .mysr-form-button {
+        pointer-events: none !important;
+        opacity: 0.5 !important;
+        filter: grayscale(0.3) !important;
+        cursor: not-allowed !important;
     }
 </style>
 @endpush
@@ -1154,6 +1198,8 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             addressStreet: @json(old('street', '')),
             buildingNotes: @json(old('building', '')),
             customerName: @json(old('name', '')),
+            showNameField: false,
+            isContinueUser: false,
             savedAddresses: [],
             deviceId: (function () {
                 try {
@@ -1528,6 +1574,17 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                     if (d.profile && d.profile.name && ! (this.customerName || '').trim()) {
                         this.customerName = String(d.profile.name);
                     }
+                    // If already verified (page reload), determine name field visibility
+                    if (this.phoneVerified) {
+                        const hasName = !!(d.profile && d.profile.name);
+                        const isCont = !!(d.is_continue);
+                        this.isContinueUser = isCont;
+                        this.showNameField = !(isCont && hasName);
+                        // Auto-apply first saved address if existing user with addresses
+                        if (isCont && this.savedAddresses.length > 0 && !this.addressStreet) {
+                            this.$nextTick(() => this.applySavedAddress(this.savedAddresses[0]));
+                        }
+                    }
                 } catch (e) {}
             },
 
@@ -1764,12 +1821,29 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                         this.otpMessageType = 'success';
                         this.otpMessage = data.message;
                         this.savedAddresses = Array.isArray(data.addresses) ? data.addresses : [];
+                        this.isContinueUser = !!data.is_continue;
+
                         if (data.profile && data.profile.name) {
                             this.customerName = String(data.profile.name);
                         }
-                        if (data.is_continue) {
+
+                        // Name field: show for new users (need to enter name), hide for existing (already has name)
+                        if (data.is_continue && data.profile && data.profile.name) {
+                            this.showNameField = false;
+                        } else {
+                            this.showNameField = true;
+                        }
+
+                        // Auto-apply first saved address for existing users
+                        if (data.is_continue && this.savedAddresses.length > 0) {
+                            this.$nextTick(() => {
+                                this.applySavedAddress(this.savedAddresses[0]);
+                                this.$refs.checkoutUserCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            });
+                        } else if (data.is_continue) {
                             this.$nextTick(() => this.$refs.checkoutUserCard?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
                         }
+
                         setTimeout(() => { this.otpModalOpen = false; }, 800);
                         this.$nextTick(() => this.scheduleMoyasarRefresh());
                     } else {

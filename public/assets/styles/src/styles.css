@@ -567,7 +567,7 @@
   }
 
   .meal-card__thumbnail img {
-    @apply aspect-[4/3] h-auto max-h-[220px] w-full object-cover object-center sm:max-h-[260px] md:max-h-[280px];
+    @apply aspect-[4/3] w-full object-cover object-center;
   }
 
   .meal-card__overlay-link {
