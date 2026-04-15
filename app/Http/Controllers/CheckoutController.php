@@ -755,7 +755,8 @@ class CheckoutController extends Controller
             'delivery_type' => 'required|in:home,pickup',
             'coupon' => 'nullable|string|max:50',
             'branch_id' => 'required_if:delivery_type,pickup|nullable|integer',
-            'zone_id' => 'required_if:delivery_type,home|nullable|integer',
+            'zone_id' => 'required_if:delivery_type,home|required_without:selected_address_id|nullable|integer',
+            'selected_address_id' => 'nullable|integer',
         ];
         if ($hasPlanItems) {
             $rules['plan_duration_id'] = 'required|integer';
