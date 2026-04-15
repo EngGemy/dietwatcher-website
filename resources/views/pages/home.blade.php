@@ -8,40 +8,46 @@
         <div class="relative container overflow-hidden rounded-md bg-gray-200 pt-12 md:pt-28">
             <div class="relative z-20 mx-auto grid w-full max-w-[1500px] gap-10 lg:grid-cols-2 lg:gap-0">
                 <div class="md:pb-28">
-                    <h1 class="hero-title-anim mb-4 text-4xl font-bold md:mb-7 lg:text-6xl/tight">
-                        <span class="text-green">{{ __('Healthy') }}</span> {{ __('Meals Delivered Daily. Designed for') }}
-                        <br class="hidden lg:block" />{{ __('Your') }}
-                        <span class="text-blue">{{ __('Goals.') }}</span>
+                    <h1 class="hero-title mb-4 text-4xl font-bold md:mb-7 lg:text-6xl/tight">
+                        <span class="hero-word hero-word--green text-green">{{ __('Healthy') }}</span>
+                        <span class="hero-word">{{ __('Meals') }}</span>
+                        <span class="hero-word">{{ __('Delivered') }}</span>
+                        <span class="hero-word">{{ __('Daily.') }}</span>
+                        <span class="hero-word">{{ __('Designed') }}</span>
+                        <span class="hero-word">{{ __('for') }}</span>
+                        <br class="hidden lg:block" />
+                        <span class="hero-word">{{ __('Your') }}</span>
+                        <span class="hero-word hero-word--blue text-blue">{{ __('Goals.') }}</span>
                     </h1>
                     <p class="hero-desc-anim mb-5 max-w-xl text-lg text-black/80 md:mb-12 lg:text-2xl">
                         {{ __('Chef-made, calorie-smart meals delivered in Saudi Arabia. Plans online, managed via our app.') }}
                     </p>
 
-                    <a href="https://app.diet-watchers.sa/meal-plans" class="hero-btn-anim btn btn--primary mb-8 text-lg">
+                    <a href="https://app.diet-watchers.sa/meal-plans" class="hero-btn-anim hero-magnetic btn btn--primary mb-8 text-lg">
                         {{ __('Choose Meal Plans') }}
                     </a>
 
                     <div class="hero-apps-anim">
                         <p class="mb-2 text-lg">{{ __('Download app') }}</p>
                         <div class="flex flex-wrap items-center gap-1.5">
-                            <a href="{{ $playStoreUrl }}" target="_blank" rel="noopener">
+                            <a href="{{ $playStoreUrl }}" target="_blank" rel="noopener" class="hero-app-badge">
                                 <img src="{{ asset('assets/images/play.png') }}" alt="{{ __('Google Play') }}" />
                             </a>
-                            <a href="{{ $appStoreUrl }}" target="_blank" rel="noopener">
+                            <a href="{{ $appStoreUrl }}" target="_blank" rel="noopener" class="hero-app-badge">
                                 <img src="{{ asset('assets/images/store.png') }}" alt="{{ __('App Store') }}" />
                             </a>
                         </div>
                     </div>
                 </div>
 
-                <div class="relative mx-auto w-full max-w-[320px] self-end md:w-fit md:max-w-none">
-                    <img src="{{ asset('assets/images/app-screens.png') }}"
-                        class="hero-img-anim hero-float relative z-20 mx-auto w-full max-w-[280px] select-none md:max-w-[420px] lg:max-w-[520px]" alt="{{ __('App Preview') }}" />
+                <div class="relative mx-auto w-fit self-end">
+                    <img src="{{ asset('assets/images/hero-img.png') }}"
+                        class="hero-img-anim hero-float hero-parallax mx-auto w-full max-w-[600px] select-none md:max-w-[800px]" alt="{{ __('Hero') }}" />
                 </div>
             </div>
 
             <img src="{{ asset('assets/images/hero-bg.png') }}"
-                class="absolute inset-y-0 start-0 z-0 h-full w-full object-cover object-right opacity-60 select-none md:opacity-100 md:object-contain rtl:-scale-x-100"
+                class="absolute inset-y-0 start-0 hidden object-contain object-right select-none md:block rtl:-scale-x-100"
                 alt="" />
         </div>
     </section>
@@ -497,26 +503,74 @@
 /* Stagger children */
 [data-anim-stagger] > [data-anim] { transition-delay: calc(var(--anim-i, 0) * 0.08s); }
 
-/* Hero-specific entrance */
-.hero-title-anim {
+/* ─── Hero: word-by-word reveal ─── */
+.hero-title .hero-word {
+    display: inline-block;
     opacity: 0;
-    transform: translateY(30px);
-    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards;
+    transform: translateY(28px) skewY(4deg);
+    filter: blur(6px);
+    animation: heroWordIn 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+.hero-title .hero-word:nth-child(1)  { animation-delay: 0.10s; }
+.hero-title .hero-word:nth-child(2)  { animation-delay: 0.18s; }
+.hero-title .hero-word:nth-child(3)  { animation-delay: 0.26s; }
+.hero-title .hero-word:nth-child(4)  { animation-delay: 0.34s; }
+.hero-title .hero-word:nth-child(5)  { animation-delay: 0.42s; }
+.hero-title .hero-word:nth-child(6)  { animation-delay: 0.50s; }
+.hero-title .hero-word:nth-child(8)  { animation-delay: 0.58s; }
+.hero-title .hero-word:nth-child(9)  { animation-delay: 0.66s; }
+@keyframes heroWordIn {
+    to { opacity: 1; transform: translateY(0) skewY(0); filter: blur(0); }
+}
+
+/* Shimmer on highlight words after they settle */
+.hero-title .hero-word--green,
+.hero-title .hero-word--blue {
+    background-clip: text;
+    -webkit-background-clip: text;
+    background-repeat: no-repeat;
+    background-size: 220% 100%;
+    background-position: 100% 0;
+}
+.hero-title .hero-word--green {
+    background-image: linear-gradient(100deg,
+        currentColor 0%, currentColor 40%,
+        rgba(255,255,255,.85) 50%,
+        currentColor 60%, currentColor 100%);
+    animation: heroWordIn 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+               heroShine 2.6s ease-in-out 1.2s infinite;
+}
+.hero-title .hero-word--blue {
+    background-image: linear-gradient(100deg,
+        currentColor 0%, currentColor 40%,
+        rgba(255,255,255,.9) 50%,
+        currentColor 60%, currentColor 100%);
+    animation: heroWordIn 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+               heroShine 2.6s ease-in-out 1.6s infinite;
+}
+@keyframes heroShine {
+    0%   { background-position: 100% 0; -webkit-text-fill-color: transparent; }
+    45%  { background-position:   0% 0; -webkit-text-fill-color: transparent; }
+    60%  { -webkit-text-fill-color: currentColor; }
+    100% { -webkit-text-fill-color: currentColor; background-position: -100% 0; }
+}
+
+/* Hero supporting elements */
 .hero-desc-anim {
     opacity: 0;
     transform: translateY(20px);
-    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.45s forwards;
+    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.9s forwards;
 }
 .hero-btn-anim {
     opacity: 0;
     transform: translateY(20px);
-    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
+    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.05s forwards;
+    position: relative;
 }
 .hero-apps-anim {
     opacity: 0;
     transform: translateY(20px);
-    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.75s forwards;
+    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.2s forwards;
 }
 .hero-img-anim {
     opacity: 0;
@@ -525,6 +579,33 @@
 }
 [dir="rtl"] .hero-img-anim {
     transform: translateX(-40px) scale(0.95);
+}
+
+/* Magnetic CTA glow halo */
+.hero-magnetic {
+    transition: transform .25s cubic-bezier(.16,1,.3,1), box-shadow .3s ease;
+}
+.hero-magnetic::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: inherit;
+    background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%),
+                rgba(59,130,246,.55), transparent 60%);
+    opacity: 0;
+    transition: opacity .35s ease;
+    z-index: -1;
+    filter: blur(14px);
+}
+.hero-magnetic:hover::after { opacity: 1; }
+
+/* App badges subtle bob on hover */
+.hero-app-badge { display: inline-block; transition: transform .25s cubic-bezier(.16,1,.3,1); }
+.hero-app-badge:hover { transform: translateY(-3px) scale(1.03); }
+
+/* Parallax float wrapper for the hero image */
+.hero-parallax {
+    transition: transform .4s cubic-bezier(.16,1,.3,1);
 }
 
 @keyframes heroSlideUp {
@@ -668,6 +749,35 @@
             });
 
             els.forEach(function(el) { observer.observe(el); });
+        })();
+
+        /* ─── Hero magnetic CTA + image parallax ─── */
+        (function() {
+            var cta = document.querySelector('.hero-magnetic');
+            if (cta && window.matchMedia('(hover: hover)').matches) {
+                cta.addEventListener('pointermove', function(e) {
+                    var r = cta.getBoundingClientRect();
+                    var x = e.clientX - r.left, y = e.clientY - r.top;
+                    cta.style.setProperty('--mx', x + 'px');
+                    cta.style.setProperty('--my', y + 'px');
+                    var dx = (x - r.width / 2) / r.width;
+                    var dy = (y - r.height / 2) / r.height;
+                    cta.style.transform = 'translate(' + (dx * 8) + 'px,' + (dy * 6) + 'px)';
+                });
+                cta.addEventListener('pointerleave', function() {
+                    cta.style.transform = '';
+                });
+            }
+
+            var heroImg = document.querySelector('.hero-parallax');
+            if (heroImg && window.matchMedia('(hover: hover)').matches) {
+                document.addEventListener('pointermove', function(e) {
+                    var w = window.innerWidth, h = window.innerHeight;
+                    var dx = (e.clientX / w - 0.5) * 14;
+                    var dy = (e.clientY / h - 0.5) * 10;
+                    heroImg.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+                });
+            }
         })();
     </script>
 @endpush
