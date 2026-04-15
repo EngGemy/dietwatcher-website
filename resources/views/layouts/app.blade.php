@@ -36,6 +36,203 @@
         }
     </style>
 
+    {{-- ─── Premium wow styles: CTA, app-store badges, social icons, ambient ─── --}}
+    <style>
+        /* Global smooth scroll + reduced-motion respect */
+        html { scroll-behavior: smooth; }
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+        }
+
+        /* ─── Premium CTA buttons: gradient border + shine + idle pulse + arrow slide ─── */
+        .btn--primary {
+            position: relative;
+            isolation: isolate;
+            background-image: linear-gradient(120deg, #3B82F6 0%, #2563EB 50%, #1D4ED8 100%);
+            background-size: 200% 100%;
+            animation: ctaGradient 6s ease-in-out infinite, ctaIdlePulse 3.2s ease-in-out 1s infinite;
+        }
+        @keyframes ctaGradient {
+            0%,100% { background-position: 0% 0%; }
+            50%     { background-position: 100% 0%; }
+        }
+        @keyframes ctaIdlePulse {
+            0%,100% { box-shadow: 0 8px 20px -10px rgba(37,99,235,.4), 0 0 0 0 rgba(37,99,235,.25); }
+            50%     { box-shadow: 0 12px 30px -8px rgba(37,99,235,.55), 0 0 0 8px rgba(37,99,235,0); }
+        }
+        .btn--primary:hover {
+            transform: translateY(-3px) scale(1.02);
+            filter: brightness(1.06) saturate(1.15);
+            animation-play-state: paused;
+        }
+
+        /* Arrow slide on buttons that want it — opt-in via .btn--arrow */
+        .btn--arrow::after {
+            content: "→";
+            display: inline-block;
+            margin-inline-start: .5rem;
+            transition: transform .35s cubic-bezier(.16,1,.3,1), letter-spacing .35s;
+            will-change: transform;
+        }
+        [dir="rtl"] .btn--arrow::after { content: "←"; }
+        .btn--arrow:hover::after { transform: translateX(6px); letter-spacing: .1em; }
+        [dir="rtl"] .btn--arrow:hover::after { transform: translateX(-6px); }
+
+        /* ─── App-store badges: neon glow pulse, magnetic float, icon tilt ─── */
+        .hero-app-badge, .app-store-badge {
+            display: inline-block;
+            position: relative;
+            transition: transform .35s cubic-bezier(.16,1,.3,1), filter .35s ease;
+            will-change: transform;
+        }
+        .hero-app-badge img, .app-store-badge img {
+            transition: transform .4s cubic-bezier(.16,1,.3,1), filter .35s ease;
+        }
+        .hero-app-badge::before, .app-store-badge::before {
+            content: "";
+            position: absolute;
+            inset: -8px;
+            border-radius: 14px;
+            background: radial-gradient(ellipse at center, rgba(59,130,246,.45), transparent 70%);
+            opacity: 0;
+            filter: blur(14px);
+            transition: opacity .4s ease;
+            z-index: -1;
+        }
+        .hero-app-badge:hover, .app-store-badge:hover { transform: translateY(-4px) scale(1.04); }
+        .hero-app-badge:hover::before, .app-store-badge:hover::before { opacity: 1; animation: badgeNeon 1.8s ease-in-out infinite; }
+        .hero-app-badge:hover img, .app-store-badge:hover img { transform: rotate(-2deg); filter: drop-shadow(0 10px 18px rgba(0,0,0,.25)); }
+        @keyframes badgeNeon {
+            0%,100% { filter: blur(14px); opacity: .6; }
+            50%     { filter: blur(18px); opacity: 1; }
+        }
+
+        /* ─── Social icons (footer): bounce-in, neon glow, magnetic lift, tooltip ─── */
+        .footer__social-link--wow {
+            position: relative;
+            overflow: visible;
+            transition: transform .35s cubic-bezier(.16,1,.3,1), background .35s ease, color .35s ease, box-shadow .35s ease;
+            opacity: 0;
+            transform: translateY(14px) scale(.8);
+            animation: socialBounceIn .7s cubic-bezier(.34,1.56,.64,1) forwards;
+            will-change: transform;
+        }
+        .footer__social-link--wow:nth-child(1) { animation-delay: .15s; }
+        .footer__social-link--wow:nth-child(2) { animation-delay: .28s; }
+        .footer__social-link--wow:nth-child(3) { animation-delay: .41s; }
+        .footer__social-link--wow:nth-child(4) { animation-delay: .54s; }
+        @keyframes socialBounceIn {
+            0%   { opacity: 0; transform: translateY(14px) scale(.8); }
+            60%  { opacity: 1; transform: translateY(-4px) scale(1.08); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .footer__social-link--wow .icon { transition: transform .4s cubic-bezier(.16,1,.3,1); }
+        .footer__social-link--wow:hover { transform: translateY(-4px) scale(1.12); }
+        .footer__social-link--wow:hover .icon { transform: rotate(-8deg); }
+
+        /* Platform-specific hover colors + neon glow */
+        .footer__social-link--wow[data-platform="instagram"]:hover { color: #E1306C; box-shadow: 0 0 0 0 rgba(225,48,108,.6), 0 0 25px 4px rgba(225,48,108,.55); }
+        .footer__social-link--wow[data-platform="facebook"]:hover  { color: #1877F2; box-shadow: 0 0 25px 4px rgba(24,119,242,.55); }
+        .footer__social-link--wow[data-platform="twitter"]:hover   { color: #1DA1F2; box-shadow: 0 0 25px 4px rgba(29,161,242,.55); }
+        .footer__social-link--wow[data-platform="youtube"]:hover   { color: #FF0000; box-shadow: 0 0 25px 4px rgba(255,0,0,.5); }
+
+        /* Tooltip */
+        .footer__social-link--wow::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: calc(100% + 10px);
+            left: 50%;
+            transform: translateX(-50%) translateY(6px);
+            background: rgba(15,23,42,.95);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 5px 10px;
+            border-radius: 6px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .25s ease, transform .25s ease;
+            z-index: 20;
+        }
+        .footer__social-link--wow::before {
+            content: "";
+            position: absolute;
+            bottom: calc(100% + 5px);
+            left: 50%;
+            border: 5px solid transparent;
+            border-top-color: rgba(15,23,42,.95);
+            transform: translateX(-50%) translateY(6px);
+            opacity: 0;
+            transition: opacity .25s ease, transform .25s ease;
+        }
+        .footer__social-link--wow:hover::after,
+        .footer__social-link--wow:hover::before {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Footer columns cinematic reveal */
+        .footer__column, .footer__brand {
+            opacity: 0;
+            transform: translateY(20px);
+            animation: footerUp .8s cubic-bezier(.16,1,.3,1) forwards;
+        }
+        .footer__brand       { animation-delay: .05s; }
+        .footer__column:nth-of-type(1) { animation-delay: .15s; }
+        .footer__column:nth-of-type(2) { animation-delay: .25s; }
+        .footer__column:nth-of-type(3) { animation-delay: .35s; }
+        @keyframes footerUp { to { opacity: 1; transform: translateY(0); } }
+
+        /* Footer links underline reveal */
+        .footer__link {
+            position: relative;
+            transition: color .3s ease, transform .3s ease;
+        }
+        .footer__link::after {
+            content: "";
+            position: absolute;
+            left: 0; right: 0; bottom: -2px;
+            height: 1px;
+            background: currentColor;
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform .35s cubic-bezier(.16,1,.3,1);
+        }
+        [dir="rtl"] .footer__link::after { transform-origin: right; }
+        .footer__link:hover::after { transform: scaleX(1); }
+        .footer__link:hover { transform: translateX(3px); }
+        [dir="rtl"] .footer__link:hover { transform: translateX(-3px); }
+
+        /* ─── Ambient floating blurred blobs (hero ambient) ─── */
+        .wow-ambient {
+            pointer-events: none;
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            z-index: 0;
+        }
+        .wow-ambient__blob {
+            position: absolute;
+            width: 420px; height: 420px;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: .45;
+            mix-blend-mode: multiply;
+            will-change: transform;
+            animation: blobDrift 18s ease-in-out infinite;
+        }
+        .wow-ambient__blob--a { top: -120px; left: -80px;  background: #86EFAC; }
+        .wow-ambient__blob--b { bottom: -140px; right: -60px; background: #93C5FD; animation-delay: -6s; animation-duration: 22s; }
+        .wow-ambient__blob--c { top: 30%; left: 40%; width: 300px; height: 300px; background: #FDE68A; animation-delay: -12s; animation-duration: 26s; }
+        @keyframes blobDrift {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33%      { transform: translate(40px, -30px) scale(1.08); }
+            66%      { transform: translate(-30px, 40px) scale(.95); }
+        }
+    </style>
+
     {{-- ─── Wow button interactions (ripple + press + shine) ─── --}}
     <style>
         .btn {

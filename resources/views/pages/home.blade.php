@@ -5,9 +5,10 @@
 @section('content')
     {{-- Hero Section --}}
     <section>
-        <div class="relative container overflow-hidden rounded-md bg-gray-200 pt-12 md:pt-28">
-            <div class="relative z-20 mx-auto grid w-full max-w-[1500px] gap-10 lg:grid-cols-2 lg:gap-0">
-                <div class="md:pb-28">
+        <div
+            class="hero-shell relative container overflow-hidden rounded-md bg-gray-200">
+            <div class="hero-grid relative z-20 mx-auto grid w-full max-w-[1500px] gap-10 lg:grid-cols-2 lg:gap-0">
+                <div class="hero-copy md:pb-28">
                     <h1 class="hero-title mb-4 text-4xl font-bold md:mb-7 lg:text-6xl/tight">
                         <span class="hero-word hero-word--green text-green">{{ __('Healthy') }}</span>
                         <span class="hero-word">{{ __('Meals') }}</span>
@@ -40,17 +41,28 @@
                     </div>
                 </div>
 
-                <div class="relative mx-auto w-fit self-end">
-                    <img src="{{ asset('assets/images/hero-img.png') }}"
-                        class="hero-img-anim hero-float hero-parallax mx-auto w-full max-w-[600px] select-none md:max-w-[800px]" alt="{{ __('Hero') }}" />
-                    <img src="{{ asset('assets/images/app-screens.png') }}"
-                        class="hero-phone pointer-events-none select-none"
-                        alt="{{ __('App Preview') }}" />
+{{--                <div class="relative mx-auto w-fit self-end">--}}
+{{--                    <img src="{{ asset('assets/images/hero-img.png') }}"--}}
+{{--                        class="hero-img-anim hero-float hero-parallax mx-auto w-full max-w-[600px] select-none md:max-w-[800px]" alt="{{ __('Hero') }}" />--}}
+{{--                    <img src="{{ asset('assets/images/app-screens.png') }}"--}}
+{{--                        class="hero-phone pointer-events-none select-none"--}}
+{{--                        alt="{{ __('App Preview') }}" />--}}
+{{--                </div>--}}
+
+                <div class="hero-visual relative mx-auto w-fit self-end">
+                    <div class="hero-stage hero-parallax">
+                        <img src="{{ asset('assets/images/hero-img.png') }}"
+                            class="hero-food hero-img-anim hero-float pointer-events-none select-none"
+                            alt="{{ __('Healthy meal') }}" />
+                        <img src="{{ asset('assets/images/app-screens.png') }}"
+                            class="hero-phones pointer-events-none select-none"
+                            alt="{{ __('App Preview') }}" />
+                    </div>
                 </div>
             </div>
 
             <img src="{{ asset('assets/images/hero-bg.png') }}"
-                class="absolute inset-y-0 start-0 hidden object-contain object-right select-none md:block rtl:-scale-x-100"
+                class="hero-bg absolute inset-y-0 start-0 hidden object-contain object-right select-none md:block rtl:-scale-x-100"
                 alt="" />
         </div>
     </section>
@@ -58,7 +70,7 @@
     {{-- Meal Plans Section --}}
     <section class="py-20">
         <div class="container">
-            <header class="section-header section-header--center" data-anim="fade-up">
+            <header class="section-header section-header--center app-section-head" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ __('Meal Plan') }}</h4>
                 <h2 class="section-header__title">{{ __('Meal Plans for Every Lifestyle') }}</h2>
                 <p class="section-header__desc">
@@ -231,7 +243,9 @@
                 </p>
             </header>
 
-            <div class="grid items-stretch gap-8 md:grid-cols-2 md:gap-12 lg:grid-cols-4" data-anim-stagger>
+            <div class="products-rail" data-products-rail data-anim="fade-up">
+                <div class="products-rail__viewport">
+                    <div class="products-rail__track" data-products-track>
                 @forelse($instantMeals as $meal)
                     @php
                         $mealImage = $meal['image_url'] ?? '';
@@ -248,7 +262,7 @@
                         $mealFallback = asset('assets/images/meal-' . ($loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3) . '.png');
                         $effectivePrice = ($meal['offer_price'] ?? 0) > 0 && ($meal['offer_price'] < $meal['price']) ? $meal['offer_price'] : $meal['price'];
                     @endphp
-                    <div class="meal-card" data-anim="fade-up">
+                    <article class="meal-card products-rail__card" data-rail-item>
                         <div class="meal-card__thumbnail">
                             <a href="{{ route('store.show', $meal['id']) }}">
                                 <img src="{{ $mealImageUrl }}" alt="{{ $meal['name'] }}" onerror="this.src='{{ $mealFallback }}'" />
@@ -278,13 +292,16 @@
                                 </div>
 
                                 <button type="button"
-                                        class="meal-card__btn"
+                                        class="meal-card__btn products-rail__btn hero-magnetic"
+                                        data-add-to-cart-btn
+                                        data-default-label="{{ __('Add to Cart') }}"
+                                        data-success-label="{{ __('Added') }}"
                                         onclick="Livewire.dispatch('add-to-cart', { mealId: {{ $meal['id'] }}, name: '{{ addslashes($meal['name']) }}', price: {{ $effectivePrice }}, image: '{{ addslashes($mealImageUrl) }}' })">
                                     {{ __('Add to Cart') }}
                                 </button>
                             </div>
                         </div>
-                    </div>
+                    </article>
                 @empty
                     <div class="col-span-full text-center py-16">
                         <svg class="w-20 h-20 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -294,6 +311,12 @@
                         <p class="text-black/60">{{ __('Check back soon for new meals.') }}</p>
                     </div>
                 @endforelse
+                    </div>
+                </div>
+                <div class="products-rail__cursor products-rail__cursor--dot" aria-hidden="true"></div>
+                <div class="products-rail__cursor products-rail__cursor--ring" aria-hidden="true">
+                    <span>{{ __('Drag') }}</span>
+                </div>
             </div>
 
             <div class="mt-10 flex items-center justify-center md:mt-20">
@@ -316,13 +339,41 @@
                 </p>
             </header>
 
-            <div class="mb-10 flex flex-wrap items-center justify-center gap-1.5 md:mb-20" data-anim="fade-up" data-anim-delay="100">
-                <a href="{{ $playStoreUrl }}" target="_blank" rel="noopener">
+            <div class="mb-10 flex flex-wrap items-center justify-center gap-1.5 md:mb-12 app-store-links" data-anim="fade-up" data-anim-delay="100">
+                <a href="{{ $playStoreUrl }}" target="_blank" rel="noopener" class="hero-magnetic">
                     <img src="{{ asset('assets/images/play.png') }}" class="h-16" alt="{{ __('Google Play') }}" />
                 </a>
-                <a href="{{ $appStoreUrl }}" target="_blank" rel="noopener">
+                <a href="{{ $appStoreUrl }}" target="_blank" rel="noopener" class="hero-magnetic">
                     <img src="{{ asset('assets/images/store.png') }}" class="h-16" alt="{{ __('App Store') }}" />
                 </a>
+            </div>
+
+            <div class="mb-12 flex items-center justify-center gap-3 app-social-links" data-anim="fade-up" data-anim-delay="180">
+                @if(!empty($socialInstagram) && $socialInstagram !== '#')
+                    <a href="{{ $socialInstagram }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" aria-label="{{ __('Instagram') }}">
+                        <svg class="size-5"><use href="{{ asset('assets/images/icons/sprite.svg#instagram') }}"></use></svg>
+                    </a>
+                @endif
+                @if(!empty($socialFacebook) && $socialFacebook !== '#')
+                    <a href="{{ $socialFacebook }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" aria-label="{{ __('Facebook') }}">
+                        <img src="{{ asset('assets/images/icons/facebook.svg') }}" alt="" class="size-5 object-contain" />
+                    </a>
+                @endif
+                @if(!empty($socialTwitter) && $socialTwitter !== '#')
+                    <a href="{{ $socialTwitter }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" aria-label="{{ __('Twitter') }}">
+                        <img src="{{ asset('assets/images/icons/twitter.svg') }}" alt="" class="size-5 object-contain" />
+                    </a>
+                @endif
+                @if(!empty($socialLinkedIn) && $socialLinkedIn !== '#')
+                    <a href="{{ $socialLinkedIn }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" aria-label="{{ __('LinkedIn') }}">
+                        <img src="{{ asset('assets/images/icons/linkedint.svg') }}" alt="" class="size-5 object-contain" />
+                    </a>
+                @endif
+                @if(!empty($socialYouTube) && $socialYouTube !== '#')
+                    <a href="{{ $socialYouTube }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" aria-label="{{ __('YouTube') }}">
+                        <svg class="size-5"><use href="{{ asset('assets/images/icons/sprite.svg#telegram') }}"></use></svg>
+                    </a>
+                @endif
             </div>
 
             <img src="{{ $appDownloadSection?->mobile_image_url ?? asset('assets/images/app-screens.png') }}"
@@ -337,7 +388,7 @@
             @php
                 $testimonialHeader = \App\Models\TestimonialSectionHeader::where('is_active', true)->first();
             @endphp
-            <header class="section-header section-header--center" data-anim="fade-up">
+            <header class="section-header section-header--center testimonials-header" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ $testimonialHeader?->badge_title() ?? __('Feedback') }}</h4>
                 <h2 class="section-header__title">{{ $testimonialHeader?->title() ?? __('What our customer say') }}</h2>
                 <p class="section-header__desc">
@@ -345,10 +396,12 @@
                 </p>
             </header>
 
-            <div class="grid gap-6 md:grid-cols-3 md:gap-10" data-anim-stagger>
+            <div class="testimonials-rail" data-testimonials-rail data-anim="fade-up">
+                <div class="testimonials-rail__viewport" data-testimonials-viewport>
+                    <div class="testimonials-rail__track" data-testimonials-track>
                 @forelse ($testimonials as $testimonial)
-                    <div class="hs-carousel-slide" data-anim="fade-up">
-                        <div class="review-card">
+                    <article class="hs-carousel-slide testimonials-card-wrap testimonials-rail__item" data-testimonial-item>
+                        <div class="review-card testimonials-card">
                             <svg class="review-card__quote">
                                 <use href="{{ asset('assets/images/icons/sprite.svg#quote') }}"></use>
                             </svg>
@@ -375,20 +428,22 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </article>
                 @empty
-                    <div class="col-span-full text-center text-gray-500">
+                    <div class="text-center text-gray-500">
                         {{ __('No testimonials available yet.') }}
                     </div>
                 @endforelse
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 
     {{-- Blog Section --}}
-    <section class="py-20">
+    <section class="py-20 blog-premium-section">
         <div class="container">
-            <header class="section-header section-header--center" data-anim="fade-up">
+            <header class="section-header section-header--center blog-premium-head" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ __('Insightful') }}</h4>
                 <h2 class="section-header__title">{{ __('Insights for a Healthier You') }}</h2>
                 <p class="section-header__desc">
@@ -396,21 +451,21 @@
                 </p>
             </header>
 
-            <div class="mb-10 grid grid-cols-1 gap-6 md:mb-14 md:grid-cols-2 lg:grid-cols-4">
+            <div class="mb-10 grid grid-cols-1 gap-6 md:mb-14 md:grid-cols-2 lg:grid-cols-4 blog-premium-grid" data-anim-stagger>
                 @forelse($latestPosts as $post)
-                    <div class="blog-card">
+                    <div class="blog-card blog-premium-card" data-anim="fade-up" data-blog-card>
                         <div class="blog-card__thumbnail">
-                            <a href="{{ route('blog.show', $post->translate(app()->getLocale())->slug) }}">
+                            <a href="{{ route('blog.show', $post->translate(app()->getLocale())->slug) }}" data-blog-link>
                                 @php
-                                    $postImage = $post->cover_image_exists 
-                                        ? $post->cover_image_url 
+                                    $postImage = $post->cover_image_exists
+                                        ? $post->cover_image_url
                                         : asset('assets/images/blog-1.png');
                                 @endphp
                                 <img src="{{ $postImage }}" alt="{{ $post->title }}" />
                             </a>
                         </div>
 
-                        <a href="{{ route('blog.show', $post->translate(app()->getLocale())->slug) }}" class="blog-card__body">
+                        <a href="{{ route('blog.show', $post->translate(app()->getLocale())->slug) }}" class="blog-card__body" data-blog-link>
                             <time datetime="{{ $post->published_at->format('Y-m-d') }}">{{ $post->formatted_date }}</time>
                             <h3 class="blog-card__title">
                                 {{ $post->title }}
@@ -559,6 +614,94 @@
 }
 
 /* Hero supporting elements */
+.hero-shell {
+    min-height: clamp(560px, 74vh, 780px);
+    padding-top: clamp(2.6rem, 5vw, 6.5rem);
+}
+.hero-grid {
+    min-height: inherit;
+    align-items: end;
+}
+.hero-copy {
+    padding-bottom: clamp(1.5rem, 3vw, 3rem);
+}
+.hero-visual {
+    width: min(100%, 720px);
+}
+.hero-stage {
+    position: relative;
+    width: min(100vw - 3rem, 680px);
+    aspect-ratio: 1.2 / 1;
+    margin-inline: auto;
+}
+.hero-bg {
+    opacity: .95;
+}
+.hero-food {
+    position: absolute;
+    inset-inline-end: -6%;
+    inset-block-start: -1%;
+    width: clamp(430px, 52vw, 760px);
+    max-width: none;
+    z-index: 10;
+}
+.hero-phones {
+    position: absolute;
+    inset-inline-start: 2%;
+    inset-block-end: -8%;
+    width: clamp(270px, 36vw, 540px);
+    z-index: 30;
+    filter: drop-shadow(0 30px 45px rgba(0,0,0,.26));
+    opacity: 0;
+    transform: translateY(44px) scale(.93);
+    animation: heroPhoneIn 1s cubic-bezier(.16,1,.3,1) .65s forwards,
+               heroPhoneBob 6s ease-in-out 1.8s infinite;
+}
+@media (max-width: 1023px) {
+    .hero-shell {
+        min-height: auto;
+        padding-top: 2.8rem;
+    }
+    .hero-grid {
+        align-items: start;
+    }
+    .hero-copy {
+        padding-bottom: 0;
+    }
+    .hero-stage {
+        width: min(100%, 560px);
+        aspect-ratio: 1.1 / 1;
+    }
+    .hero-food {
+        inset-inline-end: -12%;
+        inset-block-start: 0;
+        width: min(132%, 640px);
+    }
+    .hero-phones {
+        inset-inline-start: 2%;
+        inset-block-end: -8%;
+        width: min(78%, 380px);
+    }
+}
+@media (max-width: 767px) {
+    .hero-shell {
+        padding-top: 2.2rem;
+    }
+    .hero-stage {
+        width: min(100%, 430px);
+        aspect-ratio: 1 / 1;
+    }
+    .hero-food {
+        inset-inline-end: -14%;
+        inset-block-start: 6%;
+        width: min(145%, 520px);
+    }
+    .hero-phones {
+        width: min(80%, 305px);
+        inset-inline-start: 3%;
+        inset-block-end: -12%;
+    }
+}
 .hero-desc-anim {
     opacity: 0;
     transform: translateY(20px);
@@ -611,31 +754,6 @@
     transition: transform .4s cubic-bezier(.16,1,.3,1);
 }
 
-/* ─── Hero phone mockup (dual-phone composite overlaying food) ─── */
-.hero-phone {
-    position: absolute;
-    bottom: -8%;
-    inset-inline-start: -18%;
-    width: 85%;
-    max-width: 640px;
-    z-index: 30;
-    filter: drop-shadow(0 30px 45px rgba(0,0,0,.28));
-    opacity: 0;
-    transform: translateY(50px) scale(.9);
-    animation: heroPhoneIn 1s cubic-bezier(.16,1,.3,1) .7s forwards,
-               heroPhoneBob 6s ease-in-out 1.8s infinite;
-}
-@media (max-width: 767px) {
-    .hero-phone {
-        position: relative;
-        bottom: auto;
-        inset-inline-start: auto;
-        width: 92%;
-        max-width: 360px;
-        margin: -30px auto -10px;
-        display: block;
-    }
-}
 @keyframes heroPhoneIn {
     to { opacity: 1; transform: translateY(0) scale(1); }
 }
@@ -659,6 +777,370 @@
 .hero-float {
     animation: float 4s ease-in-out infinite;
     animation-delay: 1.5s;
+}
+
+/* ─── Premium instant products rail ─────────────────── */
+.products-rail {
+    position: relative;
+    --rail-gap: clamp(1rem, 1.6vw, 1.6rem);
+    --card-width: clamp(240px, 20vw, 300px);
+}
+.products-rail__viewport {
+    overflow: hidden;
+    border-radius: 16px;
+    mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+}
+.products-rail__track {
+    display: flex;
+    align-items: stretch;
+    gap: var(--rail-gap);
+    width: max-content;
+    padding: .4rem;
+    animation: productsRailScroll var(--rail-duration, 34s) linear infinite;
+    will-change: transform;
+}
+.products-rail.is-paused .products-rail__track {
+    animation-play-state: paused;
+}
+.products-rail__card {
+    width: var(--card-width);
+    min-width: var(--card-width);
+    transform: translateY(0) scale(1);
+    transition: transform .36s cubic-bezier(.16,1,.3,1), box-shadow .36s ease;
+}
+.products-rail__card .meal-card__thumbnail {
+    overflow: hidden;
+    border-radius: 10px;
+}
+.products-rail__card .meal-card__thumbnail img {
+    transition: transform .45s cubic-bezier(.16,1,.3,1), filter .45s ease;
+    transform-origin: center;
+}
+.products-rail__card .meal-card__btn {
+    transition: transform .22s cubic-bezier(.16,1,.3,1), opacity .24s ease, box-shadow .28s ease, background-color .28s ease, color .28s ease;
+}
+.products-rail__card .meal-card__lower {
+    transition: transform .24s cubic-bezier(.16,1,.3,1);
+}
+.products-rail__card:hover {
+    transform: translateY(-8px) scale(1.015);
+    box-shadow: 0 18px 36px rgba(0, 0, 0, .14);
+}
+.products-rail__card:hover .meal-card__thumbnail img {
+    transform: scale(1.06);
+    filter: saturate(1.05);
+}
+.products-rail__card:hover .meal-card__lower {
+    transform: translateY(-2px);
+}
+.products-rail__btn {
+    position: relative;
+    overflow: hidden;
+}
+.products-rail__btn.is-pressed {
+    transform: scale(0.96);
+}
+.products-rail__btn.is-success {
+    background: #16a34a !important;
+    color: #fff !important;
+    border-color: #16a34a !important;
+    box-shadow: 0 8px 20px rgba(22,163,74,.28);
+}
+.products-rail__btn.is-success::before {
+    content: "✓";
+    margin-inline-end: 6px;
+}
+.products-rail__btn::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 20%, rgba(255,255,255,.35) 46%, transparent 70%);
+    transform: translateX(-120%);
+}
+.products-rail__card:hover .products-rail__btn::after {
+    animation: railBtnSheen .9s ease;
+}
+.products-rail__cursor {
+    position: fixed;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate3d(-50%, -50%, 0);
+    z-index: 70;
+    transition: opacity .2s ease;
+}
+.products-rail__cursor--dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #279ff9;
+}
+.products-rail__cursor--ring {
+    width: 74px;
+    height: 74px;
+    border-radius: 999px;
+    border: 1px solid rgba(39,159,249,.35);
+    background: rgba(39,159,249,.08);
+    display: grid;
+    place-items: center;
+    font-size: .68rem;
+    font-weight: 600;
+    color: #1f2937;
+    letter-spacing: .03em;
+    backdrop-filter: blur(4px);
+}
+.products-rail.is-cursor-active .products-rail__cursor {
+    opacity: 1;
+}
+.cart-badge-bounce {
+    animation: cartBadgeBounce .55s cubic-bezier(.2,1.2,.25,1);
+}
+@keyframes productsRailScroll {
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(calc(-1 * var(--loop-distance, 50%)), 0, 0); }
+}
+@keyframes railBtnSheen {
+    from { transform: translateX(-120%); }
+    to   { transform: translateX(120%); }
+}
+@keyframes cartBadgeBounce {
+    0% { transform: scale(1); }
+    35% { transform: scale(1.25); }
+    65% { transform: scale(.93); }
+    100% { transform: scale(1); }
+}
+
+/* ─── App section enhancements ──────────────────────── */
+.app-section-head {
+    position: relative;
+}
+.app-section-head::after {
+    content: "";
+    position: absolute;
+    inset-inline: 50%;
+    bottom: -10px;
+    width: 94px;
+    height: 4px;
+    border-radius: 999px;
+    transform: translateX(-50%);
+    background: linear-gradient(90deg, #f472b6 0%, #fb7185 40%, #279ff9 100%);
+    opacity: .85;
+}
+.app-store-links a {
+    transition: transform .3s cubic-bezier(.16,1,.3,1), filter .3s ease;
+}
+.app-store-links a:hover {
+    transform: translateY(-4px) scale(1.03);
+    filter: drop-shadow(0 10px 18px rgba(0,0,0,.18));
+}
+.app-social-links {
+    flex-wrap: wrap;
+}
+.app-social-link {
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    border: 1px solid rgba(17,24,39,.18);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #111827;
+    background: rgba(255,255,255,.55);
+    backdrop-filter: blur(4px);
+    transition: transform .25s cubic-bezier(.16,1,.3,1), background-color .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.app-social-link:hover {
+    transform: translateY(-3px) scale(1.05);
+    background: #279ff9;
+    color: #fff;
+    border-color: #279ff9;
+    box-shadow: 0 12px 20px rgba(39,159,249,.3);
+}
+
+/* ─── Testimonials premium single-row rail ─────────── */
+.testimonials-rail {
+    --t-gap: clamp(1rem, 1.8vw, 1.4rem);
+    --t-card-w: clamp(280px, 33vw, 390px);
+    position: relative;
+}
+.testimonials-rail__viewport {
+    overflow: hidden;
+    border-radius: 16px;
+    touch-action: pan-y;
+    cursor: grab;
+    user-select: none;
+    mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+}
+.testimonials-rail__viewport.is-dragging {
+    cursor: grabbing;
+}
+.testimonials-rail__track {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: var(--t-gap);
+    width: max-content;
+    will-change: transform;
+    transform: translate3d(0,0,0);
+    padding: .5rem .25rem;
+}
+.testimonials-rail__item {
+    width: var(--t-card-w);
+    min-width: var(--t-card-w);
+    flex: 0 0 var(--t-card-w);
+    transform-origin: 50% 100%;
+}
+.testimonials-card {
+    height: 100%;
+    transition: transform .48s cubic-bezier(.16,1,.3,1), box-shadow .48s cubic-bezier(.16,1,.3,1), border-color .36s ease;
+    border: 1px solid rgba(148,163,184,.18);
+    box-shadow: 0 14px 30px rgba(15,23,42,.08);
+}
+.testimonials-card-wrap:hover .testimonials-card,
+.testimonials-card-wrap:focus-within .testimonials-card {
+    transform: translateY(-9px) scale(1.018);
+    box-shadow: 0 24px 45px rgba(15,23,42,.14);
+    border-color: rgba(39,159,249,.25);
+}
+.testimonials-card .review-card__quote {
+    transition: transform .32s cubic-bezier(.16,1,.3,1), color .3s ease;
+}
+.testimonials-card-wrap:hover .review-card__quote,
+.testimonials-card-wrap:focus-within .review-card__quote {
+    transform: translateY(-2px) scale(1.08);
+    color: #f472b6;
+}
+.testimonials-card .review-card__author-img {
+    transition: transform .3s cubic-bezier(.16,1,.3,1), box-shadow .3s ease;
+}
+.testimonials-card-wrap:hover .review-card__author-img,
+.testimonials-card-wrap:focus-within .review-card__author-img {
+    transform: scale(1.06);
+    box-shadow: 0 8px 16px rgba(15,23,42,.2);
+}
+
+/* ─── Blog premium motion & interactions ───────────── */
+.blog-premium-head.section-header[data-anim] .section-header__subtitle,
+.blog-premium-head.section-header[data-anim] .section-header__title,
+.blog-premium-head.section-header[data-anim] .section-header__desc {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(22px);
+    transition:
+        opacity .75s cubic-bezier(.16,1,.3,1),
+        transform .75s cubic-bezier(.16,1,.3,1),
+        filter .75s cubic-bezier(.16,1,.3,1);
+}
+.blog-premium-head.section-header[data-anim].is-visible .section-header__subtitle {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+    transition-delay: .04s;
+}
+.blog-premium-head.section-header[data-anim].is-visible .section-header__title {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+    transition-delay: .16s;
+}
+.blog-premium-head.section-header[data-anim].is-visible .section-header__desc {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+    transition-delay: .28s;
+}
+.blog-premium-card {
+    transform: translateY(0) scale(1);
+    transition:
+        transform .46s cubic-bezier(.16,1,.3,1),
+        box-shadow .46s cubic-bezier(.16,1,.3,1);
+    box-shadow: 0 12px 30px rgba(15,23,42,.08);
+}
+.blog-premium-card .blog-card__thumbnail img {
+    transition: transform .95s cubic-bezier(.16,1,.3,1), filter .95s ease;
+    will-change: transform;
+}
+.blog-premium-card .blog-card__body {
+    transition: background .45s ease;
+}
+.blog-premium-card .blog-card__title {
+    transition: transform .38s cubic-bezier(.16,1,.3,1);
+}
+.blog-premium-card:hover,
+.blog-premium-card:focus-within {
+    transform: translateY(-10px) scale(1.016);
+    box-shadow: 0 26px 54px rgba(15,23,42,.2);
+}
+.blog-premium-card:hover .blog-card__thumbnail img,
+.blog-premium-card:focus-within .blog-card__thumbnail img {
+    transform: scale(1.08);
+    filter: saturate(1.05);
+}
+.blog-premium-card:hover .blog-card__body,
+.blog-premium-card:focus-within .blog-card__body {
+    background: linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.1) 50%,
+      rgba(0, 0, 0, 0.92) 100%
+    );
+}
+.blog-premium-card:hover .blog-card__title,
+.blog-premium-card:focus-within .blog-card__title {
+    transform: translateY(-3px);
+}
+.blog-premium-card.is-pressing {
+    transform: translateY(-2px) scale(.992) !important;
+    transition-duration: .16s;
+}
+
+@media (max-width: 767px) {
+    .products-rail {
+        --card-width: min(78vw, 280px);
+    }
+    .products-rail__viewport {
+        mask-image: none;
+        -webkit-mask-image: none;
+    }
+    .testimonials-rail {
+        --t-card-w: min(84vw, 340px);
+    }
+    .testimonials-rail__viewport {
+        mask-image: none;
+        -webkit-mask-image: none;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .products-rail__track {
+        animation: none !important;
+    }
+    .products-rail__card,
+    .products-rail__card .meal-card__thumbnail img,
+    .products-rail__btn {
+        transition: none !important;
+    }
+    .products-rail__cursor {
+        display: none !important;
+    }
+    .app-store-links a,
+    .app-social-link,
+    .testimonials-card,
+    .testimonials-card .review-card__quote,
+    .testimonials-card .review-card__author-img,
+    .blog-premium-head.section-header[data-anim] .section-header__subtitle,
+    .blog-premium-head.section-header[data-anim] .section-header__title,
+    .blog-premium-head.section-header[data-anim] .section-header__desc,
+    .blog-premium-card,
+    .blog-premium-card .blog-card__thumbnail img,
+    .blog-premium-card .blog-card__body,
+    .blog-premium-card .blog-card__title {
+        transition: none !important;
+    }
+    .testimonials-rail__track {
+        transform: none !important;
+    }
 }
 
 /* Section headers entrance */
@@ -814,6 +1296,399 @@
                     heroImg.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
                 });
             }
+        })();
+
+        /* ─── Premium products rail: infinite scroll + interactions ─── */
+        (function() {
+            var section = document.querySelector('[data-products-rail]');
+            if (!section) return;
+
+            var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            var viewport = section.querySelector('.products-rail__viewport');
+            var track = section.querySelector('[data-products-track]');
+            if (!viewport || !track) return;
+
+            var baseItems = Array.from(track.querySelectorAll('[data-rail-item]'));
+            if (!baseItems.length) return;
+
+            function setupLoop() {
+                Array.from(track.querySelectorAll('[data-rail-clone="1"]')).forEach(function(node) {
+                    node.remove();
+                });
+
+                var needsClone = track.scrollWidth <= viewport.clientWidth * 1.65;
+                if (!needsClone) {
+                    needsClone = true;
+                }
+
+                if (needsClone) {
+                    baseItems.forEach(function(item) {
+                        var clone = item.cloneNode(true);
+                        clone.setAttribute('data-rail-clone', '1');
+                        clone.setAttribute('aria-hidden', 'true');
+                        clone.querySelectorAll('a, button, input, select, textarea').forEach(function(el) {
+                            el.setAttribute('tabindex', '-1');
+                        });
+                        track.appendChild(clone);
+                    });
+                }
+
+                var originalWidth = baseItems.reduce(function(sum, item) {
+                    return sum + item.getBoundingClientRect().width;
+                }, 0);
+                var computedStyle = getComputedStyle(track);
+                var gap = parseFloat(computedStyle.columnGap || computedStyle.gap || '0') || 0;
+                var distance = originalWidth + (Math.max(baseItems.length - 1, 0) * gap);
+                track.style.setProperty('--loop-distance', distance + 'px');
+
+                var speedPxPerSecond = 110;
+                var durationSeconds = Math.max(18, Math.round(distance / speedPxPerSecond));
+                track.style.setProperty('--rail-duration', durationSeconds + 's');
+            }
+
+            setupLoop();
+
+            var resizeTimer = null;
+            window.addEventListener('resize', function() {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(setupLoop, 200);
+            }, { passive: true });
+
+            if (!prefersReduced) {
+                section.addEventListener('mouseenter', function() {
+                    section.classList.add('is-paused');
+                });
+                section.addEventListener('mouseleave', function() {
+                    section.classList.remove('is-paused');
+                });
+                section.addEventListener('focusin', function() {
+                    section.classList.add('is-paused');
+                });
+                section.addEventListener('focusout', function(e) {
+                    if (!section.contains(e.relatedTarget)) {
+                        section.classList.remove('is-paused');
+                    }
+                });
+            } else {
+                section.classList.add('is-paused');
+            }
+
+            var dot = section.querySelector('.products-rail__cursor--dot');
+            var ring = section.querySelector('.products-rail__cursor--ring');
+            if (dot && ring && !prefersReduced && window.matchMedia('(hover: hover)').matches) {
+                var cursorX = 0;
+                var cursorY = 0;
+                var ringX = 0;
+                var ringY = 0;
+                var rafId = null;
+
+                function animateCursor() {
+                    ringX += (cursorX - ringX) * 0.14;
+                    ringY += (cursorY - ringY) * 0.14;
+                    dot.style.transform = 'translate3d(' + cursorX + 'px,' + cursorY + 'px,0) translate(-50%, -50%)';
+                    ring.style.transform = 'translate3d(' + ringX + 'px,' + ringY + 'px,0) translate(-50%, -50%)';
+                    rafId = requestAnimationFrame(animateCursor);
+                }
+
+                section.addEventListener('mouseenter', function() {
+                    section.classList.add('is-cursor-active');
+                    if (!rafId) {
+                        rafId = requestAnimationFrame(animateCursor);
+                    }
+                });
+
+                section.addEventListener('mouseleave', function() {
+                    section.classList.remove('is-cursor-active');
+                    if (rafId) {
+                        cancelAnimationFrame(rafId);
+                        rafId = null;
+                    }
+                });
+
+                section.addEventListener('mousemove', function(e) {
+                    cursorX = e.clientX;
+                    cursorY = e.clientY;
+                }, { passive: true });
+            }
+
+            function bounceCartBadge() {
+                var badge = document.querySelector('[data-cart-count], .cart-badge, #cart-count, [data-cart-badge]');
+                if (!badge) return;
+                badge.classList.remove('cart-badge-bounce');
+                void badge.offsetWidth;
+                badge.classList.add('cart-badge-bounce');
+            }
+
+            function flyToCart(fromEl) {
+                if (prefersReduced) return;
+                var target = document.querySelector('[data-cart-icon], .header-cart, .cart-toggle, a[href*="cart"]');
+                if (!target) return;
+
+                var start = fromEl.getBoundingClientRect();
+                var end = target.getBoundingClientRect();
+                if (!start.width || !end.width) return;
+
+                var ghost = document.createElement('span');
+                ghost.setAttribute('aria-hidden', 'true');
+                ghost.style.position = 'fixed';
+                ghost.style.left = (start.left + start.width / 2) + 'px';
+                ghost.style.top = (start.top + start.height / 2) + 'px';
+                ghost.style.width = '12px';
+                ghost.style.height = '12px';
+                ghost.style.borderRadius = '999px';
+                ghost.style.background = '#279ff9';
+                ghost.style.boxShadow = '0 0 0 10px rgba(39,159,249,.18)';
+                ghost.style.zIndex = '120';
+                ghost.style.pointerEvents = 'none';
+                ghost.style.transition = 'transform .55s cubic-bezier(.16,1,.3,1), opacity .55s ease';
+                document.body.appendChild(ghost);
+
+                var dx = (end.left + end.width / 2) - (start.left + start.width / 2);
+                var dy = (end.top + end.height / 2) - (start.top + start.height / 2);
+                requestAnimationFrame(function() {
+                    ghost.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(.45)';
+                    ghost.style.opacity = '0';
+                });
+
+                setTimeout(function() {
+                    ghost.remove();
+                }, 600);
+            }
+
+            section.querySelectorAll('[data-add-to-cart-btn]').forEach(function(btn) {
+                var defaultLabel = btn.getAttribute('data-default-label') || btn.textContent.trim();
+                var successLabel = btn.getAttribute('data-success-label') || 'Added';
+                var resetTimer = null;
+
+                btn.addEventListener('pointerdown', function() {
+                    btn.classList.add('is-pressed');
+                });
+                ['pointerup', 'pointercancel', 'mouseleave'].forEach(function(evt) {
+                    btn.addEventListener(evt, function() {
+                        btn.classList.remove('is-pressed');
+                    });
+                });
+
+                btn.addEventListener('click', function() {
+                    btn.classList.add('is-success');
+                    btn.textContent = successLabel;
+                    clearTimeout(resetTimer);
+                    resetTimer = setTimeout(function() {
+                        btn.classList.remove('is-success');
+                        btn.textContent = defaultLabel;
+                    }, 1400);
+                    bounceCartBadge();
+                    flyToCart(btn);
+                });
+            });
+
+            if (!prefersReduced && window.matchMedia('(hover: hover)').matches) {
+                section.querySelectorAll('.products-rail__btn').forEach(function(btn) {
+                    btn.addEventListener('pointermove', function(e) {
+                        var r = btn.getBoundingClientRect();
+                        var x = e.clientX - r.left;
+                        var y = e.clientY - r.top;
+                        btn.style.setProperty('--mx', x + 'px');
+                        btn.style.setProperty('--my', y + 'px');
+                        var dx = (x - r.width / 2) / r.width;
+                        var dy = (y - r.height / 2) / r.height;
+                        btn.style.transform = 'translate(' + (dx * 5) + 'px,' + (dy * 3) + 'px)';
+                    });
+                    btn.addEventListener('pointerleave', function() {
+                        btn.style.transform = '';
+                    });
+                });
+            }
+        })();
+
+        /* ─── Testimonials single-row infinite rail (rAF + drag) ─── */
+        (function() {
+            var section = document.querySelector('[data-testimonials-rail]');
+            if (!section) return;
+
+            var viewport = section.querySelector('[data-testimonials-viewport]');
+            var track = section.querySelector('[data-testimonials-track]');
+            if (!viewport || !track) return;
+
+            var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            var baseItems = Array.from(track.querySelectorAll('[data-testimonial-item]'));
+            if (!baseItems.length) return;
+
+            var state = {
+                x: 0,
+                loopWidth: 0,
+                speed: 0.05,
+                isPaused: false,
+                isDragging: false,
+                dragStartX: 0,
+                dragStartOffset: 0,
+                pointerId: null,
+                resumeTimer: null,
+                rafId: null,
+                lastTs: 0,
+            };
+
+            function normalizeX() {
+                if (!state.loopWidth) return;
+                while (state.x <= -state.loopWidth) state.x += state.loopWidth;
+                while (state.x > 0) state.x -= state.loopWidth;
+            }
+
+            function render() {
+                track.style.transform = 'translate3d(' + state.x + 'px,0,0)';
+            }
+
+            function buildRail() {
+                Array.from(track.querySelectorAll('[data-testimonial-clone="1"]')).forEach(function(node) {
+                    node.remove();
+                });
+
+                baseItems.forEach(function(item) {
+                    var clone = item.cloneNode(true);
+                    clone.setAttribute('data-testimonial-clone', '1');
+                    clone.setAttribute('aria-hidden', 'true');
+                    clone.querySelectorAll('a, button, input, select, textarea').forEach(function(el) {
+                        el.setAttribute('tabindex', '-1');
+                    });
+                    track.appendChild(clone);
+                });
+
+                var gap = parseFloat(getComputedStyle(track).columnGap || getComputedStyle(track).gap || '0') || 0;
+                var total = 0;
+                baseItems.forEach(function(item, idx) {
+                    total += item.getBoundingClientRect().width;
+                    if (idx < baseItems.length - 1) total += gap;
+                });
+                state.loopWidth = Math.max(1, total);
+                state.x = 0;
+                render();
+            }
+
+            function tick(ts) {
+                if (!state.lastTs) state.lastTs = ts;
+                var dt = ts - state.lastTs;
+                state.lastTs = ts;
+
+                if (!prefersReduced && !state.isPaused && !state.isDragging) {
+                    state.x -= state.speed * dt;
+                    normalizeX();
+                    render();
+                }
+                state.rafId = requestAnimationFrame(tick);
+            }
+
+            function pauseRail() {
+                state.isPaused = true;
+                clearTimeout(state.resumeTimer);
+            }
+
+            function resumeRail(delay) {
+                clearTimeout(state.resumeTimer);
+                state.resumeTimer = setTimeout(function() {
+                    state.isPaused = false;
+                }, delay || 0);
+            }
+
+            function pointerDown(e) {
+                if (prefersReduced) return;
+                state.isDragging = true;
+                state.pointerId = e.pointerId;
+                state.dragStartX = e.clientX;
+                state.dragStartOffset = state.x;
+                pauseRail();
+                viewport.classList.add('is-dragging');
+                viewport.setPointerCapture(e.pointerId);
+            }
+
+            function pointerMove(e) {
+                if (!state.isDragging || e.pointerId !== state.pointerId) return;
+                state.x = state.dragStartOffset + (e.clientX - state.dragStartX);
+                normalizeX();
+                render();
+            }
+
+            function pointerUp(e) {
+                if (!state.isDragging || e.pointerId !== state.pointerId) return;
+                state.isDragging = false;
+                viewport.classList.remove('is-dragging');
+                try { viewport.releasePointerCapture(e.pointerId); } catch (err) {}
+                resumeRail(700);
+            }
+
+            buildRail();
+
+            if (!prefersReduced) {
+                section.addEventListener('mouseenter', pauseRail);
+                section.addEventListener('mouseleave', function() { resumeRail(260); });
+                section.addEventListener('focusin', pauseRail);
+                section.addEventListener('focusout', function(e) {
+                    if (!section.contains(e.relatedTarget)) resumeRail(240);
+                });
+
+                viewport.addEventListener('pointerdown', pointerDown);
+                viewport.addEventListener('pointermove', pointerMove, { passive: true });
+                viewport.addEventListener('pointerup', pointerUp);
+                viewport.addEventListener('pointercancel', pointerUp);
+                viewport.addEventListener('lostpointercapture', function() {
+                    state.isDragging = false;
+                    viewport.classList.remove('is-dragging');
+                    resumeRail(500);
+                });
+            } else {
+                viewport.style.overflowX = 'auto';
+                track.style.transform = 'none';
+            }
+
+            var resizeTimer = null;
+            window.addEventListener('resize', function() {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(buildRail, 200);
+            }, { passive: true });
+
+            state.rafId = requestAnimationFrame(tick);
+        })();
+
+        /* ─── Blog premium interactions: parallax + press feedback ─── */
+        (function() {
+            var cards = Array.from(document.querySelectorAll('[data-blog-card]'));
+            if (!cards.length) return;
+
+            var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            var canHover = window.matchMedia('(hover: hover)').matches;
+
+            if (!prefersReduced && canHover) {
+                cards.forEach(function(card) {
+                    var img = card.querySelector('.blog-card__thumbnail img');
+                    if (!img) return;
+
+                    card.addEventListener('pointermove', function(e) {
+                        var rect = card.getBoundingClientRect();
+                        var rx = (e.clientX - rect.left) / rect.width - 0.5;
+                        var ry = (e.clientY - rect.top) / rect.height - 0.5;
+                        img.style.transform = 'scale(1.08) translate(' + (rx * 7) + 'px,' + (ry * 5) + 'px)';
+                    });
+
+                    card.addEventListener('pointerleave', function() {
+                        img.style.transform = '';
+                    });
+                });
+            }
+
+            document.querySelectorAll('[data-blog-link]').forEach(function(link) {
+                link.addEventListener('pointerdown', function() {
+                    var card = link.closest('[data-blog-card]');
+                    if (!card) return;
+                    card.classList.add('is-pressing');
+                });
+
+                ['pointerup', 'pointercancel', 'mouseleave'].forEach(function(evt) {
+                    link.addEventListener(evt, function() {
+                        var card = link.closest('[data-blog-card]');
+                        if (!card) return;
+                        setTimeout(function() { card.classList.remove('is-pressing'); }, 120);
+                    });
+                });
+            });
         })();
     </script>
 @endpush
