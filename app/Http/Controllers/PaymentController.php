@@ -11,6 +11,7 @@ use App\Services\Payment\MoyasarPaymentService;
 use App\Services\SmsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
@@ -164,10 +165,37 @@ class PaymentController extends Controller
             return redirect()->route('home');
         }
 
-        return view('pages.payment-result', [
+        return view('pages.payment-result-premium', [
             'payment' => $payment,
             'success' => $payment->status === PaymentStatus::PAID,
             'errorMessage' => session('payment_error'),
+            'autoDownloadInvoice' => $request->boolean('auto_download', true),
+        ]);
+    }
+
+    /**
+     * Download a lightweight HTML invoice from the confirmation page.
+     */
+    public function downloadInvoice(Request $request): Response|RedirectResponse
+    {
+        $payment = Payment::where('order_number', $request->query('order'))->first();
+        if (! $payment) {
+            return redirect()->route('home');
+        }
+
+        if ($payment->status !== PaymentStatus::PAID) {
+            return redirect()->route('payment.result', ['order' => $payment->order_number]);
+        }
+
+        $html = view('pages.payment-invoice-download', [
+            'payment' => $payment,
+        ])->render();
+
+        $file = 'invoice-' . strtolower($payment->order_number) . '.html';
+
+        return response($html, 200, [
+            'Content-Type' => 'text/html; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $file . '"',
         ]);
     }
 }

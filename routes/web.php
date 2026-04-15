@@ -132,6 +132,7 @@ Route::get('/checkout/customer-state', [\App\Http\Controllers\CheckoutController
 Route::get('/payment', [\App\Http\Controllers\PaymentController::class, 'form'])->name('payment.form');
 Route::get('/payment/callback', [\App\Http\Controllers\PaymentController::class, 'callback'])->name('payment.callback');
 Route::get('/payment/result', [\App\Http\Controllers\PaymentController::class, 'result'])->name('payment.result');
+Route::get('/payment/invoice', [\App\Http\Controllers\PaymentController::class, 'downloadInvoice'])->name('payment.invoice');
 
 // ─── AJAX: districts for address picker (Google Maps component) ──────
 Route::get('/api/districts', function () {

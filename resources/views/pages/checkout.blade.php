@@ -302,6 +302,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
 
                     {{-- Delivery address: map (home) or branch (pickup) — toggles live in Select Options --}}
                     <div class="mt-6 rounded-md border border-gray-200 bg-white p-5">
+                        <input type="hidden" name="selected_address_id" :value="selectedAddressId || ''" :disabled="deliveryType !== 'home'" />
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Delivery Address') }}</h3>
 
                         {{-- Delivery preference (under heading — matches reference layout) --}}
@@ -1632,7 +1633,14 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 }
                 this.selectedAddressId = addr.id ?? null;
                 this.addingNewAddress = false;
+                this.newAddressError = '';
+                this.addressConfirmedForSync = true;
+                this.moyasarError = '';
                 const districtId = addr.district?.id ?? addr.district_id;
+                const cityId = addr.city?.id ?? addr.city_id ?? addr.zone_id ?? addr.zone?.id ?? '';
+                if (cityId) {
+                    this.selectedZoneId = String(cityId);
+                }
                 let pickup = 'hand_it_to_me';
                 const pt = addr.pickupType;
                 if (pt && typeof pt === 'object') {
@@ -1656,6 +1664,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 if (addr.description) {
                     this.addressStreet = addr.description;
                 }
+                this.$nextTick(() => this.scheduleMoyasarRefresh());
             },
 
             async refreshCustomerFromServer() {
