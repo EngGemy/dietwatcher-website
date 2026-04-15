@@ -37,6 +37,9 @@
                 <div class="relative mx-auto w-fit self-end">
                     <img src="{{ asset('assets/images/hero-img.png') }}"
                         class="hero-img-anim hero-float mx-auto w-full max-w-[600px] select-none md:max-w-[800px]" alt="{{ __('Hero') }}" />
+                    <img src="{{ asset('assets/images/app-screens.png') }}"
+                        class="hero-phone-anim hero-phone-float pointer-events-none absolute bottom-0 end-4 z-30 w-[180px] select-none drop-shadow-2xl md:end-8 md:w-[300px] lg:w-[360px]"
+                        alt="{{ __('App Preview') }}" />
                 </div>
             </div>
 
@@ -582,6 +585,35 @@
     0% { transform: scale(1); }
     50% { transform: scale(1.05); }
     100% { transform: scale(1); }
+}
+
+/* ─── Hero phone mockup entrance + float ──────────── */
+.hero-phone-anim {
+    opacity: 0;
+    transform: translateY(60px) rotate(-6deg) scale(0.9);
+    animation: heroPhoneIn 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.7s forwards;
+}
+@keyframes heroPhoneIn {
+    to { opacity: 1; transform: translateY(0) rotate(-4deg) scale(1); }
+}
+@keyframes phoneFloat {
+    0%, 100% { transform: translateY(0) rotate(-4deg); }
+    50%      { transform: translateY(-14px) rotate(-4deg); }
+}
+.hero-phone-float {
+    animation: heroPhoneIn 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.7s forwards,
+               phoneFloat 5s ease-in-out 1.9s infinite;
+}
+[dir="rtl"] .hero-phone-anim,
+[dir="rtl"] .hero-phone-float {
+    transform: translateY(60px) rotate(6deg) scale(0.9);
+}
+[dir="rtl"] @keyframes heroPhoneIn {
+    to { opacity: 1; transform: translateY(0) rotate(4deg) scale(1); }
+}
+[dir="rtl"] @keyframes phoneFloat {
+    0%, 100% { transform: translateY(0) rotate(4deg); }
+    50%      { transform: translateY(-14px) rotate(4deg); }
 }
 </style>
 @endpush
