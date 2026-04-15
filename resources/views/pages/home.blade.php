@@ -43,6 +43,9 @@
                 <div class="relative mx-auto w-fit self-end">
                     <img src="{{ asset('assets/images/hero-img.png') }}"
                         class="hero-img-anim hero-float hero-parallax mx-auto w-full max-w-[600px] select-none md:max-w-[800px]" alt="{{ __('Hero') }}" />
+                    <img src="{{ asset('assets/images/app-screens.png') }}"
+                        class="hero-phone pointer-events-none select-none"
+                        alt="{{ __('App Preview') }}" />
                 </div>
             </div>
 
@@ -606,6 +609,61 @@
 /* Parallax float wrapper for the hero image */
 .hero-parallax {
     transition: transform .4s cubic-bezier(.16,1,.3,1);
+}
+
+/* ─── Hero phone mockup (overlays the food image) ─── */
+.hero-phone {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 44%;
+    max-width: 220px;
+    z-index: 30;
+    filter: drop-shadow(0 30px 40px rgba(0,0,0,.25));
+    opacity: 0;
+    transform: translate(-50%, 40px) rotate(-8deg) scale(.9);
+    animation: heroPhoneIn 1s cubic-bezier(.16,1,.3,1) .8s forwards,
+               heroPhoneBob 5s ease-in-out 1.9s infinite;
+}
+@media (min-width: 768px) {
+    .hero-phone {
+        width: 34%;
+        max-width: 300px;
+        left: auto;
+        right: 6%;
+        bottom: 0;
+        transform: translateY(40px) rotate(-6deg) scale(.9);
+    }
+    [dir="rtl"] .hero-phone {
+        right: auto;
+        left: 6%;
+        transform: translateY(40px) rotate(6deg) scale(.9);
+    }
+}
+@keyframes heroPhoneIn {
+    to { opacity: 1; transform: translate(-50%, 0) rotate(-4deg) scale(1); }
+}
+@media (min-width: 768px) {
+    @keyframes heroPhoneIn {
+        to { opacity: 1; transform: translateY(0) rotate(-4deg) scale(1); }
+    }
+}
+@keyframes heroPhoneBob {
+    0%,100% { translate: 0 0; }
+    50%     { translate: 0 -14px; }
+}
+.hero-phone::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.35) 50%, transparent 70%);
+    mix-blend-mode: overlay;
+    animation: heroPhoneShine 4s ease-in-out 2.5s infinite;
+    pointer-events: none;
+}
+@keyframes heroPhoneShine {
+    0%, 100% { transform: translateX(-120%); }
+    50%      { transform: translateX(120%); }
 }
 
 @keyframes heroSlideUp {
