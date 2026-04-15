@@ -34,17 +34,14 @@
                     </div>
                 </div>
 
-                <div class="relative mx-auto flex w-full items-end justify-center gap-3 self-end md:w-fit md:block">
-                    <img src="{{ asset('assets/images/hero-img.png') }}"
-                        class="hero-img-anim hero-float mx-auto w-1/2 max-w-[600px] select-none md:w-full md:max-w-[800px]" alt="{{ __('Hero') }}" />
+                <div class="relative mx-auto w-full max-w-[320px] self-end md:w-fit md:max-w-none">
                     <img src="{{ asset('assets/images/app-screens.png') }}"
-                        class="hero-phone-anim hero-phone-float pointer-events-none w-[45%] max-w-[220px] select-none drop-shadow-2xl md:absolute md:bottom-0 md:end-4 md:z-30 md:w-[260px] md:max-w-none lg:w-[320px]"
-                        alt="{{ __('App Preview') }}" />
+                        class="hero-img-anim hero-float relative z-20 mx-auto w-full max-w-[280px] select-none md:max-w-[420px] lg:max-w-[520px]" alt="{{ __('App Preview') }}" />
                 </div>
             </div>
 
             <img src="{{ asset('assets/images/hero-bg.png') }}"
-                class="absolute inset-y-0 start-0 hidden object-contain object-right select-none md:block rtl:-scale-x-100"
+                class="absolute inset-y-0 start-0 z-0 h-full w-full object-cover object-right opacity-60 select-none md:opacity-100 md:object-contain rtl:-scale-x-100"
                 alt="" />
         </div>
     </section>
@@ -587,34 +584,6 @@
     100% { transform: scale(1); }
 }
 
-/* ─── Hero phone mockup entrance + float ──────────── */
-.hero-phone-anim {
-    opacity: 0;
-    transform: translateY(60px) rotate(-6deg) scale(0.9);
-    animation: heroPhoneIn 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.7s forwards;
-}
-@keyframes heroPhoneIn {
-    to { opacity: 1; transform: translateY(0) rotate(-4deg) scale(1); }
-}
-@keyframes phoneFloat {
-    0%, 100% { transform: translateY(0) rotate(-4deg); }
-    50%      { transform: translateY(-14px) rotate(-4deg); }
-}
-.hero-phone-float {
-    animation: heroPhoneIn 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.7s forwards,
-               phoneFloat 5s ease-in-out 1.9s infinite;
-}
-[dir="rtl"] .hero-phone-anim,
-[dir="rtl"] .hero-phone-float {
-    transform: translateY(60px) rotate(6deg) scale(0.9);
-}
-[dir="rtl"] @keyframes heroPhoneIn {
-    to { opacity: 1; transform: translateY(0) rotate(4deg) scale(1); }
-}
-[dir="rtl"] @keyframes phoneFloat {
-    0%, 100% { transform: translateY(0) rotate(4deg); }
-    50%      { transform: translateY(-14px) rotate(4deg); }
-}
 </style>
 @endpush
 
