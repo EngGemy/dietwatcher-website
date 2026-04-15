@@ -611,59 +611,37 @@
     transition: transform .4s cubic-bezier(.16,1,.3,1);
 }
 
-/* ─── Hero phone mockup (overlays the food image) ─── */
+/* ─── Hero phone mockup (dual-phone composite overlaying food) ─── */
 .hero-phone {
     position: absolute;
-    bottom: 0;
-    left: 50%;
-    width: 44%;
-    max-width: 220px;
+    bottom: -8%;
+    inset-inline-start: -18%;
+    width: 85%;
+    max-width: 640px;
     z-index: 30;
-    filter: drop-shadow(0 30px 40px rgba(0,0,0,.25));
+    filter: drop-shadow(0 30px 45px rgba(0,0,0,.28));
     opacity: 0;
-    transform: translate(-50%, 40px) rotate(-8deg) scale(.9);
-    animation: heroPhoneIn 1s cubic-bezier(.16,1,.3,1) .8s forwards,
-               heroPhoneBob 5s ease-in-out 1.9s infinite;
+    transform: translateY(50px) scale(.9);
+    animation: heroPhoneIn 1s cubic-bezier(.16,1,.3,1) .7s forwards,
+               heroPhoneBob 6s ease-in-out 1.8s infinite;
 }
-@media (min-width: 768px) {
+@media (max-width: 767px) {
     .hero-phone {
-        width: 34%;
-        max-width: 300px;
-        left: auto;
-        right: 6%;
-        bottom: 0;
-        transform: translateY(40px) rotate(-6deg) scale(.9);
-    }
-    [dir="rtl"] .hero-phone {
-        right: auto;
-        left: 6%;
-        transform: translateY(40px) rotate(6deg) scale(.9);
+        position: relative;
+        bottom: auto;
+        inset-inline-start: auto;
+        width: 92%;
+        max-width: 360px;
+        margin: -30px auto -10px;
+        display: block;
     }
 }
 @keyframes heroPhoneIn {
-    to { opacity: 1; transform: translate(-50%, 0) rotate(-4deg) scale(1); }
-}
-@media (min-width: 768px) {
-    @keyframes heroPhoneIn {
-        to { opacity: 1; transform: translateY(0) rotate(-4deg) scale(1); }
-    }
+    to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes heroPhoneBob {
-    0%,100% { translate: 0 0; }
-    50%     { translate: 0 -14px; }
-}
-.hero-phone::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.35) 50%, transparent 70%);
-    mix-blend-mode: overlay;
-    animation: heroPhoneShine 4s ease-in-out 2.5s infinite;
-    pointer-events: none;
-}
-@keyframes heroPhoneShine {
-    0%, 100% { transform: translateX(-120%); }
-    50%      { transform: translateX(120%); }
+    0%, 100% { translate: 0 0; }
+    50%      { translate: 0 -12px; }
 }
 
 @keyframes heroSlideUp {
