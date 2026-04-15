@@ -29,7 +29,7 @@ Route::get('/', function () {
     $mealPlanCategories = collect($externalDataService->getCategoriesForDisplay())->take(6);
 
     // Fetch instant order meals from /meals API (group_id=29)
-    $instantMeals = $externalDataService->getMealsByGroup(29);
+    $instantMeals = array_slice($externalDataService->getMealsByGroup(29), 0, 4);
 
     return view('pages.home', compact('latestPosts', 'testimonials', 'howItWorksSteps', 'mealPlanCategories', 'instantMeals'));
 })->name('home');

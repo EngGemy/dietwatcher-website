@@ -36,6 +36,70 @@
         }
     </style>
 
+    {{-- ─── Wow button interactions (ripple + press + shine) ─── --}}
+    <style>
+        .btn {
+            position: relative;
+            overflow: hidden;
+            isolation: isolate;
+            transition: transform .18s cubic-bezier(.16,1,.3,1),
+                        box-shadow .25s ease,
+                        filter .25s ease;
+            will-change: transform;
+        }
+        .btn::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,.45) 50%, transparent 70%);
+            transform: translateX(-120%);
+            transition: transform .7s cubic-bezier(.22,1,.36,1);
+            pointer-events: none;
+            z-index: 1;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 28px -12px rgba(37, 99, 235, .35);
+        }
+        .btn:hover::before { transform: translateX(120%); }
+        .btn:active {
+            transform: translateY(0) scale(.96);
+            transition-duration: .08s;
+        }
+        .btn--primary:hover { filter: brightness(1.05) saturate(1.1); }
+
+        /* Ripple effect */
+        .btn .btn-ripple {
+            position: absolute;
+            border-radius: 9999px;
+            transform: scale(0);
+            animation: btnRipple .65s cubic-bezier(.22,1,.36,1) forwards;
+            background: rgba(255,255,255,.55);
+            pointer-events: none;
+            z-index: 2;
+            mix-blend-mode: screen;
+        }
+        @keyframes btnRipple {
+            to { transform: scale(3); opacity: 0; }
+        }
+
+        /* Press burst on click */
+        @keyframes btnBurst {
+            0%   { box-shadow: 0 0 0 0 rgba(59,130,246,.55); }
+            100% { box-shadow: 0 0 0 18px rgba(59,130,246,0); }
+        }
+        .btn.is-pressed { animation: btnBurst .55s ease-out; }
+
+        /* Touch-friendly tap on mobile */
+        @media (hover: none) {
+            .btn:active { transform: scale(.94); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .btn, .btn::before, .btn .btn-ripple { animation: none !important; transition: none !important; }
+        }
+    </style>
+
     @stack('styles')
     @stack('head')
 </head>
@@ -55,6 +119,28 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/preline/dist/preline.min.js"></script>
+
+    {{-- ─── Wow button ripple + press burst ─── --}}
+    <script>
+        (function() {
+            document.addEventListener('pointerdown', function(e) {
+                var btn = e.target.closest('.btn');
+                if (!btn) return;
+                var rect = btn.getBoundingClientRect();
+                var size = Math.max(rect.width, rect.height);
+                var ripple = document.createElement('span');
+                ripple.className = 'btn-ripple';
+                ripple.style.width  = size + 'px';
+                ripple.style.height = size + 'px';
+                ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+                ripple.style.top  = (e.clientY - rect.top  - size / 2) + 'px';
+                btn.appendChild(ripple);
+                btn.classList.add('is-pressed');
+                setTimeout(function() { ripple.remove(); }, 700);
+                setTimeout(function() { btn.classList.remove('is-pressed'); }, 600);
+            }, { passive: true });
+        })();
+    </script>
 
     {{-- Page scripts first so globals (e.g. checkoutPage) exist before Alpine boots via Livewire --}}
     @stack('scripts')
