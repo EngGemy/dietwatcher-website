@@ -267,13 +267,24 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                             </div>
 
                             <div x-show="phoneVerified && savedAddresses.length > 0" x-cloak class="rounded-lg border border-blue-100 bg-blue-50/80 p-4">
-                                <p class="mb-2 text-sm font-semibold text-gray-900">{{ __('checkout.saved_addresses_title') }}</p>
+                                <div class="mb-2 flex items-center justify-between gap-2">
+                                    <p class="text-sm font-semibold text-gray-900">{{ __('checkout.saved_addresses_title') }}</p>
+                                    <button type="button"
+                                            class="inline-flex items-center gap-1 rounded-lg border border-blue-500 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
+                                            @click="startAddingAddress()">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                        </svg>
+                                        <span x-text="addingNewAddress ? '{{ __('Cancel') }}' : '{{ __('Add new address') }}'"></span>
+                                    </button>
+                                </div>
                                 <p class="mb-3 text-xs text-gray-600">{{ __('checkout.saved_addresses_hint') }}</p>
-                                <ul class="max-h-64 space-y-2 overflow-y-auto">
+                                <ul class="max-h-64 space-y-2 overflow-y-auto" x-show="!addingNewAddress">
                                     <template x-for="addr in savedAddresses" :key="addr.id">
                                         <li>
                                             <button type="button"
-                                                    class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left text-sm text-gray-800 transition hover:border-blue-400 hover:bg-blue-50/50"
+                                                    class="w-full rounded-lg border px-3 py-2.5 text-left text-sm text-gray-800 transition hover:border-blue-400 hover:bg-blue-50/50"
+                                                    :class="String(addr.id) === String(selectedAddressId) ? 'border-blue-500 bg-white shadow-sm ring-1 ring-blue-200' : 'border-gray-200 bg-white'"
                                                     @click="applySavedAddress(addr)">
                                                 <span class="line-clamp-2" x-text="addr.description || addr.title || ''"></span>
                                                 <span class="mt-1 block text-xs text-gray-500" x-text="savedAddressDistrict(addr)"></span>
@@ -281,6 +292,9 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                                         </li>
                                     </template>
                                 </ul>
+                                <p x-show="addingNewAddress" x-cloak class="text-xs text-blue-700">
+                                    {{ __('Fill the map and address fields below, then tap "Save address".') }}
+                                </p>
                             </div>
 
                         </div>
@@ -371,7 +385,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                         </div>
 
                         {{-- Home: city + inline map + address — no x-transition (can leave map invisible); x-show keeps block in DOM --}}
-                        <div x-show="deliveryType === 'home'" class="space-y-4">
+                        <div x-show="deliveryType === 'home' && (savedAddresses.length === 0 || addingNewAddress)" class="space-y-4">
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('City') }}</label>
                                     <select name="zone_id" class="form-control @error('zone_id') border-red-500 @enderror"
@@ -448,6 +462,22 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                                     </div>
 
                                     <input type="hidden" name="building" :value="buildingNotes" :disabled="deliveryType === 'pickup'" />
+
+                                    <div x-show="addingNewAddress" x-cloak class="flex items-center gap-3 pt-2">
+                                        <button type="button"
+                                                class="btn btn--primary btn--md flex-1"
+                                                :disabled="savingNewAddress"
+                                                @click="saveNewAddress()">
+                                            <span x-show="!savingNewAddress">{{ __('Save address') }}</span>
+                                            <span x-show="savingNewAddress" x-cloak>{{ __('Saving...') }}</span>
+                                        </button>
+                                        <button type="button"
+                                                class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                                                @click="addingNewAddress = false">
+                                            {{ __('Cancel') }}
+                                        </button>
+                                    </div>
+                                    <p x-show="newAddressError" x-cloak class="text-sm text-red-600" x-text="newAddressError"></p>
                                 </div>
                         </div>
                     </div>
@@ -1201,6 +1231,10 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             showNameField: false,
             isContinueUser: false,
             savedAddresses: [],
+            selectedAddressId: null,
+            addingNewAddress: false,
+            savingNewAddress: false,
+            newAddressError: '',
             deviceId: (function () {
                 try {
                     const k = 'dw_checkout_device_id';
@@ -1531,10 +1565,73 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 return '';
             },
 
+            startAddingAddress() {
+                this.addingNewAddress = !this.addingNewAddress;
+                this.newAddressError = '';
+                if (this.addingNewAddress) {
+                    this.selectedAddressId = null;
+                    this.addressStreet = '';
+                    this.deliveryBuilding = '';
+                    this.deliveryFloor = '';
+                    this.deliveryDoor = '';
+                    this.buildingNotes = '';
+                    this.deliveryType = 'home';
+                    setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 200);
+                }
+            },
+
+            async saveNewAddress() {
+                this.newAddressError = '';
+                const form = this.$refs.checkoutForm;
+                if (! form) return;
+                const fd = new FormData(form);
+                // Only send the fields the sync-address endpoint needs.
+                const payload = new FormData();
+                const keep = ['delivery_lat', 'delivery_lng', 'delivery_district_id', 'delivery_description',
+                              'delivery_type', 'delivery_title', 'delivery_pickup_type', 'building', 'zone_id'];
+                keep.forEach(k => { if (fd.has(k)) payload.append(k, fd.get(k)); });
+                if (! payload.get('delivery_lat') || ! payload.get('delivery_lng')) {
+                    this.newAddressError = '{{ __('Please set a location on the map first.') }}';
+                    return;
+                }
+                if (! payload.get('delivery_district_id')) {
+                    this.newAddressError = '{{ __('Please confirm the address (district) on the map.') }}';
+                    return;
+                }
+                this.savingNewAddress = true;
+                try {
+                    const res = await fetch('{{ route('checkout.sync-address') }}', {
+                        method: 'POST',
+                        body: payload,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+                        },
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (! res.ok || ! data.success) {
+                        this.newAddressError = data.message || '{{ __('address.save_failed') }}';
+                        return;
+                    }
+                    await this.refreshCustomerFromServer();
+                    if (data.data && data.data.id) {
+                        const fresh = this.savedAddresses.find(a => String(a.id) === String(data.data.id));
+                        if (fresh) this.applySavedAddress(fresh);
+                    }
+                    this.addingNewAddress = false;
+                } catch (e) {
+                    this.newAddressError = '{{ __('An error occurred. Please try again.') }}';
+                } finally {
+                    this.savingNewAddress = false;
+                }
+            },
+
             applySavedAddress(addr) {
                 if (! addr || this.deliveryType !== 'home') {
                     return;
                 }
+                this.selectedAddressId = addr.id ?? null;
+                this.addingNewAddress = false;
                 const districtId = addr.district?.id ?? addr.district_id;
                 let pickup = 'hand_it_to_me';
                 const pt = addr.pickupType;
@@ -1620,6 +1717,8 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             selectBranch(id) {
                 this.selectedBranchId = String(id);
                 this.pickupPhase = 'done';
+                this.moyasarError = '';
+                this.scheduleMoyasarRefresh();
             },
 
             editBranchSelection() {
@@ -1926,6 +2025,15 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             scheduleMoyasarRefresh() {
                 clearTimeout(this._moyasarTimer);
                 this._moyasarTimer = setTimeout(() => {
+                    // Skip refresh when required delivery info is missing — avoids spurious errors.
+                    if (this.deliveryType === 'pickup' && ! this.selectedBranchId) {
+                        this.moyasarError = '';
+                        return;
+                    }
+                    if (this.deliveryType === 'home' && ! this.selectedZoneId) {
+                        this.moyasarError = '';
+                        return;
+                    }
                     if (this.phoneVerified) {
                         this.bootstrapMoyasar();
                     } else {

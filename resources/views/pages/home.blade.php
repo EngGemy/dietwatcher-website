@@ -34,11 +34,11 @@
                     </div>
                 </div>
 
-                <div class="relative mx-auto w-fit self-end">
+                <div class="relative mx-auto flex w-full items-end justify-center gap-3 self-end md:w-fit md:block">
                     <img src="{{ asset('assets/images/hero-img.png') }}"
-                        class="hero-img-anim hero-float mx-auto w-full max-w-[600px] select-none md:max-w-[800px]" alt="{{ __('Hero') }}" />
+                        class="hero-img-anim hero-float mx-auto w-1/2 max-w-[600px] select-none md:w-full md:max-w-[800px]" alt="{{ __('Hero') }}" />
                     <img src="{{ asset('assets/images/app-screens.png') }}"
-                        class="hero-phone-anim hero-phone-float pointer-events-none absolute bottom-0 end-4 z-30 w-[180px] select-none drop-shadow-2xl md:end-8 md:w-[300px] lg:w-[360px]"
+                        class="hero-phone-anim hero-phone-float pointer-events-none w-[45%] max-w-[220px] select-none drop-shadow-2xl md:absolute md:bottom-0 md:end-4 md:z-30 md:w-[260px] md:max-w-none lg:w-[320px]"
                         alt="{{ __('App Preview') }}" />
                 </div>
             </div>
