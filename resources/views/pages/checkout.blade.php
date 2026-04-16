@@ -1683,11 +1683,11 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                     // If already verified (page reload), determine name field visibility
                     if (this.phoneVerified) {
                         const hasName = !!(d.profile && d.profile.name);
-                        const isCont = !!(d.is_continue);
-                        this.isContinueUser = isCont;
-                        this.showNameField = !(isCont && hasName);
+                        const isNewUser = !!(d.is_continue);
+                        this.isContinueUser = isNewUser;
+                        this.showNameField = isNewUser || !hasName;
                         // Auto-apply first saved address if existing user with addresses
-                        if (isCont && this.savedAddresses.length > 0 && !this.addressStreet) {
+                        if (!isNewUser && this.savedAddresses.length > 0 && !this.addressStreet) {
                             this.$nextTick(() => this.applySavedAddress(this.savedAddresses[0]));
                         }
                     }
@@ -1935,20 +1935,21 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                             this.customerName = String(data.profile.name);
                         }
 
-                        // Name field: show for new users (need to enter name), hide for existing (already has name)
-                        if (data.is_continue && data.profile && data.profile.name) {
+                        // Name field: show for new users; hide when returning user already has name.
+                        const isNewUser = !!data.is_continue;
+                        if (!isNewUser && data.profile && data.profile.name) {
                             this.showNameField = false;
                         } else {
                             this.showNameField = true;
                         }
 
                         // Auto-apply first saved address for existing users
-                        if (data.is_continue && this.savedAddresses.length > 0) {
+                        if (!isNewUser && this.savedAddresses.length > 0) {
                             this.$nextTick(() => {
                                 this.applySavedAddress(this.savedAddresses[0]);
                                 this.$refs.checkoutUserCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                             });
-                        } else if (data.is_continue) {
+                        } else if (isNewUser) {
                             this.$nextTick(() => this.$refs.checkoutUserCard?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
                         }
 
@@ -2039,7 +2040,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                         this.moyasarError = '';
                         return;
                     }
-                    if (this.deliveryType === 'home' && ! this.selectedZoneId) {
+                    if (this.deliveryType === 'home' && ! this.selectedZoneId && ! this.selectedAddressId) {
                         this.moyasarError = '';
                         return;
                     }

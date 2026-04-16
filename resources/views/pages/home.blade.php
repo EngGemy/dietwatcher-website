@@ -127,42 +127,65 @@
     {{-- How It Works Section --}}
     <section class="bg-gray-200 py-20">
         <div class="container">
+            @php
+                $resolveHowImage = function (array $candidates): string {
+                    foreach ($candidates as $path) {
+                        if (is_file(public_path($path))) {
+                            return asset($path);
+                        }
+                    }
+
+                    return asset('assets/images/plan-1.png');
+                };
+                $howDefaultImages = [
+                    $resolveHowImage(['assets/images/how-old-1.png', 'assets/images/how-1.png']),
+                    $resolveHowImage(['assets/images/how-old-2.png', 'assets/images/how-2.png']),
+                    $resolveHowImage(['assets/images/how-old-3.png', 'assets/images/how-3.png']),
+                ];
+            @endphp
             <header class="section-header section-header--center" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ __('How It Works') }}</h4>
                 <h2 class="section-header__title">{{ __('3 Easy Steps For Happy Life') }}</h2>
             </header>
             <div class="grid gap-8 lg:grid-cols-3" data-anim-stagger>
                 @forelse($howItWorksSteps as $step)
-                    <div data-anim="fade-up">
-                        <img src="{{ $step->image_url }}" class="mb-8 rounded-lg w-full h-64 object-cover" alt="{{ $step->title() }}" />
+                    @php
+                        $stepFallback = $howDefaultImages[$loop->index] ?? $howDefaultImages[array_key_last($howDefaultImages)];
+                        $stepImage = !empty($step->image_url) ? $step->image_url : $stepFallback;
+                    @endphp
+                    <article data-anim="fade-up" class="how-step-card">
+                        <img src="{{ $stepImage }}"
+                             class="mb-8 w-full rounded-lg"
+                             alt="{{ $step->title() }}"
+                             onerror="this.src='{{ $stepFallback }}'" />
                         <h3 class="mb-4 text-xl font-semibold md:text-2xl">{{ $step->title() }}</h3>
                         <p class="text-lg text-black/70 md:text-xl">
                             {{ $step->description() }}
                         </p>
-                    </div>
+                    </article>
                 @empty
                     {{-- Fallback static content --}}
-                    <div>
-                        <img src="{{ asset('assets/images/how-old-1.png') }}" class="mb-8 rounded-lg" alt="" />
+                    <article data-anim="fade-up" class="how-step-card">
+                        <img src="{{ $howDefaultImages[0] }}" class="mb-8 w-full rounded-lg" alt="{{ __('Choose Your Plan') }}" />
                         <h3 class="mb-4 text-xl font-semibold md:text-2xl">{{ __('Choose Your Plan') }}</h3>
                         <p class="text-lg text-black/70 md:text-xl">
                             {{ __('Select a meal plan based on calories, lifestyle, or fitness goals.') }}
                         </p>
-                    </div>
-                    <div>
-                        <img src="{{ asset('assets/images/how-old-2.png') }}" class="mb-8 rounded-lg" alt="" />
+                    </article>
+                    <article data-anim="fade-up" class="how-step-card">
+                        <img src="{{ $howDefaultImages[1] }}" class="mb-8 w-full rounded-lg" alt="{{ __('Swap to Your Favorite Meals') }}" />
                         <h3 class="mb-4 text-xl font-semibold md:text-2xl">{{ __('Swap to Your Favorite Meals') }}</h3>
                         <p class="text-lg text-black/70 md:text-xl">
                             {{ __('Change meals anytime and enjoy dishes that suit your taste, mood, and lifestyle.') }}
                         </p>
-                    </div>
-                    <div>
-                        <img src="{{ asset('assets/images/how-old-3.png') }}" class="mb-8 rounded-lg" alt="" />
+                    </article>
+                    <article data-anim="fade-up" class="how-step-card">
+                        <img src="{{ $howDefaultImages[2] }}" class="mb-8 w-full rounded-lg" alt="{{ __('Enjoy Your Meals!') }}" />
                         <h3 class="mb-4 text-xl font-semibold md:text-2xl">{{ __('Enjoy Your Meals!') }}</h3>
                         <p class="text-lg text-black/70 md:text-xl">
                             {{ __('our meals are ready - fresh, nutritious, and made to enjoy.') }}
                         </p>
-                    </div>
+                    </article>
                 @endforelse
             </div>
         </div>
@@ -1096,6 +1119,20 @@
     transition-duration: .16s;
 }
 
+.how-step-card {
+    transition: transform .35s cubic-bezier(.16,1,.3,1), filter .35s ease;
+}
+.how-step-card img {
+    transition: transform .5s cubic-bezier(.16,1,.3,1), filter .5s ease;
+}
+.how-step-card:hover {
+    transform: translateY(-5px);
+}
+.how-step-card:hover img {
+    transform: scale(1.025);
+    filter: saturate(1.03);
+}
+
 @media (max-width: 767px) {
     .products-rail {
         --card-width: min(78vw, 280px);
@@ -1135,7 +1172,9 @@
     .blog-premium-card,
     .blog-premium-card .blog-card__thumbnail img,
     .blog-premium-card .blog-card__body,
-    .blog-premium-card .blog-card__title {
+    .blog-premium-card .blog-card__title,
+    .how-step-card,
+    .how-step-card img {
         transition: none !important;
     }
     .testimonials-rail__track {
