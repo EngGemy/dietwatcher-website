@@ -755,7 +755,7 @@ class CheckoutController extends Controller
             'delivery_type' => 'required|in:home,pickup',
             'coupon' => 'nullable|string|max:50',
             'branch_id' => 'required_if:delivery_type,pickup|nullable|integer',
-            'zone_id' => 'required_if:delivery_type,home|required_without:selected_address_id|nullable|integer',
+            'zone_id' => 'required_if:delivery_type,home|nullable|integer',
             'selected_address_id' => 'nullable|integer',
         ];
         if ($hasPlanItems) {
@@ -771,6 +771,18 @@ class CheckoutController extends Controller
                 'success' => false,
                 'message' => __('payment.fill_delivery_first'),
                 'errors' => $e->errors(),
+            ], 422);
+        }
+
+        if (
+            ($validated['delivery_type'] ?? '') === 'home'
+            && empty($validated['zone_id'])
+            && empty($validated['selected_address_id'])
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => __('payment.fill_delivery_first'),
+                'errors' => ['zone_id' => [__('Please select a city or a saved address.')]],
             ], 422);
         }
 

@@ -125,44 +125,66 @@
     </section>
 
     {{-- How It Works Section --}}
-    <section class="bg-gray-200 py-20">
+    <section class="bg-gray-200 py-20 how-works-section">
         <div class="container">
-            <header class="section-header section-header--center" data-anim="fade-up">
+            @php
+                $howDefaultImages = [
+                    asset('assets/images/how-old-1.png'),
+                    asset('assets/images/how-old-2.png'),
+                    asset('assets/images/how-old-3.png'),
+                ];
+            @endphp
+            <header class="section-header section-header--center how-works-head" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ __('How It Works') }}</h4>
                 <h2 class="section-header__title">{{ __('3 Easy Steps For Happy Life') }}</h2>
             </header>
-            <div class="grid gap-8 lg:grid-cols-3" data-anim-stagger>
+            <div class="how-works-grid grid gap-8 lg:grid-cols-3" data-anim-stagger>
                 @forelse($howItWorksSteps as $step)
-                    <div data-anim="fade-up">
-                        <img src="{{ $step->image_url }}" class="mb-8 rounded-lg w-full h-64 object-cover" alt="{{ $step->title() }}" />
-                        <h3 class="mb-4 text-xl font-semibold md:text-2xl">{{ $step->title() }}</h3>
-                        <p class="text-lg text-black/70 md:text-xl">
+                    @php
+                        $stepFallback = $howDefaultImages[$loop->index] ?? $howDefaultImages[array_key_last($howDefaultImages)];
+                        $stepImage = !empty($step->image_url) ? $step->image_url : $stepFallback;
+                    @endphp
+                    <article class="how-works-card" data-anim="fade-up">
+                        <div class="how-works-card__media">
+                            <img src="{{ $stepImage }}"
+                                 class="how-works-card__img"
+                                 alt="{{ $step->title() }}"
+                                 onerror="this.src='{{ $stepFallback }}'" />
+                        </div>
+                        <h3 class="how-works-card__title">{{ $step->title() }}</h3>
+                        <p class="how-works-card__desc">
                             {{ $step->description() }}
                         </p>
-                    </div>
+                    </article>
                 @empty
                     {{-- Fallback static content --}}
-                    <div>
-                        <img src="{{ asset('assets/images/how-old-1.png') }}" class="mb-8 rounded-lg" alt="" />
-                        <h3 class="mb-4 text-xl font-semibold md:text-2xl">{{ __('Choose Your Plan') }}</h3>
-                        <p class="text-lg text-black/70 md:text-xl">
+                    <article class="how-works-card" data-anim="fade-up">
+                        <div class="how-works-card__media">
+                            <img src="{{ $howDefaultImages[0] }}" class="how-works-card__img" alt="{{ __('Choose Your Plan') }}" />
+                        </div>
+                        <h3 class="how-works-card__title">{{ __('Choose Your Plan') }}</h3>
+                        <p class="how-works-card__desc">
                             {{ __('Select a meal plan based on calories, lifestyle, or fitness goals.') }}
                         </p>
-                    </div>
-                    <div>
-                        <img src="{{ asset('assets/images/how-old-2.png') }}" class="mb-8 rounded-lg" alt="" />
-                        <h3 class="mb-4 text-xl font-semibold md:text-2xl">{{ __('Swap to Your Favorite Meals') }}</h3>
-                        <p class="text-lg text-black/70 md:text-xl">
+                    </article>
+                    <article class="how-works-card" data-anim="fade-up">
+                        <div class="how-works-card__media">
+                            <img src="{{ $howDefaultImages[1] }}" class="how-works-card__img" alt="{{ __('Swap to Your Favorite Meals') }}" />
+                        </div>
+                        <h3 class="how-works-card__title">{{ __('Swap to Your Favorite Meals') }}</h3>
+                        <p class="how-works-card__desc">
                             {{ __('Change meals anytime and enjoy dishes that suit your taste, mood, and lifestyle.') }}
                         </p>
-                    </div>
-                    <div>
-                        <img src="{{ asset('assets/images/how-old-3.png') }}" class="mb-8 rounded-lg" alt="" />
-                        <h3 class="mb-4 text-xl font-semibold md:text-2xl">{{ __('Enjoy Your Meals!') }}</h3>
-                        <p class="text-lg text-black/70 md:text-xl">
+                    </article>
+                    <article class="how-works-card" data-anim="fade-up">
+                        <div class="how-works-card__media">
+                            <img src="{{ $howDefaultImages[2] }}" class="how-works-card__img" alt="{{ __('Enjoy Your Meals!') }}" />
+                        </div>
+                        <h3 class="how-works-card__title">{{ __('Enjoy Your Meals!') }}</h3>
+                        <p class="how-works-card__desc">
                             {{ __('our meals are ready - fresh, nutritious, and made to enjoy.') }}
                         </p>
-                    </div>
+                    </article>
                 @endforelse
             </div>
         </div>
@@ -1096,6 +1118,84 @@
     transition-duration: .16s;
 }
 
+/* ─── How it works: old design width + premium motion ─ */
+.how-works-section .container {
+    max-width: 1240px;
+}
+.how-works-head {
+    margin-bottom: clamp(2rem, 4vw, 3rem);
+}
+.how-works-head.section-header[data-anim] .section-header__subtitle,
+.how-works-head.section-header[data-anim] .section-header__title {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(18px);
+    transition: opacity .7s cubic-bezier(.16,1,.3,1), transform .7s cubic-bezier(.16,1,.3,1), filter .7s cubic-bezier(.16,1,.3,1);
+}
+.how-works-head.section-header[data-anim].is-visible .section-header__subtitle {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+    transition-delay: .03s;
+}
+.how-works-head.section-header[data-anim].is-visible .section-header__title {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+    transition-delay: .14s;
+}
+.how-works-grid {
+    align-items: start;
+}
+.how-works-card {
+    transform: translateY(0) scale(1);
+    transition: transform .38s cubic-bezier(.16,1,.3,1), filter .38s ease;
+}
+.how-works-card__media {
+    margin-bottom: 1.4rem;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #f1f2f6;
+    box-shadow: 0 10px 24px rgba(15,23,42,.08);
+    aspect-ratio: 1.35 / 1;
+}
+.how-works-card__img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform .65s cubic-bezier(.16,1,.3,1), filter .5s ease;
+}
+.how-works-card__title {
+    margin-bottom: .7rem;
+    font-size: clamp(1.3rem, 1.1rem + .7vw, 1.95rem);
+    line-height: 1.25;
+    font-weight: 600;
+    color: #111827;
+}
+.how-works-card__desc {
+    font-size: clamp(1rem, .92rem + .35vw, 1.35rem);
+    line-height: 1.6;
+    color: rgba(17,24,39,.72);
+}
+.how-works-card:hover {
+    transform: translateY(-6px) scale(1.01);
+}
+.how-works-card:hover .how-works-card__img {
+    transform: scale(1.045);
+    filter: saturate(1.03);
+}
+
+@media (max-width: 1023px) {
+    .how-works-section .container {
+        max-width: 980px;
+    }
+}
+@media (max-width: 767px) {
+    .how-works-card__media {
+        aspect-ratio: 1.42 / 1;
+    }
+}
+
 @media (max-width: 767px) {
     .products-rail {
         --card-width: min(78vw, 280px);
@@ -1135,7 +1235,9 @@
     .blog-premium-card,
     .blog-premium-card .blog-card__thumbnail img,
     .blog-premium-card .blog-card__body,
-    .blog-premium-card .blog-card__title {
+    .blog-premium-card .blog-card__title,
+    .how-works-card,
+    .how-works-card__img {
         transition: none !important;
     }
     .testimonials-rail__track {
