@@ -41,20 +41,208 @@
     @apply mx-auto flex basis-full flex-wrap items-center justify-between;
   }
 
+  .header__brand {
+    @apply flex min-w-0 max-w-full flex-1 items-center gap-2 sm:flex-none sm:shrink-0 sm:gap-3 md:gap-4;
+  }
+
   .header__logo {
-    @apply h-8 flex-none focus:outline-hidden md:h-11;
+    @apply h-8 flex-none shrink-0 focus:outline-hidden md:h-11;
 
     img {
       @apply h-full w-auto;
     }
   }
 
-  .header__actions {
-    @apply flex items-center gap-x-5 sm:order-3;
+  /**
+   * Secondary tagline beside logo.
+   *
+   * Layout: the viewport is an inline CSS grid with every line stacked in
+   * a single cell (grid-area: stack). The grid sizes to the widest line,
+   * so the navbar never reflows horizontally when the tagline crossfades —
+   * no hand-tuned min-inline-size required.
+   *
+   * Motion: luxe crossfade with opacity + 6px lift + a 2px blur decay.
+   * Mobile drops the blur and halves the duration for a lighter feel.
+   * prefers-reduced-motion removes all transforms.
+   */
+  .header__brand-tagline {
+    /* Reuses the logo's primary brand token (text-blue = --color-primary-500
+       = #279ff9) — same class used elsewhere for brand-colored copy, no new
+       tagline-only color introduced. */
+    @apply relative text-blue;
+    font-feature-settings: "kern", "liga", "calt";
+    font-variant-ligatures: common-ligatures contextual;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
+  .header__brand-tagline__viewport {
+    position: relative;
+    display: inline-grid;
+    grid-template-areas: "stack";
+    align-items: center;
+    min-block-size: 1.375rem;
+  }
+
+  /* Slogan stack: rotating text on top, smile icon tucked tight beneath.
+     Zero gap (just a 1px breathing space) reads as one unit, not two. */
+  .header__brand-tagline__stack {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1;
+    gap: 1px;
+  }
+
+  .header__brand-tagline__icon {
+    /* Responsive size: clamps between 16px (compact) and 22px (desktop).
+       Using clamp avoids breakpoint jumps and keeps the icon proportional
+       to the surrounding 13–15px tagline text across every viewport. */
+    inline-size: clamp(16px, 1.55vw + 0.5rem, 22px);
+    block-size: clamp(16px, 1.55vw + 0.5rem, 22px);
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
+    filter: drop-shadow(0 3px 6px rgba(39, 159, 249, 0.22));
+    animation: brandTaglineSmile 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    transform-origin: center 75%;
+    will-change: transform;
+  }
+
+  @keyframes brandTaglineSmile {
+    0%, 100% { transform: translateY(0)    rotate(0deg)   scale(1); }
+    25%      { transform: translateY(-2px) rotate(-6deg)  scale(1.05); }
+    50%      { transform: translateY(0)    rotate(0deg)   scale(1); }
+    75%      { transform: translateY(-1px) rotate(5deg)   scale(1.04); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .header__brand-tagline__icon { animation: none; }
+  }
+
+  .header-sticky-wrap.is-scrolled .header__brand-tagline__icon {
+    /* Shrink ~18% when the header compacts on scroll, but still scales
+       with viewport via clamp. */
+    inline-size: clamp(14px, 1.3vw + 0.4rem, 18px);
+    block-size: clamp(14px, 1.3vw + 0.4rem, 18px);
+  }
+
+  .header__brand-tagline__line {
+    grid-area: stack;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+    color: inherit;
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+    filter: blur(2px);
+    transition:
+      opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+      filter 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+    will-change: opacity, transform;
+  }
+
+  .header__brand-tagline__line[dir="rtl"],
+  .header__brand-tagline__line[lang="ar"] {
+    font-family: "Tajawal", "IBM Plex Sans Arabic", "Cairo", "Noto Sans Arabic", system-ui, sans-serif;
+    letter-spacing: 0;
+    /* Arabic line keeps the parent's brand-blue (matches "watchers" in the
+       logo). No override needed — color inherits. */
+  }
+
+  /* English line ("Enjoy it") uses brand green — matches "diet" in the
+     logo, so the two rotating taglines mirror the two-tone logo. Uses the
+     existing --color-green token, no new color introduced. */
+  .header__brand-tagline__line[lang="en"],
+  .header__brand-tagline__line[dir="ltr"] {
+    color: var(--color-green);
+  }
+
+  @media (max-width: 639px) {
+    .header__brand-tagline__line {
+      font-size: 0.75rem;
+      transform: translate3d(0, 3px, 0);
+      filter: none;
+      transition:
+        opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+  }
+
+  .header__brand-tagline__line.is-active {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+    pointer-events: auto;
+    z-index: 1;
+  }
+
+  .header__brand-tagline--static .header__brand-tagline__line,
+  .header__brand-tagline--static .header__brand-tagline__line.is-active {
+    transition: none;
+    transform: none;
+    filter: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .header__brand-tagline__line {
+      transition: none;
+      transform: none;
+      filter: none;
+    }
+  }
+
+  .header-sticky-wrap.is-scrolled .header__brand-tagline__line {
+    font-size: 0.75rem;
+  }
+
+  @media (min-width: 640px) {
+    .header-sticky-wrap.is-scrolled .header__brand-tagline__line {
+      font-size: 0.8125rem;
+    }
+  }
+
+  /* Premium hairline divider between logo and tagline — hidden on mobile
+     to keep the brand block compact alongside the action cluster. */
+  .header__brand-divider {
+    display: none;
+    inline-size: 1px;
+    block-size: 1.5rem;
+    flex: none;
+    margin-inline: 0.125rem;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      color-mix(in srgb, var(--color-gray-600) 30%, transparent) 50%,
+      transparent 100%
+    );
+  }
+
+  @media (min-width: 640px) {
+    .header__brand-divider { display: block; }
+  }
+
+  .header__actions {
+    @apply flex items-center gap-x-2 sm:order-3 sm:gap-x-4 md:gap-x-5;
+  }
+
+  /* Hide the inline CTA button on narrow phones — the hamburger menu
+     exposes it, and the hero section has its own CTA. Keeps the action
+     cluster (toggle + lang + cart) breathable on small screens.  */
+  .header__actions > a.btn {
+    @apply hidden sm:inline-flex;
+  }
+
+
   .header__toggle {
-    @apply relative hidden size-9 items-center justify-center gap-x-2 rounded-lg border border-gray-200 bg-white text-gray-800 shadow-2xs hover:bg-gray-50 focus:bg-gray-50 focus:outline-hidden disabled:pointer-events-none disabled:opacity-50 sm:hidden;
+    @apply relative inline-flex size-9 items-center justify-center gap-x-2 rounded-lg border border-gray-200 bg-white text-gray-800 shadow-2xs hover:bg-gray-50 focus:bg-gray-50 focus:outline-hidden disabled:pointer-events-none disabled:opacity-50 sm:hidden;
 
     svg {
       @apply size-4;
@@ -131,7 +319,7 @@
     @apply bg-blue/10 text-blue font-semibold;
   }
   .header__lang {
-    @apply hover:text-blue flex items-center gap-x-2 text-sm font-semibold text-gray-800 transition-colors focus:outline-hidden;
+    @apply hover:text-blue flex items-center gap-x-1.5 text-xs font-semibold text-gray-800 transition-colors focus:outline-hidden sm:gap-x-2 sm:text-sm;
 
     svg {
       @apply hs-dropdown-open:rotate-180 size-3 text-gray-600 transition-transform duration-300;

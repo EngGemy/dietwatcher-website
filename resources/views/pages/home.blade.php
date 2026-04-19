@@ -9,16 +9,33 @@
             class="hero-shell relative container overflow-hidden rounded-md bg-gray-200">
             <div class="hero-grid relative z-20 mx-auto grid w-full max-w-[1500px] gap-10 lg:grid-cols-2 lg:gap-0">
                 <div class="hero-copy md:pb-28">
-                    <h1 class="hero-title mb-4 text-4xl font-bold md:mb-7 lg:text-6xl/tight">
-                        <span class="hero-word hero-word--green text-green">{{ __('Healthy') }}</span>
-                        <span class="hero-word">{{ __('Meals') }}</span>
-                        <span class="hero-word">{{ __('Delivered') }}</span>
-                        <span class="hero-word">{{ __('Daily.') }}</span>
-                        <span class="hero-word">{{ __('Designed') }}</span>
-                        <span class="hero-word">{{ __('for') }}</span>
-                        <br class="hidden lg:block" />
-                        <span class="hero-word">{{ __('Your') }}</span>
-                        <span class="hero-word hero-word--blue text-blue">{{ __('Goals.') }}</span>
+                    <h1 class="hero-title mb-4 font-bold md:mb-6">
+                        @if(app()->getLocale() === 'ar')
+                            <span class="hero-line hero-line--1">
+                                <span class="hero-line__brand">
+                                    <span class="hero-line__phrase hero-line__phrase--blue text-blue">وجبات محسوبة السعرات</span>
+                                    <img class="hero-line__smile" src="{{ asset('assets/images/icons/smile.svg') }}" alt="" aria-hidden="true" decoding="async" loading="eager" />
+                                </span>
+                            </span>
+                            <span class="hero-line hero-line--2">تصلك يومياً.</span>
+                            <span class="hero-line hero-line--3">
+                                مصممة لتحقيق
+                                <span class="hero-line__phrase hero-line__phrase--green text-green">أهدافك.</span>
+                            </span>
+                        @else
+                            <span class="hero-line hero-line--1">
+                                <span class="hero-line__brand">
+                                    <span class="hero-line__phrase hero-line__phrase--blue text-blue">{{ __('Healthy') }}</span>
+                                    <img class="hero-line__smile" src="{{ asset('assets/images/icons/smile.svg') }}" alt="" aria-hidden="true" decoding="async" loading="eager" />
+                                </span>
+                                {{ __('Meals') }}
+                            </span>
+                            <span class="hero-line hero-line--2">{{ __('Delivered Daily.') }}</span>
+                            <span class="hero-line hero-line--3">
+                                {{ __('Designed for Your') }}
+                                <span class="hero-line__phrase hero-line__phrase--green text-green">{{ __('Goals.') }}</span>
+                            </span>
+                        @endif
                     </h1>
                     <p class="hero-desc-anim mb-5 max-w-xl text-lg text-black/80 md:mb-12 lg:text-2xl">
                         {{ __('Chef-made, calorie-smart meals delivered in Saudi Arabia. Plans online, managed via our app.') }}
@@ -584,56 +601,142 @@
 /* Stagger children */
 [data-anim-stagger] > [data-anim] { transition-delay: calc(var(--anim-i, 0) * 0.08s); }
 
-/* ─── Hero: word-by-word reveal ─── */
-.hero-title .hero-word {
-    display: inline-block;
-    opacity: 0;
-    transform: translateY(28px) skewY(4deg);
-    filter: blur(6px);
-    animation: heroWordIn 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+/* ─── Hero title: content-creator refined scale + cinematic line reveal ──
+ *
+ * Senior-hero aesthetic (Linear / Stripe / Notion range): ~32px mobile,
+ * ~60px max desktop. Confident weight, tight leading, balanced wrap —
+ * the hierarchy does the work, not raw size.
+ *
+ * Arabic sizes down slightly and loosens leading — Arabic glyphs carry
+ * more vertical mass, so 1.02 line-height clips descenders.
+ */
+.hero-title {
+    font-size: clamp(2rem, 2.8vw + 1rem, 3.75rem);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    font-feature-settings: "kern", "liga", "calt", "ss01";
+    text-wrap: balance;
 }
-.hero-title .hero-word:nth-child(1)  { animation-delay: 0.10s; }
-.hero-title .hero-word:nth-child(2)  { animation-delay: 0.18s; }
-.hero-title .hero-word:nth-child(3)  { animation-delay: 0.26s; }
-.hero-title .hero-word:nth-child(4)  { animation-delay: 0.34s; }
-.hero-title .hero-word:nth-child(5)  { animation-delay: 0.42s; }
-.hero-title .hero-word:nth-child(6)  { animation-delay: 0.50s; }
-.hero-title .hero-word:nth-child(8)  { animation-delay: 0.58s; }
-.hero-title .hero-word:nth-child(9)  { animation-delay: 0.66s; }
-@keyframes heroWordIn {
-    to { opacity: 1; transform: translateY(0) skewY(0); filter: blur(0); }
+[dir="rtl"] .hero-title {
+    letter-spacing: 0;
+    line-height: 1.22;
+    font-size: clamp(1.875rem, 2.6vw + 1rem, 3.375rem);
 }
 
-/* Shimmer on highlight words after they settle */
-.hero-title .hero-word--green,
-.hero-title .hero-word--blue {
+/* Each line becomes a reveal unit. Using `display: block` forces proper
+   line breaks so the hero never wraps mid-phrase. */
+.hero-title .hero-line {
+    display: block;
+    opacity: 0;
+    transform: translateY(22px);
+    filter: blur(5px);
+    animation: heroLineIn 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    will-change: opacity, transform, filter;
+}
+.hero-title .hero-line--1 { animation-delay: 0.08s; }
+.hero-title .hero-line--2 { animation-delay: 0.22s; }
+.hero-title .hero-line--3 { animation-delay: 0.36s; }
+@keyframes heroLineIn {
+    to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+/* Shared shimmer for branded phrases (blue + green). Uses background-clip:
+   text so the shimmer flows through the letterforms, no overlays. */
+.hero-title .hero-line__phrase--blue,
+.hero-title .hero-line__phrase--green {
+    display: inline-block;
     background-clip: text;
     -webkit-background-clip: text;
     background-repeat: no-repeat;
     background-size: 220% 100%;
     background-position: 100% 0;
+    letter-spacing: -0.025em;
 }
-.hero-title .hero-word--green {
+.hero-title .hero-line__phrase--blue {
     background-image: linear-gradient(100deg,
         currentColor 0%, currentColor 40%,
-        rgba(255,255,255,.85) 50%,
+        rgba(255,255,255,.92) 50%,
         currentColor 60%, currentColor 100%);
-    animation: heroWordIn 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards,
-               heroShine 2.6s ease-in-out 1.2s infinite;
+    animation: heroShine 2.8s ease-in-out 1.4s infinite;
 }
-.hero-title .hero-word--blue {
+.hero-title .hero-line__phrase--green {
     background-image: linear-gradient(100deg,
         currentColor 0%, currentColor 40%,
-        rgba(255,255,255,.9) 50%,
+        rgba(255,255,255,.88) 50%,
         currentColor 60%, currentColor 100%);
-    animation: heroWordIn 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards,
-               heroShine 2.6s ease-in-out 1.6s infinite;
+    animation: heroShine 2.8s ease-in-out 2.2s infinite;
+}
+[dir="rtl"] .hero-title .hero-line__phrase--blue,
+[dir="rtl"] .hero-title .hero-line__phrase--green {
+    letter-spacing: 0;
+}
+
+/* Brand cluster: vertical stack — phrase on top, smile tucked tight
+   beneath it like a slogan badge. The whole cluster is an inline-flex
+   column that flows inline with the rest of line 1, so text around it
+   stays on the same baseline row while the icon decorates below. */
+.hero-title .hero-line__brand {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    vertical-align: baseline;
+    line-height: 1;
+    gap: 0.08em;
+}
+
+/* Smile icon: tucked under the brand phrase. Scales with font-size via
+   em units so it stays proportional from 32px mobile to 60px desktop.  */
+.hero-title .hero-line__smile {
+    display: block;
+    inline-size: 0.58em;
+    block-size: 0.58em;
+    object-fit: contain;
+    filter: drop-shadow(0 6px 14px rgba(39, 159, 249, 0.22));
+    animation: heroSmileBob 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite,
+               heroSmileWink 6s ease-in-out 1.6s infinite;
+    transform-origin: center 78%;
+    will-change: transform, opacity;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+/* On mobile viewports, scale the smile down a notch since the title
+   itself is smaller — keeps the visual weight balanced. */
+@media (max-width: 639px) {
+    .hero-title .hero-line__smile {
+        inline-size: 0.52em;
+        block-size: 0.52em;
+    }
+}
+@keyframes heroSmileBob {
+    0%, 100% { transform: translateY(0)    scale(1)    rotate(0deg); }
+    25%      { transform: translateY(-4px) scale(1.06) rotate(-6deg); }
+    55%      { transform: translateY(-1px) scale(1.02) rotate(4deg); }
+    80%      { transform: translateY(-3px) scale(1.05) rotate(-2deg); }
+}
+@keyframes heroSmileWink {
+    0%, 93%, 100% { opacity: 1; }
+    96%           { opacity: 0.35; }
 }
 @keyframes heroShine {
     0%   { background-position: 100% 0; -webkit-text-fill-color: transparent; }
     45%  { background-position:   0% 0; -webkit-text-fill-color: transparent; }
     60%  { -webkit-text-fill-color: currentColor; }
     100% { -webkit-text-fill-color: currentColor; background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero-title .hero-line {
+        animation: none;
+        opacity: 1;
+        transform: none;
+        filter: none;
+    }
+    .hero-title .hero-line__smile,
+    .hero-title .hero-line__phrase--blue,
+    .hero-title .hero-line__phrase--green {
+        animation: none;
+    }
 }
 
 /* Hero supporting elements */
