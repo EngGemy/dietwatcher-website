@@ -22,13 +22,14 @@ class SetLocale
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $locale = session('locale', config('app.locale', 'en'));
-        
+        $default = config('app.locale', 'ar');
+        $locale = session('locale', $default);
+
         // Ensure locale is valid (en or ar only)
-        if (!in_array($locale, ['en', 'ar'])) {
-            $locale = 'en';
+        if (!in_array($locale, ['en', 'ar'], true)) {
+            $locale = $default;
         }
-        
+
         app()->setLocale($locale);
         
         return $next($request);

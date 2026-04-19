@@ -68,13 +68,56 @@
         }
         return $isActiveUrl($link['url'] ?? '');
     };
+
+    $brandTaglines = [
+        ['text' => __('common.brand_tagline_1'), 'lang' => 'en', 'dir' => 'ltr'],
+        ['text' => __('common.brand_tagline_2'), 'lang' => 'ar', 'dir' => 'rtl'],
+    ];
 @endphp
 <div class="header-sticky-wrap" id="header-wrap">
 <header class="header" id="site-header">
     <nav class="header__nav">
-        <a href="{{ route('home') }}" class="header__logo">
-            <img src="{{ $siteLogo }}" alt="{{ $siteName }}" />
-        </a>
+        <div class="header__brand">
+            <a href="{{ route('home') }}" class="header__logo" aria-label="{{ $siteName }}">
+                <img src="{{ $siteLogo }}" alt="{{ $siteName }}" decoding="async" />
+            </a>
+
+            <span class="header__brand-divider" aria-hidden="true"></span>
+
+            <div
+                class="header__brand-tagline hidden sm:block"
+                x-data="brandTaglineRotator(@js($brandTaglines))"
+                x-bind:class="{ 'header__brand-tagline--static': reduced }"
+                x-init="init()"
+                x-on:mouseenter="pause()"
+                x-on:mouseleave="resume()"
+                x-on:focusin="pause()"
+                x-on:focusout="resume()"
+            >
+                <p id="brand-tagline-announcer" class="sr-only" aria-live="polite" aria-atomic="true" x-text="lines[index].text"></p>
+                <span class="header__brand-tagline__stack" aria-hidden="true">
+                    <span class="header__brand-tagline__viewport">
+                        <template x-for="(line, idx) in lines" :key="idx">
+                            <span
+                                class="header__brand-tagline__line"
+                                x-bind:class="{ 'is-active': idx === index }"
+                                x-bind:lang="line.lang"
+                                x-bind:dir="line.dir"
+                                x-text="line.text"
+                            ></span>
+                        </template>
+                    </span>
+                    <img
+                        class="header__brand-tagline__icon"
+                        src="{{ asset('assets/images/icons/smile.svg') }}"
+                        alt=""
+                        aria-hidden="true"
+                        decoding="async"
+                        loading="lazy"
+                    />
+                </span>
+            </div>
+        </div>
 
         <div class="header__actions">
             <button
@@ -233,6 +276,88 @@
 </style>
 
 <script>
+/**
+ * Navbar secondary taglines: crossfade, 7s (desktop) / 10s (mobile), pause on hover/focus-in,
+ * no auto-rotation when prefers-reduced-motion (first line only).
+ */
+window.brandTaglineRotator = function (lines) {
+    return {
+        lines: Array.isArray(lines) && lines.length
+            ? lines
+            : [
+                  { text: 'Enjoy it', lang: 'en', dir: 'ltr' },
+                  { text: 'كلها محسوبة!', lang: 'ar', dir: 'rtl' },
+              ],
+        index: 0,
+        timer: null,
+        paused: false,
+        reduced: false,
+        mobile: false,
+        _onReduce: null,
+        _onMobile: null,
+        init: function () {
+            var self = this;
+            self.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            self.mobile = window.matchMedia('(max-width: 639px)').matches;
+            var mqR = window.matchMedia('(prefers-reduced-motion: reduce)');
+            var mqM = window.matchMedia('(max-width: 639px)');
+            self._onReduce = function (e) {
+                self.reduced = e.matches;
+                self.resetTimer();
+            };
+            self._onMobile = function (e) {
+                self.mobile = e.matches;
+                self.resetTimer();
+            };
+            mqR.addEventListener('change', self._onReduce);
+            mqM.addEventListener('change', self._onMobile);
+            if (!self.reduced) {
+                self.startTimer();
+            }
+        },
+        intervalMs: function () {
+            if (this.reduced) {
+                return null;
+            }
+            return this.mobile ? 10000 : 7000;
+        },
+        clearTimer: function () {
+            if (this.timer) {
+                clearInterval(this.timer);
+                this.timer = null;
+            }
+        },
+        startTimer: function () {
+            this.clearTimer();
+            var ms = this.intervalMs();
+            if (!ms) {
+                return;
+            }
+            var self = this;
+            this.timer = setInterval(function () {
+                if (!self.paused) {
+                    self.next();
+                }
+            }, ms);
+        },
+        resetTimer: function () {
+            this.clearTimer();
+            if (!this.reduced) {
+                this.startTimer();
+            }
+        },
+        next: function () {
+            this.index = (this.index + 1) % this.lines.length;
+        },
+        pause: function () {
+            this.paused = true;
+        },
+        resume: function () {
+            this.paused = false;
+        },
+    };
+};
+
 (function () {
     /* ─── 1. Sticky header — scroll shadow + spacer sync ─── */
     var wrap   = document.getElementById('header-wrap');
