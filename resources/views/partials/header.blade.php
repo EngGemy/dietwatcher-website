@@ -77,15 +77,13 @@
 <div class="header-sticky-wrap" id="header-wrap">
 <header class="header" id="site-header">
     <nav class="header__nav">
-        <div class="header__brand">
+        <div class="header__brand header__brand-lockup">
             <a href="{{ route('home') }}" class="header__logo" aria-label="{{ $siteName }}">
                 <img src="{{ $siteLogo }}" alt="{{ $siteName }}" decoding="async" />
             </a>
 
-            <span class="header__brand-divider" aria-hidden="true"></span>
-
             <div
-                class="header__brand-tagline hidden sm:block"
+                class="header__brand-tagline"
                 x-data="brandTaglineRotator(@js($brandTaglines))"
                 x-bind:class="{ 'header__brand-tagline--static': reduced }"
                 x-init="init()"
@@ -103,18 +101,15 @@
                                 x-bind:class="{ 'is-active': idx === index }"
                                 x-bind:lang="line.lang"
                                 x-bind:dir="line.dir"
-                                x-text="line.text"
-                            ></span>
+                            >
+                                <span class="nav-enjoy-wrap" x-cloak x-show="line.lang === 'en' && idx === index" x-transition.opacity.duration.300ms>
+                                    <span class="nav-enjoy-text" x-text="line.text"></span>
+                                    <img src="{{ asset('assets/images/icons/smile.svg') }}" class="nav-enjoy-smile" alt="" aria-hidden="true" decoding="async" loading="lazy" />
+                                </span>
+                                <span x-cloak x-show="!(line.lang === 'en' && idx === index)" x-text="line.text"></span>
+                            </span>
                         </template>
                     </span>
-                    <img
-                        class="header__brand-tagline__icon"
-                        src="{{ asset('assets/images/icons/smile.svg') }}"
-                        alt=""
-                        aria-hidden="true"
-                        decoding="async"
-                        loading="lazy"
-                    />
                 </span>
             </div>
         </div>
@@ -272,6 +267,122 @@
 /* Spacer to prevent content from hiding behind the fixed header */
 .header-spacer {
     display: block;
+}
+
+/* Navbar smile/tagline animation refinement */
+.header__brand-lockup {
+    animation: brandLockupIn .6s cubic-bezier(.22,1,.36,1) both;
+}
+.header__brand-tagline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-inline-start: .35rem;
+}
+.header__brand-tagline__line.is-active {
+    animation: none;
+}
+@keyframes brandLockupIn {
+    from { opacity: 0; transform: translateY(-20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+/* ─── Shared green tint filter ─────────────────────── */
+/* Converts the original icon color to brand green #10B981 */
+.nav-enjoy-smile {
+    filter: brightness(0) saturate(100%) invert(56%) sepia(82%)
+            saturate(458%) hue-rotate(118deg) brightness(95%) contrast(88%) !important;
+}
+
+/* ─── NAVBAR: "Enjoy it" + smile underneath ────────── */
+.nav-enjoy-wrap {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1;
+    gap: 2px;
+    padding-bottom: 6px;
+    overflow: visible;
+}
+
+.nav-enjoy-text {
+    font-size: 0.875rem;
+    font-style: italic;
+    color: #10B981;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.nav-enjoy-smile {
+    display: block;
+    width: 74px;
+    height: 20px;
+    object-fit: contain;
+    margin-top: 3px;
+    opacity: 0;
+    transform: scale(0.3);
+    animation:
+        smileFlashIn 0.95s cubic-bezier(0.22, 1, 0.36, 1) 0.28s forwards,
+        smileBreathe 3s ease-in-out 1.4s infinite;
+    filter: drop-shadow(0 0 0 rgba(16,185,129,0));
+}
+
+/* ─── Animations ───────────────────────────────────── */
+@keyframes smileFlashIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.2) rotate(-16deg) translateY(-10px);
+        filter: drop-shadow(0 0 0 rgba(16,185,129,0));
+    }
+    42% {
+        opacity: 1;
+        transform: scale(1.34) rotate(8deg) translateY(0);
+        filter: drop-shadow(0 0 16px rgba(16,185,129,.55));
+    }
+    70% {
+        opacity: 1;
+        transform: scale(0.96) rotate(-3deg);
+        filter: drop-shadow(0 0 8px rgba(16,185,129,.25));
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+        filter: drop-shadow(0 0 0 rgba(16,185,129,0));
+    }
+}
+
+@keyframes smileBreathe {
+    0%, 100% {
+        transform: scale(1) rotate(0deg);
+    }
+    25% {
+        transform: scale(1.08) rotate(2deg);
+    }
+    50% {
+        transform: scale(1.12) rotate(0deg);
+    }
+    75% {
+        transform: scale(1.08) rotate(-2deg);
+    }
+}
+
+@media (max-width: 639px) {
+    .header__brand-tagline {
+        margin-inline-start: .25rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .header__brand-lockup,
+    .nav-enjoy-smile,
+    .header__brand-tagline__line.is-active {
+        animation: none !important;
+        transform: none !important;
+        transition: none !important;
+    }
+    .nav-enjoy-smile {
+        opacity: 1 !important;
+        transform: scale(1) !important;
+    }
 }
 </style>
 

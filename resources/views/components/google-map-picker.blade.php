@@ -19,12 +19,12 @@
 
 <div
     x-data="googleMapPicker({
-        prefix:      '{{ $fieldPrefix }}',
-        initialLat:  {{ $initialLat }},
-        initialLng:  {{ $initialLng }},
-        districts:   {{ json_encode($districts) }},
-        variant:     @json($variant ?? 'modal'),
-        mapsKeyPresent: @json(filled($mapsKey)),
+        prefix: @js($fieldPrefix),
+        initialLat: {{ $initialLat }},
+        initialLng: {{ $initialLng }},
+        districts: @js($districts),
+        variant: @js($variant ?? 'modal'),
+        mapsKeyPresent: @js(filled($mapsKey)),
     })"
     @open-map-picker.window="variant === 'modal' && openModal()"
     @class([
@@ -388,7 +388,7 @@ window.gm_authFailure = function() {
 };
 </script>
 <script
-    src="https://maps.googleapis.com/maps/api/js?key={{ $mapsKey }}&libraries=places&v=weekly&language={{ app()->getLocale() }}&region=SA&callback=initGoogleMaps"
+    src="https://maps.googleapis.com/maps/api/js?key={{ $mapsKey }}&libraries=places&v=weekly&language={{ app()->getLocale() }}&region=SA&callback=initGoogleMaps&loading=async"
     async defer
 ></script>
 @endif

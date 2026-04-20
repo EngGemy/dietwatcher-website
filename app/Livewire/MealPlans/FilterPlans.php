@@ -48,6 +48,21 @@ class FilterPlans extends Component
 
         $plans = $service->getPrograms($this->selectedCategory);
 
+        // Enrich list cards with accurate "starts from" price from detail endpoint
+        // (default subscription plan minimum), while keeping list rendering stable.
+        $plans = array_map(function (array $plan) use ($service): array {
+            $id = (int) ($plan['id'] ?? 0);
+            if ($id <= 0) {
+                return $plan;
+            }
+            $detail = $service->getProgram($id);
+            if ($detail && isset($detail->min_price) && (float) $detail->min_price > 0) {
+                $plan['min_price'] = (float) $detail->min_price;
+            }
+
+            return $plan;
+        }, $plans);
+
         $categories = $service->getCategories();
 
         return view('livewire.meal-plans.filter-plans', [

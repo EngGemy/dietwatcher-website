@@ -144,6 +144,53 @@ class ExternalDataService
     /**
      * Transform raw API program into the format the frontend expects.
      */
+    protected function moneyAmount(mixed $value): float
+    {
+        if (is_array($value)) {
+            $value = $value['amount'] ?? $value['value'] ?? 0;
+        }
+
+        return is_numeric($value) ? (float) $value : 0.0;
+    }
+
+    /**
+     * Extract lowest valid PROGRAM PACKAGE total from durations only.
+     *
+     * Important: ignore plan/day pricing fields (can be per-day and too low),
+     * and only consider total duration package prices.
+     */
+    protected function extractProgramMinPrice(array $program): float
+    {
+        $prices = [];
+
+        $push = static function (array &$bucket, float $v): void {
+            if ($v > 0) {
+                $bucket[] = $v;
+            }
+        };
+
+        foreach (($program['plans'] ?? []) as $plan) {
+            if (! is_array($plan)) {
+                continue;
+            }
+
+            foreach (($plan['durations'] ?? []) as $d) {
+                if (! is_array($d)) {
+                    continue;
+                }
+                $effective = $this->moneyAmount($d['effective_price'] ?? 0);
+                $offer = $this->moneyAmount($d['offer_price'] ?? 0);
+                $price = $this->moneyAmount($d['price'] ?? 0);
+
+                $push($prices, $effective);
+                $push($prices, $offer);
+                $push($prices, $price);
+            }
+        }
+
+        return ! empty($prices) ? (float) min($prices) : 0.0;
+    }
+
     protected function transformProgram(array $program): array
     {
         if (! empty($program['profile']) && is_array($program['profile'])) {
@@ -177,6 +224,8 @@ class ExternalDataService
             $calorieOptions[] = ['range' => "{$calMax}", 'label' => "{$calMax} kcal"];
         }
 
+        $minPrice = $this->extractProgramMinPrice($program);
+
         return [
             'id' => $program['id'],
             'name' => $program['name'] ?? '',
@@ -184,6 +233,7 @@ class ExternalDataService
             'image_url' => $this->absoluteMediaUrl((string) ($program['image'] ?? '')),
             'price' => (int) $priceAmount,
             'offer_price' => (int) $offerPriceAmount,
+            'min_price' => (int) round($minPrice > 0 ? $minPrice : ((float) $offerPriceAmount > 0 ? (float) $offerPriceAmount : (float) $priceAmount)),
             'duration_days' => $program['duration_days'] ?? 28,
             'calories_per_day' => $caloriesPerDay,
             'calories_min' => $calMin,
@@ -248,6 +298,45 @@ class ExternalDataService
         $calMin = (int) data_get($profile, 'calories.min', data_get($profile, 'calories_min', 0));
         $calMax = (int) data_get($profile, 'calories.max', data_get($profile, 'calories_max', 0));
 
+        $defaultPlan = collect($subscriptionPlans)->firstWhere('id', $defaultPlanId);
+        $defaultPlanMin = collect($defaultPlan['durations'] ?? [])
+            ->map(function (array $d): float {
+                $effective = (float) ($d['effective_price'] ?? 0);
+                $offer = (float) ($d['offer_price'] ?? 0);
+                $price = (float) ($d['price'] ?? 0);
+                if ($effective > 0) {
+                    return $effective;
+                }
+                if ($offer > 0 && ($price <= 0 || $offer < $price)) {
+                    return $offer;
+                }
+
+                return $price;
+            })
+            ->filter(fn (float $p) => $p > 0)
+            ->min();
+
+        $subscriptionMin = collect($subscriptionPlans)
+            ->flatMap(fn (array $sp) => $sp['durations'] ?? [])
+            ->map(function (array $d): float {
+                $effective = (float) ($d['effective_price'] ?? 0);
+                $offer = (float) ($d['offer_price'] ?? 0);
+                $price = (float) ($d['price'] ?? 0);
+                if ($effective > 0) {
+                    return $effective;
+                }
+                if ($offer > 0 && ($price <= 0 || $offer < $price)) {
+                    return $offer;
+                }
+
+                return $price;
+            })
+            ->filter(fn (float $p) => $p > 0)
+            ->min();
+
+        $fallbackMin = collect([(float) $offerPriceAmount, (float) $priceAmount])->filter(fn (float $p) => $p > 0)->min();
+        $resolvedMin = (float) ($defaultPlanMin ?: $subscriptionMin ?: $fallbackMin ?: 0);
+
         return [
             'id' => $programId,
             'name' => $profile['name'] ?? '',
@@ -257,6 +346,7 @@ class ExternalDataService
             'default_subscription_plan_id' => $defaultPlanId,
             'price' => (int) round($priceAmount),
             'offer_price' => (int) round($offerPriceAmount),
+            'min_price' => (int) round($resolvedMin),
             'duration_days' => ($first && ! empty($first['durations'])) ? (int) ($first['durations'][0]['days'] ?? 28) : 28,
             'calories_per_day' => $caloriesPerDay,
             'calories_min' => $calMin,

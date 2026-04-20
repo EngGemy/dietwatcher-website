@@ -1637,7 +1637,32 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 this.addressConfirmedForSync = true;
                 this.moyasarError = '';
                 const districtId = addr.district?.id ?? addr.district_id;
-                const cityId = addr.city?.id ?? addr.city_id ?? addr.zone_id ?? addr.zone?.id ?? '';
+                // Resolve zone/city id across every known field shape the external
+                // API might return, then fall back to matching the district against
+                // the locally known zones list. Without a valid zone the server
+                // can't compute the correct delivery fee and the Moyasar session
+                // fails silently — so we *must* have one populated.
+                let cityId = addr.city?.id
+                    ?? addr.city_id
+                    ?? addr.zone_id
+                    ?? addr.zone?.id
+                    ?? addr.district?.city_id
+                    ?? addr.district?.zone_id
+                    ?? addr.district?.city?.id
+                    ?? addr.district?.zone?.id
+                    ?? '';
+                if (! cityId && districtId && Array.isArray(this.zones)) {
+                    const match = this.zones.find((z) => {
+                        const districtList = z.districts || z.district_ids || [];
+                        return districtList.some((d) => {
+                            const id = typeof d === 'object' ? (d.id ?? d.district_id) : d;
+                            return String(id) === String(districtId);
+                        });
+                    });
+                    if (match) {
+                        cityId = match.id;
+                    }
+                }
                 if (cityId) {
                     this.selectedZoneId = String(cityId);
                 }
