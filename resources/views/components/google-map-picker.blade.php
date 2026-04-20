@@ -374,7 +374,7 @@
 <script>
 window._gmpLoaded = false;
 window._gmpCallbacks = [];
-window.initGoogleMaps = function() {
+window._gmpNotify = function() {
     window._gmpLoaded = true;
     (window._gmpCallbacks || []).forEach(function(fn) {
         try {
@@ -382,6 +382,22 @@ window.initGoogleMaps = function() {
         } catch (e) {}
     });
     window._gmpCallbacks = [];
+};
+window.initGoogleMaps = function() {
+    // Preload the libraries so the Maps JS API bootstrap (`v=weekly`) moves out of
+    // the legacy-callback path and into the importLibrary dispatcher. Using the new
+    // Places library pulls PlaceAutocompleteElement instead of the deprecated
+    // google.maps.places.Autocomplete constructor.
+    try {
+        if (window.google && window.google.maps && typeof window.google.maps.importLibrary === 'function') {
+            Promise.all([
+                window.google.maps.importLibrary('maps'),
+                window.google.maps.importLibrary('places'),
+            ]).finally(window._gmpNotify);
+            return;
+        }
+    } catch (e) {}
+    window._gmpNotify();
 };
 window.gm_authFailure = function() {
     window.dispatchEvent(new CustomEvent('gmp-maps-auth-failed', { bubbles: true }));
@@ -642,18 +658,7 @@ function googleMapPicker(opts) {
 
                 const searchInput = document.getElementById(UID + '_search');
                 if (searchInput) {
-                    this._autocomplete = new google.maps.places.Autocomplete(searchInput, {
-                        componentRestrictions: { country: 'sa' },
-                    });
-                    this._autocomplete.addListener('place_changed', () => {
-                        const place = this._autocomplete.getPlace();
-                        if (!place.geometry) return;
-                        const loc = place.geometry.location;
-                        this._center = { lat: loc.lat(), lng: loc.lng() };
-                        this._map.panTo(this._center);
-                        this._map.setZoom(16);
-                        this.reverseGeocode(this._center);
-                    });
+                    this.mountPlaceAutocomplete(searchInput);
                 }
             };
 
@@ -674,6 +679,58 @@ function googleMapPicker(opts) {
                 setTimeout(catchUp, 150);
                 setTimeout(catchUp, 600);
                 setTimeout(catchUp, 2000);
+            }
+        },
+
+        async mountPlaceAutocomplete(inputEl) {
+            if (!inputEl || !window.google || !window.google.maps) return;
+            const handlePick = (place) => {
+                if (!place) return;
+                const loc = place.location || (place.geometry && place.geometry.location) || null;
+                if (!loc) return;
+                const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
+                const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
+                if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+                this._center = { lat, lng };
+                this._map.panTo(this._center);
+                this._map.setZoom(16);
+                this.reverseGeocode(this._center);
+            };
+
+            try {
+                if (typeof google.maps.importLibrary === 'function') {
+                    const placesLib = await google.maps.importLibrary('places');
+                    const PlaceAutocompleteElement = placesLib && placesLib.PlaceAutocompleteElement;
+                    if (PlaceAutocompleteElement) {
+                        const el = new PlaceAutocompleteElement({
+                            componentRestrictions: { country: 'sa' },
+                        });
+                        el.className = 'gmp-topbar__search-input gmp-topbar__search-input--pac';
+                        el.setAttribute('placeholder', inputEl.getAttribute('placeholder') || '');
+                        inputEl.replaceWith(el);
+                        this._autocomplete = el;
+                        el.addEventListener('gmp-placeselect', async (ev) => {
+                            const picked = ev.place || (ev.detail && ev.detail.place);
+                            if (!picked) return;
+                            try {
+                                await picked.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+                            } catch (_) {}
+                            handlePick(picked);
+                        });
+                        return;
+                    }
+                }
+            } catch (e) {}
+
+            // Fallback for older Maps SDK versions still cached by the browser.
+            if (google.maps.places && google.maps.places.Autocomplete) {
+                this._autocomplete = new google.maps.places.Autocomplete(inputEl, {
+                    componentRestrictions: { country: 'sa' },
+                });
+                this._autocomplete.addListener('place_changed', () => {
+                    const place = this._autocomplete.getPlace();
+                    handlePick(place);
+                });
             }
         },
 

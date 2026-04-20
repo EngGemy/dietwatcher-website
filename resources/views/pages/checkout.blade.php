@@ -435,6 +435,16 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                                         @enderror
                                     </div>
 
+                                    <div x-show="deliveryType === 'home' && addingNewAddress" x-cloak>
+                                        <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Phone') }}</label>
+                                        <input type="tel" class="form-control" autocomplete="tel" inputmode="tel" dir="ltr"
+                                               name="address_phone"
+                                               placeholder="{{ __('e.g. 05XXXXXXXX') }}"
+                                               x-model="addressPhone"
+                                               :disabled="deliveryType === 'pickup'" />
+                                        <p class="mt-1 text-xs text-gray-500">{{ __('Used for delivery coordination on this address.') }}</p>
+                                    </div>
+
                                     <div class="grid grid-cols-1 gap-3 sm:grid-cols-3" x-show="deliveryType === 'home'" x-cloak>
                                         <div>
                                             <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Building') }}</label>
@@ -1245,6 +1255,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             addingNewAddress: false,
             savingNewAddress: false,
             newAddressError: '',
+            addressPhone: '{{ old('phone', '') }}',
             deviceId: (function () {
                 try {
                     const k = 'dw_checkout_device_id';
@@ -1618,6 +1629,9 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                     this.deliveryDoor = '';
                     this.buildingNotes = '';
                     this.deliveryType = 'home';
+                    if (! (this.addressPhone || '').trim()) {
+                        this.addressPhone = (this.phone || '').trim();
+                    }
                     setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 200);
                 }
             },
@@ -1632,6 +1646,12 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 const keep = ['delivery_lat', 'delivery_lng', 'delivery_district_id', 'delivery_description',
                               'delivery_type', 'delivery_title', 'delivery_pickup_type', 'building', 'zone_id'];
                 keep.forEach(k => { if (fd.has(k)) payload.append(k, fd.get(k)); });
+                const phoneForAddress = (this.addressPhone || this.phone || '').trim();
+                if (! phoneForAddress) {
+                    this.newAddressError = '{{ __('Please enter a phone number for this address.') }}';
+                    return;
+                }
+                payload.set('phone', phoneForAddress);
                 if (! payload.get('delivery_lat') || ! payload.get('delivery_lng')) {
                     this.newAddressError = '{{ __('Please set a location on the map first.') }}';
                     return;
