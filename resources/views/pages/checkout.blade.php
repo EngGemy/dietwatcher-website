@@ -1644,8 +1644,14 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 // Only send the fields the sync-address endpoint needs.
                 const payload = new FormData();
                 const keep = ['delivery_lat', 'delivery_lng', 'delivery_district_id', 'delivery_description',
-                              'delivery_type', 'delivery_title', 'delivery_pickup_type', 'building', 'zone_id'];
+                              'delivery_kind', 'delivery_title', 'delivery_pickup_type', 'building', 'zone_id'];
                 keep.forEach(k => { if (fd.has(k)) payload.append(k, fd.get(k)); });
+                // The sync-address endpoint still expects the field named `delivery_type`.
+                // On the form it is `delivery_kind` to avoid colliding with the home/pickup radio.
+                if (payload.has('delivery_kind')) {
+                    payload.append('delivery_type', payload.get('delivery_kind'));
+                    payload.delete('delivery_kind');
+                }
                 const phoneForAddress = (this.addressPhone || this.phone || '').trim();
                 if (! phoneForAddress) {
                     this.newAddressError = '{{ __('Please enter a phone number for this address.') }}';

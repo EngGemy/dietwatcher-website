@@ -58,7 +58,8 @@
     <input type="hidden" :name="prefix + '_lat'"         :value="form.latitude" />
     <input type="hidden" :name="prefix + '_lng'"         :value="form.longitude" />
     <input type="hidden" :name="prefix + '_description'" :value="form.description" />
-    <input type="hidden" :name="prefix + '_type'"        :value="form.type" />
+    {{-- `_kind` (not `_type`) avoids name collision with the checkout `delivery_type` radio --}}
+    <input type="hidden" :name="prefix + '_kind'"        :value="form.type" />
     <input type="hidden" :name="prefix + '_district_id'" :value="form.district_id" />
     <input type="hidden" :name="prefix + '_pickup_type'" :value="form.pickup_type" />
     <input type="hidden" :name="prefix + '_title'"       :value="form.title" />
