@@ -510,9 +510,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                                 x-show="!canProceedToPayment()"
                                 x-cloak
                                 class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-                            >
-                                اختر المدة، المدينة، والعنوان على الخريطة حتى يتطابق المبلغ قبل الدفع
-                            </div>
+                                x-text="paymentBlockerMessage()"></div>
                             {{-- Info banner when phone not verified --}}
                             <div
                                 x-show="!phoneVerified"
@@ -1232,6 +1230,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             planDurationPrices: @json($planDurationPrices ?? []),
             deliveryType: '{{ old('delivery_type', 'home') }}',
             selectedPlanId: @json((int) (collect($cart)->first()['id'] ?? 0)),
+            hasCartItems: @json(!empty($cart)),
             startDate: '{{ old('start_date', date('Y-m-d', strtotime('+1 day'))) }}',
             vatRate: {{ $vatRate }},
             deliveryFeeAmount: {{ $deliveryFeeAmount }},
@@ -1863,10 +1862,22 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             },
 
             canProceedToPayment() {
+                const hasSelectedPlan = this.isPlanCheckout ? !!this.selectedPlanId : this.hasCartItems;
+                const hasSelectedDuration = this.isPlanCheckout
+                    ? (this.selectedDurationValue() !== '' || Number(this.cartDurationDaysHint || 0) > 0)
+                    : this.selectedDurationValue() !== '';
+
                 return this.deliveryReady()
-                    && !!this.selectedPlanId
-                    && this.selectedDurationValue() !== ''
+                    && hasSelectedPlan
+                    && hasSelectedDuration
                     && this.hasStartDate();
+            },
+
+            paymentBlockerMessage() {
+                if (this.deliveryType === 'pickup') {
+                    return 'اختر المدة وتاريخ البداية والفرع حتى يتطابق المبلغ قبل الدفع';
+                }
+                return 'اختر المدة، المدينة، والعنوان على الخريطة حتى يتطابق المبلغ قبل الدفع';
             },
 
             // Computed: subscription line total is fixed; meals use duration multiplier
