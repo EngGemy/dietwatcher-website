@@ -1298,6 +1298,18 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             moyasarError: '',
             _moyasarTimer: null,
 
+            getCsrfToken() {
+                const fromMeta = document.querySelector('meta[name="csrf-token"]')?.content;
+                if (fromMeta) {
+                    return fromMeta;
+                }
+                const fromForm = this.$refs.checkoutForm?.querySelector('input[name="_token"]')?.value;
+                if (fromForm) {
+                    return fromForm;
+                }
+                return '{{ csrf_token() }}';
+            },
+
             // ─── PRICES FROM API ARE VAT-INCLUSIVE (like mobile app) ───
             // The baseSubtotal already includes VAT. We extract VAT for display only.
 
@@ -1893,14 +1905,17 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 this.otpDigits = ['', '', '', ''];
 
                 try {
+                    const csrf = this.getCsrfToken();
                     const response = await fetch('{{ route('otp.send') }}', {
                         method: 'POST',
+                        credentials: 'same-origin',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+                            'X-CSRF-TOKEN': csrf,
+                            'X-Requested-With': 'XMLHttpRequest',
                             'Accept': 'application/json',
                         },
-                        body: JSON.stringify({ phone: this.phone.trim() }),
+                        body: JSON.stringify({ phone: this.phone.trim(), _token: csrf }),
                     });
 
                     const data = await response.json();
@@ -1933,17 +1948,21 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 this.otpMessage = '';
 
                 try {
+                    const csrf = this.getCsrfToken();
                     const response = await fetch('{{ route('otp.verify') }}', {
                         method: 'POST',
+                        credentials: 'same-origin',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+                            'X-CSRF-TOKEN': csrf,
+                            'X-Requested-With': 'XMLHttpRequest',
                             'Accept': 'application/json',
                         },
                         body: JSON.stringify({
                             phone: this.phone.trim(),
                             otp: code,
                             device_id: this.deviceId,
+                            _token: csrf,
                         }),
                     });
 
