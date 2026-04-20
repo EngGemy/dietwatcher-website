@@ -15,8 +15,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // production edge setups (proxy/domain/cookie scope differences).
         // We exempt only OTP endpoints and keep protection elsewhere.
         $middleware->validateCsrfTokens(except: [
+            'otp/*',
+            '/otp/*',
             'otp/send',
             'otp/verify',
+            '/otp/send',
+            '/otp/verify',
         ]);
 
         $middleware->web(append: [

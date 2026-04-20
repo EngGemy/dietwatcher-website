@@ -1310,6 +1310,26 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 return '{{ csrf_token() }}';
             },
 
+            getXsrfTokenFromCookie() {
+                const m = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/);
+                return m ? decodeURIComponent(m[1]) : '';
+            },
+
+            buildCsrfHeaders() {
+                const csrf = this.getCsrfToken();
+                const xsrf = this.getXsrfTokenFromCookie();
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                };
+                if (xsrf) {
+                    headers['X-XSRF-TOKEN'] = xsrf;
+                }
+                return { headers, csrf };
+            },
+
             // ─── PRICES FROM API ARE VAT-INCLUSIVE (like mobile app) ───
             // The baseSubtotal already includes VAT. We extract VAT for display only.
 
@@ -1905,16 +1925,11 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 this.otpDigits = ['', '', '', ''];
 
                 try {
-                    const csrf = this.getCsrfToken();
+                    const { headers, csrf } = this.buildCsrfHeaders();
                     const response = await fetch('{{ route('otp.send') }}', {
                         method: 'POST',
                         credentials: 'same-origin',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrf,
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Accept': 'application/json',
-                        },
+                        headers,
                         body: JSON.stringify({ phone: this.phone.trim(), _token: csrf }),
                     });
 
@@ -1948,16 +1963,11 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 this.otpMessage = '';
 
                 try {
-                    const csrf = this.getCsrfToken();
+                    const { headers, csrf } = this.buildCsrfHeaders();
                     const response = await fetch('{{ route('otp.verify') }}', {
                         method: 'POST',
                         credentials: 'same-origin',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrf,
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Accept': 'application/json',
-                        },
+                        headers,
                         body: JSON.stringify({
                             phone: this.phone.trim(),
                             otp: code,
