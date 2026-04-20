@@ -1851,7 +1851,16 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             },
 
             hasStartDate() {
-                return String(this.startDate || '').trim().length > 0;
+                const localValue = String(this.startDate || '').trim();
+                if (localValue.length > 0) {
+                    return true;
+                }
+                const inputValue = String(document.getElementById('start_date_input')?.value || '').trim();
+                if (inputValue.length > 0) {
+                    this.startDate = inputValue;
+                    return true;
+                }
+                return false;
             },
 
             deliveryReady() {
@@ -1862,7 +1871,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             },
 
             canProceedToPayment() {
-                const hasSelectedPlan = this.isPlanCheckout ? !!this.selectedPlanId : this.hasCartItems;
+                const hasSelectedPlan = this.hasCartItems;
                 const hasSelectedDuration = this.isPlanCheckout
                     ? (this.selectedDurationValue() !== '' || Number(this.cartDurationDaysHint || 0) > 0)
                     : this.selectedDurationValue() !== '';
@@ -2356,6 +2365,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                     this.scheduleMoyasarRefresh();
                 });
                 this.$watch('duration', () => this.revalidateCoupon());
+                this.$watch('duration', () => this.scheduleMoyasarRefresh());
                 this.$watch('selectedZoneId', () => this.scheduleMoyasarRefresh());
                 this.$watch('selectedAddressId', () => this.scheduleMoyasarRefresh());
                 this.$watch('selectedBranchId', () => this.scheduleMoyasarRefresh());
