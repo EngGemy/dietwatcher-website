@@ -13,8 +13,17 @@
                         @if(app()->getLocale() === 'ar')
                             <span class="hero-line hero-line--1">
                                 <span class="hero-line__brand">
-                                    <span class="hero-line__phrase hero-line__phrase--blue text-blue">وجبات محسوبة السعرات</span>
-                                    <img class="hero-line__smile" src="{{ asset('assets/images/icons/smile.svg') }}" alt="" aria-hidden="true" decoding="async" loading="eager" />
+                                    <span class="hero-line__phrase hero-line__phrase--blue text-blue">وجبات</span>
+                                    <span class="hero-line__phrase hero-line__phrase--blue text-blue hero-smile-wrap">
+                                        <span class="hero-smile-word">محسوبة</span>
+                                        <img
+                                            src="{{ asset('assets/images/icons/smile.svg') }}"
+                                            class="hero-smile-icon"
+                                            alt=""
+                                            aria-hidden="true"
+                                        />
+                                    </span>
+                                    <span class="hero-line__phrase hero-line__phrase--blue text-blue">السعرات</span>
                                 </span>
                             </span>
                             <span class="hero-line hero-line--2">تصلك يومياً.</span>
@@ -26,7 +35,6 @@
                             <span class="hero-line hero-line--1">
                                 <span class="hero-line__brand">
                                     <span class="hero-line__phrase hero-line__phrase--blue text-blue">{{ __('Healthy') }}</span>
-                                    <img class="hero-line__smile" src="{{ asset('assets/images/icons/smile.svg') }}" alt="" aria-hidden="true" decoding="async" loading="eager" />
                                 </span>
                                 {{ __('Meals') }}
                             </span>
@@ -632,6 +640,7 @@
     filter: blur(5px);
     animation: heroLineIn 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     will-change: opacity, transform, filter;
+    overflow: visible !important;
 }
 .hero-title .hero-line--1 { animation-delay: 0.08s; }
 .hero-title .hero-line--2 { animation-delay: 0.22s; }
@@ -677,46 +686,64 @@
    stays on the same baseline row while the icon decorates below. */
 .hero-title .hero-line__brand {
     display: inline-flex;
-    flex-direction: column;
     align-items: center;
     vertical-align: baseline;
     line-height: 1;
-    gap: 0.08em;
+    gap: 0.12em;
+    overflow: visible !important;
 }
 
-/* Smile icon: tucked under the brand phrase. Scales with font-size via
-   em units so it stays proportional from 32px mobile to 60px desktop.  */
+.hero-title .hero-line__word-with-smile {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1;
+    gap: 0.04em;
+}
+
+/* Smile swoosh (raster): sits tight under the brand word, spans its
+   width, and wipes in left-to-right as the "draw-on" reveal. The filter
+   chain tints the raster to brand green (#3fb536). */
 .hero-title .hero-line__smile {
     display: block;
-    inline-size: 0.58em;
-    block-size: 0.58em;
+    inline-size: 1.9em;
+    block-size: 0.24em;
     object-fit: contain;
-    filter: drop-shadow(0 6px 14px rgba(39, 159, 249, 0.22));
-    animation: heroSmileBob 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite,
-               heroSmileWink 6s ease-in-out 1.6s infinite;
-    transform-origin: center 78%;
-    will-change: transform, opacity;
+    object-position: center;
+    margin-block-start: 0;
+    /* Tint raster → brand green + soft green drop-shadow */
+    filter:
+        brightness(0) saturate(100%)
+        invert(47%) sepia(89%) saturate(414%) hue-rotate(70deg)
+        brightness(99%) contrast(86%);
+    /* Wipe-reveal: from clipped-to-nothing to fully visible */
+    clip-path: inset(0 100% 0 0);
+    animation:
+        heroSmileReveal 0.85s cubic-bezier(0.65, 0, 0.35, 1) 0.35s forwards;
+    transform-origin: center;
     user-select: none;
     -webkit-user-drag: none;
 }
 
-/* On mobile viewports, scale the smile down a notch since the title
-   itself is smaller — keeps the visual weight balanced. */
-@media (max-width: 639px) {
+@keyframes heroSmileReveal {
+    from { clip-path: inset(0 100% 0 0); }
+    to   { clip-path: inset(0 0 0 0); }
+}
+
+/* RTL wipe: Arabic reads right-to-left, so reveal from right to left. */
+[dir="rtl"] .hero-title .hero-line__smile {
+    animation-name: heroSmileRevealRtl;
+}
+@keyframes heroSmileRevealRtl {
+    from { clip-path: inset(0 0 0 100%); }
+    to   { clip-path: inset(0 0 0 0); }
+}
+/* Respect reduced-motion: show the finished smile immediately. */
+@media (prefers-reduced-motion: reduce) {
     .hero-title .hero-line__smile {
-        inline-size: 0.52em;
-        block-size: 0.52em;
+        clip-path: none;
+        animation: none;
     }
-}
-@keyframes heroSmileBob {
-    0%, 100% { transform: translateY(0)    scale(1)    rotate(0deg); }
-    25%      { transform: translateY(-4px) scale(1.06) rotate(-6deg); }
-    55%      { transform: translateY(-1px) scale(1.02) rotate(4deg); }
-    80%      { transform: translateY(-3px) scale(1.05) rotate(-2deg); }
-}
-@keyframes heroSmileWink {
-    0%, 93%, 100% { opacity: 1; }
-    96%           { opacity: 0.35; }
 }
 @keyframes heroShine {
     0%   { background-position: 100% 0; -webkit-text-fill-color: transparent; }
@@ -750,6 +777,64 @@
 }
 .hero-copy {
     padding-bottom: clamp(1.5rem, 3vw, 3rem);
+}
+/* Smile swoosh under "محسوبة" — inline SVG, guaranteed positioning */
+.hero-smile-wrap {
+    position: relative;
+    display: inline-block;
+    padding-bottom: 0.38em;
+    overflow: visible !important;
+}
+
+.hero-smile-word {
+    display: inline-block;
+}
+
+/* ─── Shared green tint filter ─────────────────────── */
+/* Converts the original icon color to brand green #10B981 */
+.hero-smile-icon {
+    filter: brightness(0) saturate(100%) invert(56%) sepia(82%)
+            saturate(458%) hue-rotate(118deg) brightness(95%) contrast(88%) !important;
+}
+
+/* ─── HERO: under "محسوبة" word ─────────────────────── */
+.hero-smile-icon {
+    position: absolute;
+    left: 50%;
+    bottom: 0.04em;
+    transform: translateX(-50%) scale(0.3);
+    width: 118%;
+    height: 0.66em;
+    max-height: 44px;
+    object-fit: contain;
+    pointer-events: none;
+    opacity: 0;
+    animation:
+        heroSmileAppear 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) 0.9s forwards,
+        heroSmileBreathe 3.2s ease-in-out 2s infinite;
+}
+
+@keyframes heroSmileBreathe {
+    0%, 100% { transform: translateX(-50%) scale(1); }
+    50%      { transform: translateX(-50%) scale(1.12); }
+}
+
+@keyframes heroSmileAppear {
+    0% {
+        opacity: 0;
+        transform: translateX(-50%) scale(0) rotate(-15deg);
+    }
+    50% {
+        opacity: 1;
+        transform: translateX(-50%) scale(1.25) rotate(5deg);
+    }
+    75% {
+        transform: translateX(-50%) scale(0.95) rotate(-2deg);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(-50%) scale(1) rotate(0deg);
+    }
 }
 .hero-visual {
     width: min(100%, 720px);
@@ -1282,6 +1367,11 @@
     }
     .testimonials-rail__track {
         transform: none !important;
+    }
+    .hero-smile-icon {
+        opacity: 1 !important;
+        transform: translateX(-50%) scale(1) !important;
+        animation: none !important;
     }
 }
 

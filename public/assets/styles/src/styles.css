@@ -95,38 +95,45 @@
   }
 
   .header__brand-tagline__icon {
-    /* Responsive size: clamps between 16px (compact) and 22px (desktop).
-       Using clamp avoids breakpoint jumps and keeps the icon proportional
-       to the surrounding 13–15px tagline text across every viewport. */
-    inline-size: clamp(16px, 1.55vw + 0.5rem, 22px);
-    block-size: clamp(16px, 1.55vw + 0.5rem, 22px);
+    /* Raster smile.svg tinted to brand green via CSS filter chain.
+       Width spans the tagline; clip-path wipe animates the reveal. */
+    display: block;
+    inline-size: 100%;
+    block-size: 0.9em;
     object-fit: contain;
+    object-position: center;
     user-select: none;
     -webkit-user-drag: none;
     pointer-events: none;
-    filter: drop-shadow(0 3px 6px rgba(39, 159, 249, 0.22));
-    animation: brandTaglineSmile 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-    transform-origin: center 75%;
-    will-change: transform;
+    filter:
+      brightness(0) saturate(100%)
+      invert(47%) sepia(89%) saturate(414%) hue-rotate(70deg)
+      brightness(99%) contrast(86%)
+      drop-shadow(0 2px 4px rgba(63, 181, 54, 0.25));
+    clip-path: inset(0 100% 0 0);
+    animation: brandSmileReveal 0.85s cubic-bezier(0.65, 0, 0.35, 1) 0.3s forwards;
   }
 
-  @keyframes brandTaglineSmile {
-    0%, 100% { transform: translateY(0)    rotate(0deg)   scale(1); }
-    25%      { transform: translateY(-2px) rotate(-6deg)  scale(1.05); }
-    50%      { transform: translateY(0)    rotate(0deg)   scale(1); }
-    75%      { transform: translateY(-1px) rotate(5deg)   scale(1.04); }
+  [dir="rtl"] .header__brand-tagline__icon {
+    animation-name: brandSmileRevealRtl;
+  }
+
+  @keyframes brandSmileReveal {
+    from { clip-path: inset(0 100% 0 0); }
+    to   { clip-path: inset(0 0 0 0); }
+  }
+  @keyframes brandSmileRevealRtl {
+    from { clip-path: inset(0 0 0 100%); }
+    to   { clip-path: inset(0 0 0 0); }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .header__brand-tagline__icon { animation: none; }
+    .header__brand-tagline__icon {
+      clip-path: none;
+      animation: none;
+    }
   }
 
-  .header-sticky-wrap.is-scrolled .header__brand-tagline__icon {
-    /* Shrink ~18% when the header compacts on scroll, but still scales
-       with viewport via clamp. */
-    inline-size: clamp(14px, 1.3vw + 0.4rem, 18px);
-    block-size: clamp(14px, 1.3vw + 0.4rem, 18px);
-  }
 
   .header__brand-tagline__line {
     grid-area: stack;

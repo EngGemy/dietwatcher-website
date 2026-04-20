@@ -92,7 +92,7 @@
     </div>
 
     {{-- Plans Grid --}}
-    <div class="mt-14 grid gap-8 lg:grid-cols-3 xl:grid-cols-4">
+    <div class="mt-14 grid gap-8 lg:grid-cols-3 xl:grid-cols-4 meal-plans-grid">
         @forelse($plans as $plan)
             @php
                 $planImg     = $plan['image_url'] ?? '';
@@ -101,9 +101,39 @@
                 $catLabel = is_array($plan['category']['name'] ?? null)
                     ? ($plan['category']['name'][app()->getLocale()] ?? $plan['category']['name']['en'] ?? '')
                     : ($plan['category']['name'] ?? '');
+
+                // Compute "lowest valid price" across available pricing options.
+                $durationPrices = collect($plan['subscription_plans'] ?? [])
+                    ->flatMap(fn ($sp) => $sp['durations'] ?? [])
+                    ->map(function ($d) {
+                        $price = (float) ($d['price'] ?? 0);
+                        $offer = (float) ($d['offer_price'] ?? 0);
+                        $effective = (float) ($d['effective_price'] ?? 0);
+                        if ($effective > 0) {
+                            return $effective;
+                        }
+                        if ($offer > 0 && ($price <= 0 || $offer < $price)) {
+                            return $offer;
+                        }
+
+                        return $price;
+                    })
+                    ->filter(fn ($p) => is_numeric($p) && (float) $p > 0)
+                    ->values();
+
+                $directPrices = collect([
+                    (float) ($plan['min_price'] ?? 0),
+                    (float) ($plan['offer_price'] ?? 0),
+                    (float) ($plan['price'] ?? 0),
+                    (float) ($plan['weekly_price'] ?? 0),
+                ])->filter(fn ($p) => is_numeric($p) && (float) $p > 0)->values();
+
+                $allValidPrices = $durationPrices->merge($directPrices);
+                $minPlanPrice = $allValidPrices->isNotEmpty() ? (float) $allValidPrices->min() : null;
+                $startsFromLabel = app()->getLocale() === 'ar' ? 'يبدأ من' : __('Starting From');
             @endphp
-            <div class="plan-card" wire:key="plan-{{ $plan['id'] }}">
-                <div class="plan-card__thumbnail">
+            <div class="plan-card plan-card--premium group flex h-full flex-col" wire:key="plan-{{ $plan['id'] }}">
+                <div class="plan-card__thumbnail plan-card__thumbnail--premium">
                     <a href="{{ route('meal-plans.show', $plan['id']) }}">
                         <img src="{{ $planImgUrl }}" alt="{{ $plan['name'] }}" loading="lazy"
                              onerror="this.src='{{ $planFallback }}'" />
@@ -113,17 +143,10 @@
                         @if(!empty($plan['calories_per_day']))
                             <span class="plan-card__badge">{{ number_format($plan['calories_per_day']) }} {{ __('kcal/day') }}</span>
                         @endif
-
-                        <a href="{{ route('meal-plans.show', $plan['id']) }}" class="plan-card__select">
-                            {{ __('Select') }}
-                            <svg>
-                                <use href="{{ asset('assets/images/icons/sprite.svg#check') }}"></use>
-                            </svg>
-                        </a>
                     </div>
                 </div>
 
-                <div class="plan-card__body">
+                <div class="plan-card__body plan-card__body--premium flex min-h-0 flex-1 flex-col">
                     <a href="{{ route('meal-plans.show', $plan['id']) }}">
                         <h3 class="plan-card__title">{{ $plan['name'] }}</h3>
                     </a>
@@ -135,11 +158,20 @@
                         <p>{{ __('Starting From') }} <time>{{ now()->format('d M Y') }}</time></p>
                     </div>
 
-                    <div class="plan-card__footer">
+                    <div class="plan-card__footer plan-card__footer--premium">
                         @if($catLabel)
                             <span class="plan-card__category">{{ $catLabel }}</span>
                         @endif
-                        <span class="plan-card__price">{{ __('SAR') }} {{ number_format($plan['price'], 0) }}</span>
+                        <div class="plan-card__price-cta">
+                            @if($minPlanPrice)
+                                <span class="plan-card__price">{{ $startsFromLabel }} {{ number_format($minPlanPrice, 0) }} {{ app()->getLocale() === 'ar' ? 'ر.س' : __('SAR') }}</span>
+                            @else
+                                <span class="plan-card__price">{{ __('Price unavailable') }}</span>
+                            @endif
+                            <a href="{{ route('meal-plans.show', $plan['id']) }}" class="plan-card__cta">
+                                {{ __('Select') }}
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -153,4 +185,111 @@
             </div>
         @endforelse
     </div>
+
+    <style>
+        .meal-plans-grid > .plan-card--premium {
+            opacity: 0;
+            transform: translateY(18px);
+            animation: planCardIn .55s cubic-bezier(.22,1,.36,1) forwards;
+            animation-delay: calc(var(--card-i, 0) * 70ms);
+        }
+        .plan-card--premium {
+            transition: transform .28s cubic-bezier(.22,1,.36,1), box-shadow .28s ease, border-color .25s ease;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+            border-color: rgba(148, 163, 184, .45);
+        }
+        .plan-card--premium:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+            border-color: rgba(39, 159, 249, .35);
+        }
+        .plan-card__thumbnail--premium {
+            overflow: hidden;
+            border-radius: .6rem;
+        }
+        .plan-card__thumbnail--premium img {
+            transition: transform .45s cubic-bezier(.22,1,.36,1);
+        }
+        .plan-card--premium:hover .plan-card__thumbnail--premium img {
+            transform: scale(1.03);
+        }
+        .plan-card__body--premium {
+            gap: .15rem;
+        }
+        .plan-card__footer--premium {
+            margin-top: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: .6rem;
+            border-top: 1px solid rgba(100, 116, 139, .2);
+            padding-top: .65rem;
+        }
+        .plan-card__price-cta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .65rem;
+            width: 100%;
+        }
+        .plan-card__price {
+            white-space: nowrap;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+        .plan-card__cta {
+            display: inline-flex;
+            width: auto;
+            min-width: 90px;
+            align-items: center;
+            justify-content: center;
+            border-radius: .65rem;
+            padding: .45rem .9rem;
+            background: #279ff9;
+            color: #fff;
+            font-weight: 600;
+            transition: background-color .2s ease, box-shadow .2s ease, transform .2s ease;
+        }
+        .plan-card__cta:hover {
+            background: #1789e4;
+            box-shadow: 0 8px 18px rgba(39, 159, 249, 0.24);
+            transform: translateY(-1px);
+        }
+        @keyframes planCardIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @media (max-width: 640px) {
+            .plan-card__price-cta {
+                gap: .5rem;
+            }
+            .plan-card__cta {
+                min-width: 82px;
+                padding: .42rem .8rem;
+            }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .meal-plans-grid > .plan-card--premium {
+                animation: none !important;
+                opacity: 1 !important;
+                transform: none !important;
+            }
+            .plan-card--premium,
+            .plan-card__thumbnail--premium img,
+            .plan-card__cta {
+                transition: none !important;
+            }
+        }
+    </style>
+
+    <script>
+        (function () {
+            var cards = document.querySelectorAll('.meal-plans-grid > .plan-card--premium');
+            cards.forEach(function (card, idx) {
+                card.style.setProperty('--card-i', idx);
+            });
+        })();
+    </script>
 </div>

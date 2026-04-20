@@ -786,6 +786,61 @@ class CheckoutController extends Controller
             ], 422);
         }
 
+        // Safety net: when the client only sends `selected_address_id` (saved
+        // address flow) and the frontend couldn't resolve the zone locally, we
+        // must resolve it server-side. Without this, delivery fee falls back
+        // to the flat settings value and the payment session gets a wrong
+        // total for zone-priced deliveries.
+        if (
+            ($validated['delivery_type'] ?? '') === 'home'
+            && empty($validated['zone_id'])
+            && ! empty($validated['selected_address_id'])
+        ) {
+            $token = session('external_api_token');
+            if (is_string($token) && $token !== '') {
+                $savedAddresses = app(ApiAuthService::class)->getAddresses($token, true);
+                if (is_array($savedAddresses)) {
+                    $picked = collect($savedAddresses)->first(
+                        fn ($a) => (int) ($a['id'] ?? 0) === (int) $validated['selected_address_id']
+                    );
+                    if (is_array($picked)) {
+                        $resolvedZoneId = $picked['city']['id']
+                            ?? $picked['city_id']
+                            ?? $picked['zone_id']
+                            ?? $picked['zone']['id']
+                            ?? $picked['district']['city_id']
+                            ?? $picked['district']['zone_id']
+                            ?? $picked['district']['city']['id']
+                            ?? $picked['district']['zone']['id']
+                            ?? null;
+                        if (! $resolvedZoneId) {
+                            $districtId = $picked['district']['id'] ?? $picked['district_id'] ?? null;
+                            if ($districtId) {
+                                $zonesList = $this->externalDataService->getZones();
+                                $match = collect($zonesList)->first(function ($z) use ($districtId) {
+                                    $districtList = $z['districts'] ?? $z['district_ids'] ?? [];
+                                    foreach ((array) $districtList as $d) {
+                                        $id = is_array($d) ? ($d['id'] ?? $d['district_id'] ?? null) : $d;
+                                        if ((int) $id === (int) $districtId) {
+                                            return true;
+                                        }
+                                    }
+
+                                    return false;
+                                });
+                                if ($match) {
+                                    $resolvedZoneId = $match['id'] ?? null;
+                                }
+                            }
+                        }
+                        if ($resolvedZoneId) {
+                            $validated['zone_id'] = (int) $resolvedZoneId;
+                        }
+                    }
+                }
+            }
+        }
+
         if ($hasPlanItems) {
             $validated['duration'] = 'once';
         }
