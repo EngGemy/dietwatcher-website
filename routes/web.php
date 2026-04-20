@@ -111,8 +111,12 @@ Route::get('/privacy-policy', fn () => view('pages.privacy'))->name('privacy');
 Route::get('/terms-and-conditions', fn () => view('pages.terms'))->name('terms');
 
 // OTP verification
-Route::post('/otp/send', [\App\Http\Controllers\OtpController::class, 'send'])->name('otp.send');
-Route::post('/otp/verify', [\App\Http\Controllers\OtpController::class, 'verify'])->name('otp.verify');
+Route::post('/otp/send', [\App\Http\Controllers\OtpController::class, 'send'])
+    ->middleware('throttle:10,1')
+    ->name('otp.send');
+Route::post('/otp/verify', [\App\Http\Controllers\OtpController::class, 'verify'])
+    ->middleware('throttle:20,1')
+    ->name('otp.verify');
 
 Route::post('/checkout/moyasar-session', [\App\Http\Controllers\CheckoutController::class, 'moyasarSession'])
     ->name('checkout.moyasar-session');
