@@ -997,5 +997,12 @@
     "market.related_products": "منتجات ذات صلة",
     "e.g. 05XXXXXXXX": "مثال: 05XXXXXXXX",
     "Used for delivery coordination on this address.": "يُستخدم للتواصل بخصوص هذا العنوان عند التوصيل.",
-    "Please enter a phone number for this address.": "يُرجى إدخال رقم هاتف لهذا العنوان."
+    "Please enter a phone number for this address.": "يُرجى إدخال رقم هاتف لهذا العنوان.",
+    "Save address": "حفظ العنوان",
+    "Please select a city first.": "يُرجى اختيار المدينة أولاً.",
+    "Add new address": "إضافة عنوان جديد",
+    "Saving...": "جارٍ الحفظ...",
+    "Please set a location on the map first.": "يُرجى تحديد الموقع على الخريطة أولاً.",
+    "Please confirm the address (district) on the map.": "يُرجى تأكيد الحي على الخريطة.",
+    "Fill the map and address fields below, then tap \"Save address\".": "حدِّد الموقع على الخريطة واملأ حقول العنوان بالأسفل، ثم اضغط على \"حفظ العنوان\"."
 }
