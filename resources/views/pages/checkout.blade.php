@@ -506,6 +506,13 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                         <div x-show="moyasarError" x-cloak class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" x-text="moyasarError"></div>
 
                         <div class="relative min-h-[160px] rounded-xl border border-gray-200 bg-gray-50 p-4">
+                            <div
+                                x-show="!canProceedToPayment()"
+                                x-cloak
+                                class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                            >
+                                اختر المدة، المدينة، والعنوان على الخريطة حتى يتطابق المبلغ قبل الدفع
+                            </div>
                             {{-- Info banner when phone not verified --}}
                             <div
                                 x-show="!phoneVerified"
@@ -601,7 +608,8 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
 
                             {{-- Proceed to Payment Button --}}
                             <div class="pt-2">
-                                <button type="submit" class="btn btn--primary btn--md w-full">
+                                <button type="submit" class="btn btn--primary btn--md w-full"
+                                        :disabled="!phoneVerified || !canProceedToPayment()">
                                     {{ __('payment.proceed') }} — SAR <span x-text="total().toFixed(2)"></span>
                                 </button>
                             </div>
@@ -1223,6 +1231,8 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             selectedPlanDurationId: @json((string) ($preferredPlanDurationId ?? '')),
             planDurationPrices: @json($planDurationPrices ?? []),
             deliveryType: '{{ old('delivery_type', 'home') }}',
+            selectedPlanId: @json((int) (collect($cart)->first()['id'] ?? 0)),
+            startDate: '{{ old('start_date', date('Y-m-d', strtotime('+1 day'))) }}',
             vatRate: {{ $vatRate }},
             deliveryFeeAmount: {{ $deliveryFeeAmount }},
             discount: 0,
@@ -1631,6 +1641,10 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                     this.newAddressError = '{{ __('Please confirm the address (district) on the map.') }}';
                     return;
                 }
+                if (! payload.get('zone_id')) {
+                    this.newAddressError = '{{ __('Please select a city first.') }}';
+                    return;
+                }
                 this.savingNewAddress = true;
                 try {
                     const res = await fetch('{{ route('checkout.sync-address') }}', {
@@ -1643,13 +1657,28 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                     });
                     const data = await res.json().catch(() => ({}));
                     if (! res.ok || ! data.success) {
-                        this.newAddressError = data.message || '{{ __('address.save_failed') }}';
+                        const errs = data && data.errors && typeof data.errors === 'object'
+                            ? Object.values(data.errors).flat().filter(Boolean)
+                            : [];
+                        this.newAddressError = errs[0] || data.message || '{{ __('address.save_failed') }}';
                         return;
                     }
                     await this.refreshCustomerFromServer();
                     if (data.data && data.data.id) {
-                        const fresh = this.savedAddresses.find(a => String(a.id) === String(data.data.id));
-                        if (fresh) this.applySavedAddress(fresh);
+                        let fresh = this.savedAddresses.find(a => String(a.id) === String(data.data.id));
+                        if (!fresh) {
+                            fresh = {
+                                id: data.data.id,
+                                latitude: payload.get('delivery_lat'),
+                                longitude: payload.get('delivery_lng'),
+                                city_id: payload.get('zone_id'),
+                                line1: payload.get('delivery_description') || this.addressStreet || '',
+                                description: payload.get('delivery_description') || this.addressStreet || '',
+                                district_id: payload.get('delivery_district_id'),
+                            };
+                            this.savedAddresses = [fresh, ...this.savedAddresses];
+                        }
+                        this.applySavedAddress(fresh);
                     }
                     this.addingNewAddress = false;
                 } catch (e) {
@@ -1716,6 +1745,20 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                         type: addr.type || 'residential',
                         title: addr.title || '',
                         pickup_type: pickup,
+                    },
+                }));
+                window.dispatchEvent(new CustomEvent('address-selected', {
+                    detail: {
+                        id: addr.id ?? null,
+                        latitude: addr.latitude,
+                        longitude: addr.longitude,
+                        city_id: cityId || null,
+                        line1: addr.line1 || addr.description || '',
+                        description: addr.description || '',
+                        district_id: districtId || null,
+                        building_num: addr.building_num ?? this.deliveryBuilding,
+                        floor: addr.floor ?? this.deliveryFloor,
+                        door: addr.door ?? this.deliveryDoor,
                     },
                 }));
                 if (addr.description) {
@@ -1799,6 +1842,31 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 } else {
                     this.pickupPhase = 'cta';
                 }
+            },
+
+            selectedDurationValue() {
+                if (this.isPlanCheckout) {
+                    return this.selectedPlanDurationId ? String(this.selectedPlanDurationId) : '';
+                }
+                return this.duration ? String(this.duration) : '';
+            },
+
+            hasStartDate() {
+                return String(this.startDate || '').trim().length > 0;
+            },
+
+            deliveryReady() {
+                if (this.deliveryType === 'pickup') {
+                    return !!this.selectedBranchId;
+                }
+                return !!this.selectedAddressId;
+            },
+
+            canProceedToPayment() {
+                return this.deliveryReady()
+                    && !!this.selectedPlanId
+                    && this.selectedDurationValue() !== ''
+                    && this.hasStartDate();
             },
 
             // Computed: subscription line total is fixed; meals use duration multiplier
@@ -2083,26 +2151,32 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                     this.openOtpModal();
                     return;
                 }
+                if (!this.canProceedToPayment()) {
+                    this.moyasarError = '{{ __('payment.fill_delivery_first') }}';
+                    return;
+                }
                 event.target.submit();
             },
 
             scheduleMoyasarRefresh() {
                 clearTimeout(this._moyasarTimer);
                 this._moyasarTimer = setTimeout(() => {
-                    // Skip refresh when required delivery info is missing — avoids spurious errors.
-                    if (this.deliveryType === 'pickup' && ! this.selectedBranchId) {
+                    const el = document.getElementById('moyasar-form-checkout');
+                    if (! this.canProceedToPayment()) {
                         this.moyasarError = '';
+                        if (el) {
+                            el.innerHTML = '';
+                        }
                         return;
                     }
-                    if (this.deliveryType === 'home' && ! this.selectedZoneId && ! this.selectedAddressId) {
+                    if (! this.phoneVerified) {
                         this.moyasarError = '';
+                        if (el) {
+                            el.innerHTML = '';
+                        }
                         return;
                     }
-                    if (this.phoneVerified) {
-                        this.bootstrapMoyasar();
-                    } else {
-                        this.bootstrapMoyasarPreview();
-                    }
+                    this.bootstrapMoyasar();
                 }, 450);
             },
 
@@ -2192,6 +2266,8 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 }
                 this.moyasarError = '';
                 const fd = new FormData(form);
+                fd.set('selected_plan_id', String(this.selectedPlanId || ''));
+                fd.set('selected_duration', this.selectedDurationValue());
                 try {
                     const res = await fetch('{{ route('checkout.moyasar-session') }}', {
                         method: 'POST',
@@ -2239,6 +2315,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                     publishable_api_key: data.publishable_key,
                     callback_url: cb,
                     methods: ['creditcard', 'applepay', 'stcpay'],
+                    metadata: data.metadata || {},
                     supported_networks: ['visa', 'mastercard', 'mada'],
                     apple_pay: {
                         country: 'SA',
@@ -2269,6 +2346,8 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 });
                 this.$watch('duration', () => this.revalidateCoupon());
                 this.$watch('selectedZoneId', () => this.scheduleMoyasarRefresh());
+                this.$watch('selectedAddressId', () => this.scheduleMoyasarRefresh());
+                this.$watch('selectedBranchId', () => this.scheduleMoyasarRefresh());
                 this.$watch('deliveryType', (v) => {
                     if (v === 'pickup') {
                         this.syncPickupPhase();
@@ -2288,12 +2367,23 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                     .then(data => {
                         this.branches = data;
                         this.branchesLoading = false;
+                        if (this.deliveryType === 'pickup' && !this.selectedBranchId && this.branches.length === 1) {
+                            this.selectBranch(this.branches[0].id);
+                        }
                         this.syncPickupPhase();
                     })
                     .catch(() => { this.branches = []; this.branchesLoading = false; });
 
                 if (this.phoneVerified) {
                     await this.refreshCustomerFromServer();
+                }
+                const startDateInput = document.getElementById('start_date_input');
+                if (startDateInput) {
+                    this.startDate = String(startDateInput.value || this.startDate || '');
+                    startDateInput.addEventListener('change', () => {
+                        this.startDate = String(startDateInput.value || '');
+                        this.scheduleMoyasarRefresh();
+                    });
                 }
                 this.scheduleMoyasarRefresh();
             }
@@ -2328,6 +2418,10 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             @endif
             onChange: function(selectedDates, dateStr) {
                 updateDisplay(dateStr);
+                const input = document.getElementById('start_date_input');
+                if (input) {
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                }
             },
         });
 
