@@ -790,5 +790,12 @@
     "checkout.saved_addresses_hint": "Tap one to fill delivery details for this order, or set a new location on the map below.",
     "e.g. 05XXXXXXXX": "e.g. 05XXXXXXXX",
     "Used for delivery coordination on this address.": "Used for delivery coordination on this address.",
-    "Please enter a phone number for this address.": "Please enter a phone number for this address."
+    "Please enter a phone number for this address.": "Please enter a phone number for this address.",
+    "Save address": "Save address",
+    "Please select a city first.": "Please select a city first.",
+    "Add new address": "Add new address",
+    "Saving...": "Saving...",
+    "Please set a location on the map first.": "Please set a location on the map first.",
+    "Please confirm the address (district) on the map.": "Please confirm the address (district) on the map.",
+    "Fill the map and address fields below, then tap \"Save address\".": "Fill the map and address fields below, then tap \"Save address\"."
 }
