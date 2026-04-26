@@ -43,13 +43,13 @@ class Show extends Component
         }
 
         $data = $result['data'] ?? [];
-        $this->order = is_array($data) ? ($data['order'] ?? $data['data'] ?? $data) : [];
+        $this->order = is_array($data) ? ($data['order'] ?? $data['response'] ?? $data['data'] ?? $data) : [];
         if (! is_array($this->order)) $this->order = [];
 
         $track = $api->orderTrackings($this->orderId);
         $td = $track['data'] ?? [];
         if (is_array($td)) {
-            $rows = $td['data'] ?? $td;
+            $rows = $td['trackings'] ?? $td['items'] ?? $td['data'] ?? $td;
             $this->trackings = is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
         }
 

@@ -51,12 +51,42 @@ class Index extends Component
             return;
         }
 
-        $data = $result['data'] ?? [];
-        if (is_array($data)) {
-            $rows = $data['data'] ?? $data;
-            $this->orders = is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
-        }
+        $this->orders = $this->extractRows($result['data'] ?? null, ['orders', 'items', 'rows']);
         $this->loading = false;
+    }
+
+    /**
+     * @param  mixed  $data
+     * @param  array<int, string>  $keys
+     * @return array<int, array<string, mixed>>
+     */
+    private function extractRows(mixed $data, array $keys = []): array
+    {
+        if (! is_array($data)) {
+            return [];
+        }
+
+        if (array_is_list($data)) {
+            return array_values(array_filter($data, 'is_array'));
+        }
+
+        $candidateKeys = array_merge(['data', 'response'], $keys);
+        foreach ($candidateKeys as $key) {
+            $v = $data[$key] ?? null;
+            if (! is_array($v)) {
+                continue;
+            }
+
+            if (array_is_list($v)) {
+                return array_values(array_filter($v, 'is_array'));
+            }
+
+            if (isset($v['data']) && is_array($v['data']) && array_is_list($v['data'])) {
+                return array_values(array_filter($v['data'], 'is_array'));
+            }
+        }
+
+        return [];
     }
 
     public function render()

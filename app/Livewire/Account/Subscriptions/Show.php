@@ -69,11 +69,12 @@ class Show extends Component
 
         if (is_array($data)) {
             // Some APIs wrap the target subscription
-            $sub = $data['subscription'] ?? $data['data'] ?? $data;
+            $sub = $data['subscription'] ?? $data['response'] ?? $data['data'] ?? $data;
 
             // Days might be in subscription.days, data.days, or inside the subscription's menus
             $days = $sub['days']
                 ?? $sub['menu_days']
+                ?? $sub['subscription_days']
                 ?? $data['days']
                 ?? [];
 
