@@ -162,6 +162,18 @@
             {{-- Cart Component --}}
             <livewire:cart.cart-manager />
 
+            {{-- My Account quick link (visible once logged in via OTP) --}}
+            @if(session('external_api_token') && session('phone_verified'))
+                <a href="{{ route('account.dashboard') }}"
+                   class="header__icon-btn ms-2 inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition hover:border-blue-400 hover:text-blue-600"
+                   title="{{ __('account.my_account') }}"
+                   aria-label="{{ __('account.my_account') }}">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
+                    </svg>
+                </a>
+            @endif
+
             @foreach($headerActions as $action)
                 @if($action->type === 'button')
                     <a href="{{ $action->url }}" class="{{ $action->meta['classes'] ?? 'btn btn--primary' }}">

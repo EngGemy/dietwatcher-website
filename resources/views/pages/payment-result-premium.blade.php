@@ -78,10 +78,13 @@
                 </div>
 
                 <div class="flex flex-wrap items-center justify-center gap-3">
+                    <a href="{{ route('account.dashboard') }}" class="btn btn--primary btn--md btn--arrow">
+                        {{ __('account.go_to_dashboard') }}
+                    </a>
                     <a href="{{ route('payment.invoice', ['order' => $payment->order_number]) }}" class="btn btn--outline btn--md" id="invoice-download-link">
                         {{ __('Download Invoice') }}
                     </a>
-                    <a href="{{ route('home') }}" class="btn btn--primary btn--md">{{ __('Back to home') }}</a>
+                    <a href="{{ route('home') }}" class="btn btn--outline btn--md">{{ __('Back to home') }}</a>
                 </div>
             </div>
         @else

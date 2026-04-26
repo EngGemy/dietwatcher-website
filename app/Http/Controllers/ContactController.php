@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Contact;
 use App\Models\Settings\Setting;
+use App\Services\ExternalDataService;
 use App\Notifications\NewContactNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
@@ -15,7 +16,19 @@ class ContactController extends Controller
      */
     public function index()
     {
-        return view('pages.contact');
+        $settings = app(ExternalDataService::class)->getSettings();
+
+        return view('pages.contact', [
+            'apiContactPhone' => (string) ($settings['phone_number'] ?? ''),
+            'apiWhatsAppPhone' => (string) ($settings['whatsapp_number'] ?? ''),
+            'apiSupportEmail' => (string) ($settings['support_email'] ?? ''),
+            'apiFacebookUrl' => (string) ($settings['facebook_url'] ?? ''),
+            'apiTwitterUrl' => (string) ($settings['twitter_url'] ?? ''),
+            'apiInstagramUrl' => (string) ($settings['instagram_url'] ?? ''),
+            'apiTelegramUrl' => (string) ($settings['telegram_url'] ?? ''),
+            'apiYoutubeUrl' => (string) ($settings['youtube_url'] ?? ''),
+            'apiSnapchatUrl' => (string) ($settings['snapchat_url'] ?? ''),
+        ]);
     }
 
     /**

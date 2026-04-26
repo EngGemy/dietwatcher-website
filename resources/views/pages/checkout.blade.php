@@ -81,7 +81,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                                         readonly
                                         placeholder="{{ __('Select day') }}"
                                         class="date-picker-input @error('start_date') date-picker-input--error @enderror"
-                                        value="{{ old('start_date', date('Y-m-d', strtotime('+1 day'))) }}"
+                                        value="{{ old('start_date', now()->addHours(48)->format('Y-m-d')) }}"
                                     />
                                     <div class="date-picker-icon">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -90,7 +90,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                                     </div>
                                     <div class="date-picker-label" id="date_display">
                                         @php
-                                            $defaultDate = old('start_date', date('Y-m-d', strtotime('+1 day')));
+                                            $defaultDate = old('start_date', now()->addHours(48)->format('Y-m-d'));
                                             $dateObj = \Carbon\Carbon::parse($defaultDate);
                                         @endphp
                                         <span class="date-picker-label__day">{{ $dateObj->format('d') }}</span>
@@ -1241,7 +1241,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             deliveryType: '{{ old('delivery_type', 'home') }}',
             selectedPlanId: @json((int) (collect($cart)->first()['id'] ?? 0)),
             hasCartItems: @json(!empty($cart)),
-            startDate: '{{ old('start_date', date('Y-m-d', strtotime('+1 day'))) }}',
+            startDate: '{{ old('start_date', now()->addHours(48)->format('Y-m-d')) }}',
             vatRate: {{ $vatRate }},
             deliveryFeeAmount: {{ $deliveryFeeAmount }},
             discount: 0,
@@ -2455,10 +2455,27 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             }
         }
 
+        const startDateInput = document.getElementById('start_date_input');
+        const minDate48h = new Date(Date.now() + (48 * 60 * 60 * 1000));
+        const minDateStr = [
+            minDate48h.getFullYear(),
+            String(minDate48h.getMonth() + 1).padStart(2, '0'),
+            String(minDate48h.getDate()).padStart(2, '0'),
+        ].join('-');
+
+        // Enforce a real 48h minimum in the user's local timezone.
+        if (startDateInput) {
+            const currentValue = String(startDateInput.value || '').trim();
+            if (! currentValue || currentValue < minDateStr) {
+                startDateInput.value = minDateStr;
+                updateDisplay(minDateStr);
+            }
+        }
+
         flatpickr('#start_date_input', {
             dateFormat: 'Y-m-d',
-            minDate: 'today',
-            defaultDate: '{{ old('start_date', date('Y-m-d', strtotime('+1 day'))) }}',
+            minDate: minDateStr,
+            defaultDate: (startDateInput && startDateInput.value) ? startDateInput.value : minDateStr,
             disableMobile: true,
             @if($locale === 'ar')
             locale: 'ar',

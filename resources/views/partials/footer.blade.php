@@ -34,7 +34,9 @@
                     @endif
                     @if($socialYouTube)
                         <a href="{{ $socialYouTube }}" class="footer__social-link footer__social-link--wow" data-platform="youtube" data-tooltip="{{ __('YouTube') }}" target="_blank" rel="noopener" aria-label="{{ __('YouTube') }}">
-                            <img src="{{ asset('assets/images/icons/telegram.svg') }}" alt="" class="footer__social-icon-img" style="width:20px;height:20px;object-fit:contain;filter:brightness(0) invert(1);" />
+                            <svg class="icon footer__social-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M21.6 7.2a2.7 2.7 0 0 0-1.9-1.9C18 4.8 12 4.8 12 4.8s-6 0-7.7.5A2.7 2.7 0 0 0 2.4 7.2 28 28 0 0 0 2 12a28 28 0 0 0 .4 4.8 2.7 2.7 0 0 0 1.9 1.9c1.7.5 7.7.5 7.7.5s6 0 7.7-.5a2.7 2.7 0 0 0 1.9-1.9A28 28 0 0 0 22 12a28 28 0 0 0-.4-4.8ZM10 15.5v-7l6 3.5-6 3.5Z"/>
+                            </svg>
                         </a>
                     @endif
                 </div>
