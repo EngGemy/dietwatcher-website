@@ -345,11 +345,52 @@ class CheckoutController extends Controller
             'name' => 'required|string|max:255',
             'phone' => 'required|string|max:20',
             'branch_id' => 'required_if:delivery_type,pickup|nullable|integer',
-            'zone_id' => 'required_if:delivery_type,home|nullable|integer',
+            // Saved-address flow may provide selected_address_id only.
+            'zone_id' => 'nullable|integer',
+            'selected_address_id' => 'nullable|integer',
             'street' => 'required_if:delivery_type,home|nullable|string|max:500',
             'building' => 'nullable|string|max:500',
             'delivery_pickup_type' => 'nullable|string|max:50',
         ])->validate();
+
+        if (
+            ($validated['delivery_type'] ?? '') === 'home'
+            && empty($validated['zone_id'])
+            && ! empty($validated['selected_address_id'])
+        ) {
+            $token = session('external_api_token');
+            if (is_string($token) && $token !== '') {
+                $savedAddresses = app(ApiAuthService::class)->getAddresses($token);
+                if (is_array($savedAddresses)) {
+                    $picked = collect($savedAddresses)->first(
+                        fn ($a) => (int) ($a['id'] ?? 0) === (int) $validated['selected_address_id']
+                    );
+                    if (is_array($picked)) {
+                        $resolvedZoneId = $picked['city']['id']
+                            ?? $picked['city_id']
+                            ?? $picked['zone_id']
+                            ?? $picked['zone']['id']
+                            ?? $picked['district']['city_id']
+                            ?? $picked['district']['zone_id']
+                            ?? $picked['district']['city']['id']
+                            ?? $picked['district']['zone']['id']
+                            ?? null;
+                        if ($resolvedZoneId) {
+                            $validated['zone_id'] = (int) $resolvedZoneId;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (
+            ($validated['delivery_type'] ?? '') === 'home'
+            && empty($validated['zone_id'])
+        ) {
+            return redirect()->back()
+                ->withErrors(['zone_id' => __('Please select a city or a saved address.')])
+                ->withInput();
+        }
 
         if ($hasPlanItems) {
             $validated['duration'] = 'once';
@@ -757,7 +798,10 @@ class CheckoutController extends Controller
             'coupon' => 'nullable|string|max:50',
             'promocode_name' => 'nullable|string|max:50',
             'branch_id' => 'required_if:delivery_type,pickup|nullable|integer',
-            'zone_id' => 'required_if:delivery_type,home|nullable|integer',
+            // Do not require zone_id at validator level for home delivery:
+            // saved-address flow may only send selected_address_id and we
+            // resolve zone_id server-side below.
+            'zone_id' => 'nullable|integer',
             'selected_address_id' => 'nullable|integer',
         ];
         if ($hasPlanItems) {
