@@ -763,10 +763,10 @@ class ExternalDataService
             'ingredients' => $meal['ingredients'] ?? [],
             'benefits' => $meal['benefits'] ?? $meal['health_benefits'] ?? '',
             'group_id' => $groupId,
-            'calories' => $this->nutritionFloat($meal, 'calories', $nutrition),
-            'protein' => $this->nutritionFloat($meal, 'protein', $nutrition),
-            'carbs' => $this->nutritionFloat($meal, 'carbs', $nutrition),
-            'fat' => $this->nutritionFloat($meal, 'fat', $nutrition),
+            'calories' => $this->nutritionFloatAliases($meal, ['calories', 'kcal', 'calorie'], $nutrition),
+            'protein' => $this->nutritionFloatAliases($meal, ['protein', 'proteins', 'protein_g'], $nutrition),
+            'carbs' => $this->nutritionFloatAliases($meal, ['carbs', 'carb', 'carbohydrates', 'carbohydrate', 'carbs_g'], $nutrition),
+            'fat' => $this->nutritionFloatAliases($meal, ['fat', 'fats', 'fat_g', 'fats_g', 'lipids'], $nutrition),
         ];
     }
 
@@ -783,6 +783,65 @@ class ExternalDataService
             return (float) $v;
         }
         if (is_string($v) && preg_match('/([\d.]+)/', $v, $m)) {
+            return (float) $m[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * Read nutrition value across multiple possible API keys/shapes.
+     *
+     * @param  array<string, mixed>  $meal
+     * @param  array<int, string>  $keys
+     * @param  array<string, mixed>  $nutrition
+     */
+    protected function nutritionFloatAliases(array $meal, array $keys, array $nutrition): ?float
+    {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $meal)) {
+                $parsed = $this->parseNutritionValue($meal[$key]);
+                if ($parsed !== null) {
+                    return $parsed;
+                }
+            }
+
+            if (array_key_exists($key, $nutrition)) {
+                $parsed = $this->parseNutritionValue($nutrition[$key]);
+                if ($parsed !== null) {
+                    return $parsed;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  mixed  $value
+     */
+    protected function parseNutritionValue(mixed $value): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return (float) $value;
+        }
+
+        if (is_array($value)) {
+            foreach (['amount', 'value', 'total'] as $k) {
+                if (array_key_exists($k, $value)) {
+                    $nested = $this->parseNutritionValue($value[$k]);
+                    if ($nested !== null) {
+                        return $nested;
+                    }
+                }
+            }
+        }
+
+        if (is_string($value) && preg_match('/([\d.]+)/', $value, $m)) {
             return (float) $m[1];
         }
 

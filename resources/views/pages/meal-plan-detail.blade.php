@@ -140,6 +140,34 @@ if ($firstMacros) {
     ];
 }
 
+// If calorie-row macros are missing, fallback to profile-level macros.
+if (($nutrition['carbs']['amount'] ?? '—') === '—' && ($nutrition['protein']['amount'] ?? '—') === '—' && ($nutrition['fat']['amount'] ?? '—') === '—') {
+    $profileProtein = (float) ($plan->protein ?? 0);
+    $profileCarbs = (float) ($plan->carbs ?? 0);
+    $profileFat = (float) ($plan->fats ?? $plan->fat ?? 0);
+    $profileTotal = $profileProtein + $profileCarbs + $profileFat;
+
+    if ($profileTotal > 0) {
+        $nutrition = [
+            'carbs' => [
+                'amount' => rtrim(rtrim(number_format($profileCarbs, 2, '.', ''), '0'), '.').'g',
+                'percent' => (int) round(($profileCarbs / $profileTotal) * 100),
+                'color' => 'bg-green',
+            ],
+            'protein' => [
+                'amount' => rtrim(rtrim(number_format($profileProtein, 2, '.', ''), '0'), '.').'g',
+                'percent' => (int) round(($profileProtein / $profileTotal) * 100),
+                'color' => 'bg-yellow',
+            ],
+            'fat' => [
+                'amount' => rtrim(rtrim(number_format($profileFat, 2, '.', ''), '0'), '.').'g',
+                'percent' => (int) round(($profileFat / $profileTotal) * 100),
+                'color' => 'bg-red',
+            ],
+        ];
+    }
+}
+
 // Default meal includes based on type (legacy UI only)
 $mealIncludes = [
     'breakfast' => [
@@ -175,9 +203,9 @@ if ($firstCalRange === '' && isset($calorieOptions[0]['range'])) {
     $firstCalRange = (string) $calorieOptions[0]['range'];
 }
 
-// Calculate start date (next day)
-$startDate = now()->addDay()->format('Y-m-d');
-$startDateDisplay = now()->addDay()->format('D d M');
+// Calculate earliest allowed start date (48 hours from now)
+$startDate = now()->addHours(48)->format('Y-m-d');
+$startDateDisplay = now()->addHours(48)->format('D d M');
 
 // Prices from API are already VAT-inclusive (like mobile app)
 $planPrice = $plan->price ?? 2200;
@@ -797,15 +825,35 @@ function planDetail() {
             this.$watch('selectedCalories', (val) => {
                 const cal = this.calories.find(c => c.range === val);
                 if (cal) this.updateNutrition(cal);
+                if (!this.hasNumericNutrition()) {
+                    this.applyEstimatedNutritionFromRange(val);
+                }
             });
+
+            await this.hydrateNutritionFromProgramMeals();
+            if (!this.hasNumericNutrition()) {
+                this.applyEstimatedNutritionFromRange(this.selectedCalories);
+            }
         },
 
         updateNutrition(cal) {
             if (cal && cal.macros) {
                 const m = cal.macros;
-                const protein = m.protein || 0;
-                const carbs = m.carbs || 0;
-                const fat = m.fats || m.fat || 0;
+                const n = (v) => {
+                    if (v == null) return 0;
+                    if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+                    if (typeof v === 'string') {
+                        const match = v.match(/[\d.]+/);
+                        return match ? parseFloat(match[0]) : 0;
+                    }
+                    if (typeof v === 'object') {
+                        return n(v.amount ?? v.value ?? v.total ?? null);
+                    }
+                    return 0;
+                };
+                const protein = n(m.protein ?? m.proteins ?? m.protein_g ?? null);
+                const carbs = n(m.carbs ?? m.carb ?? m.carbohydrates ?? m.carbs_g ?? null);
+                const fat = n(m.fats ?? m.fat ?? m.fat_g ?? m.fats_g ?? null);
                 const total = protein + carbs + fat;
                 this.currentNutrition = {
                     carbs: carbs + 'g',
@@ -816,6 +864,103 @@ function planDetail() {
                     fatPercent: total > 0 ? Math.round(fat / total * 100) : 33,
                 };
             }
+        },
+
+        hasNumericNutrition() {
+            const parse = (s) => {
+                const match = String(s ?? '').match(/[\d.]+/);
+                return match ? parseFloat(match[0]) : 0;
+            };
+            const p = parse(this.currentNutrition.protein);
+            const c = parse(this.currentNutrition.carbs);
+            const f = parse(this.currentNutrition.fat);
+            return (p + c + f) > 0;
+        },
+
+        parseCaloriesRange(range) {
+            const str = String(range || '').trim();
+            if (!str) return 0;
+            const nums = str.match(/[\d.]+/g) || [];
+            if (nums.length === 0) return 0;
+            if (nums.length === 1) return parseFloat(nums[0]) || 0;
+            const min = parseFloat(nums[0]) || 0;
+            const max = parseFloat(nums[1]) || 0;
+            if (min > 0 && max > 0) return (min + max) / 2;
+            return Math.max(min, max);
+        },
+
+        applyRawNutrition(protein, carbs, fat) {
+            const p = Number(protein) || 0;
+            const c = Number(carbs) || 0;
+            const f = Number(fat) || 0;
+            const total = p + c + f;
+            this.currentNutrition = {
+                carbs: c + 'g',
+                carbsPercent: total > 0 ? Math.round((c / total) * 100) : 33,
+                protein: p + 'g',
+                proteinPercent: total > 0 ? Math.round((p / total) * 100) : 33,
+                fat: f + 'g',
+                fatPercent: total > 0 ? Math.round((f / total) * 100) : 33,
+            };
+        },
+
+        applyEstimatedNutritionFromRange(range) {
+            const kcal = this.parseCaloriesRange(range);
+            if (kcal <= 0) {
+                return;
+            }
+
+            // Fallback when API doesn't provide macros.
+            const proteinKcal = kcal * 0.30;
+            const carbsKcal = kcal * 0.40;
+            const fatKcal = kcal * 0.30;
+
+            const proteinG = Math.round((proteinKcal / 4) * 10) / 10;
+            const carbsG = Math.round((carbsKcal / 4) * 10) / 10;
+            const fatG = Math.round((fatKcal / 9) * 10) / 10;
+
+            this.applyRawNutrition(proteinG, carbsG, fatG);
+        },
+
+        async hydrateNutritionFromProgramMeals() {
+            // Final fallback: derive macros from program meals endpoint when calories
+            // endpoint does not include macros payload.
+            if (this.hasNumericNutrition()) {
+                return;
+            }
+            try {
+                const res = await fetch('{{ route('api.plan.meals', $plan->id) }}');
+                const rows = await res.json();
+                const list = Array.isArray(rows) ? rows : [];
+                const n = (v) => {
+                    if (v == null) return 0;
+                    if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+                    if (typeof v === 'string') {
+                        const match = v.match(/[\d.]+/);
+                        return match ? parseFloat(match[0]) : 0;
+                    }
+                    if (typeof v === 'object') {
+                        return n(v.amount ?? v.value ?? v.total ?? null);
+                    }
+                    return 0;
+                };
+
+                const withMacros = list.find((row) => {
+                    const protein = n(row?.protein ?? row?.proteins ?? row?.nutrition?.protein ?? null);
+                    const carbs = n(row?.carbs ?? row?.carbohydrates ?? row?.nutrition?.carbs ?? null);
+                    const fat = n(row?.fats ?? row?.fat ?? row?.nutrition?.fats ?? row?.nutrition?.fat ?? null);
+                    return (protein + carbs + fat) > 0;
+                });
+
+                if (withMacros) {
+                    const protein = n(withMacros?.protein ?? withMacros?.proteins ?? withMacros?.nutrition?.protein ?? null);
+                    const carbs = n(withMacros?.carbs ?? withMacros?.carbohydrates ?? withMacros?.nutrition?.carbs ?? null);
+                    const fat = n(withMacros?.fats ?? withMacros?.fat ?? withMacros?.nutrition?.fats ?? withMacros?.nutrition?.fat ?? null);
+                    if ((protein + carbs + fat) > 0) {
+                        this.applyRawNutrition(protein, carbs, fat);
+                    }
+                }
+            } catch (e) {}
         },
 
         onDurationChange(dur) {

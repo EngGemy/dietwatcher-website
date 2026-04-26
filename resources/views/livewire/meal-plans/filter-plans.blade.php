@@ -155,7 +155,7 @@
                             <p>{{ $plan['duration_days'] }} {{ __('Days') }}</p>
                             &bull;
                         @endif
-                        <p>{{ __('Starting From') }} <time>{{ now()->format('d M Y') }}</time></p>
+                        <p>{{ __('Starting From') }} <time>{{ now()->addHours(48)->format('d M Y') }}</time></p>
                     </div>
 
                     <div class="plan-card__footer plan-card__footer--premium">

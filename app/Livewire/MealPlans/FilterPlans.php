@@ -11,12 +11,20 @@ use Livewire\Component;
 class FilterPlans extends Component
 {
     public ?int $selectedCategory = null;
+    public ?int $initialCategoryId = null;
     public string $selectedMealType = '';
     public string $pageTitle = '';
     public string $pageDescription = '';
 
     public function mount(): void
     {
+        $requestedCategoryId = request()->integer('category');
+        if ($requestedCategoryId > 0) {
+            $this->selectedCategory = $requestedCategoryId;
+        } elseif (($this->initialCategoryId ?? 0) > 0) {
+            $this->selectedCategory = $this->initialCategoryId;
+        }
+
         $locale = app()->getLocale();
 
         $this->pageTitle = Setting::getValue('meal_plans_title_' . $locale,

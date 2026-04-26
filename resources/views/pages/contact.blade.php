@@ -2,6 +2,19 @@
 
 @section('title', __('Contact Us'))
 
+@php
+    $contactPhoneDisplay = $apiContactPhone ?: '920015428';
+    $contactPhoneHref = preg_replace('/\D+/', '', $contactPhoneDisplay);
+    $contactPhoneHref = $contactPhoneHref ? ('+' . ltrim($contactPhoneHref, '+')) : '+966920015428';
+
+    $whatsRaw = $apiWhatsAppPhone ?: '00966920015428';
+    $whatsDigits = preg_replace('/\D+/', '', $whatsRaw);
+    $whatsHref = $whatsDigits ? ('https://wa.me/' . $whatsDigits) : '';
+    $whatsDisplay = $whatsRaw ?: '00966920015428';
+
+    $contactEmailDisplay = $apiSupportEmail ?: 'callcenter@diet-watchers.sa';
+@endphp
+
 @section('content')
     <section class="bg-gray-200 pt-20 pb-28">
         <div class="container mb-10 md:mb-16">
@@ -130,7 +143,7 @@
                                 </div>
                                 <div class="flex-1">
                                     <h4 class="font-semibold">{{ __('Email Address') }}</h4>
-                                    <a href="mailto:{{ $contactEmail ?: 'info@diet-watchers.com' }}">{{ $contactEmail ?: 'info@diet-watchers.com' }}</a>
+                                    <a href="mailto:{{ $contactEmailDisplay }}">{{ $contactEmailDisplay }}</a>
                                 </div>
                             </div>
 
@@ -142,9 +155,23 @@
                                 </div>
                                 <div class="flex-1">
                                     <h4 class="font-semibold">{{ __('Phone Number') }}</h4>
-                                    <a href="tel:+966920015428">(966) 920015428</a>
+                                    <a href="tel:{{ $contactPhoneHref }}">{{ $contactPhoneDisplay }}</a>
                                 </div>
                             </div>
+
+                            @if($whatsHref)
+                                <div class="flex items-center gap-4 rounded-md bg-gray-200 p-5">
+                                    <div class="inline-flex size-12 items-center justify-center rounded-sm border border-gray-300">
+                                        <svg class="size-7">
+                                            <use href="{{ asset('assets/images/icons/sprite.svg#messages') }}"></use>
+                                        </svg>
+                                    </div>
+                                    <div class="flex-1">
+                                        <h4 class="font-semibold">{{ __('WhatsApp') }}</h4>
+                                        <a href="{{ $whatsHref }}" target="_blank" rel="noopener">{{ $whatsDisplay }}</a>
+                                    </div>
+                                </div>
+                            @endif
 
                             <div class="flex items-center gap-4 rounded-md bg-gray-200 p-5">
                                 <div class="inline-flex size-12 items-center justify-center rounded-sm border border-gray-300">
@@ -157,6 +184,27 @@
                                     <p>{{ __('Riyadh, Saudi Arabia') }}</p>
                                 </div>
                             </div>
+                        </div>
+
+                        <div class="mt-6 flex flex-wrap gap-3">
+                            @if(!empty($apiInstagramUrl))
+                                <a href="{{ $apiInstagramUrl }}" target="_blank" rel="noopener" class="btn btn--outline btn--sm">Instagram</a>
+                            @endif
+                            @if(!empty($apiFacebookUrl))
+                                <a href="{{ $apiFacebookUrl }}" target="_blank" rel="noopener" class="btn btn--outline btn--sm">Facebook</a>
+                            @endif
+                            @if(!empty($apiTwitterUrl))
+                                <a href="{{ $apiTwitterUrl }}" target="_blank" rel="noopener" class="btn btn--outline btn--sm">Twitter</a>
+                            @endif
+                            @if(!empty($apiTelegramUrl))
+                                <a href="{{ $apiTelegramUrl }}" target="_blank" rel="noopener" class="btn btn--outline btn--sm">TikTok</a>
+                            @endif
+                            @if(!empty($apiYoutubeUrl))
+                                <a href="{{ $apiYoutubeUrl }}" target="_blank" rel="noopener" class="btn btn--outline btn--sm">YouTube</a>
+                            @endif
+                            @if(!empty($apiSnapchatUrl))
+                                <a href="{{ $apiSnapchatUrl }}" target="_blank" rel="noopener" class="btn btn--outline btn--sm">Snapchat</a>
+                            @endif
                         </div>
                     </div>
                 </div>

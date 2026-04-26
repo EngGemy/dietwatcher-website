@@ -94,6 +94,12 @@ Route::get('/api/plan/{id}/calories', function (int $id) {
     return response()->json($service->getPlanCalories($id));
 })->name('api.plan.calories');
 
+Route::get('/api/plan/{id}/meals', function (int $id) {
+    $service = app(\App\Services\ExternalDataService::class);
+
+    return response()->json($service->getProgramMeals($id));
+})->name('api.plan.meals');
+
 Route::get('/api/zones', function () {
     $service = app(\App\Services\ExternalDataService::class);
 
@@ -113,9 +119,11 @@ Route::get('/terms-and-conditions', fn () => view('pages.terms'))->name('terms')
 // OTP verification
 Route::post('/otp/send', [\App\Http\Controllers\OtpController::class, 'send'])
     ->middleware('throttle:10,1')
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])
     ->name('otp.send');
 Route::post('/otp/verify', [\App\Http\Controllers\OtpController::class, 'verify'])
     ->middleware('throttle:20,1')
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])
     ->name('otp.verify');
 
 Route::post('/checkout/moyasar-session', [\App\Http\Controllers\CheckoutController::class, 'moyasarSession'])
@@ -142,3 +150,19 @@ Route::get('/payment/invoice', [\App\Http\Controllers\PaymentController::class, 
 Route::get('/api/districts', function () {
     return response()->json(app(\App\Services\ApiAuthService::class)->getDistricts());
 })->name('api.districts');
+
+// ─── Customer account area ──────────────────────────────────────────
+Route::prefix('account')->group(function () {
+    Route::get('/login',  [\App\Http\Controllers\Account\AccountAuthController::class, 'showLogin'])->name('account.login');
+    Route::post('/logout', [\App\Http\Controllers\Account\AccountAuthController::class, 'logout'])->middleware('customer.auth')->name('account.logout');
+
+    Route::middleware('customer.auth')->group(function () {
+        Route::get('/',                                  \App\Livewire\Account\Dashboard::class)->name('account.dashboard');
+        Route::get('/subscriptions',                     \App\Livewire\Account\Subscriptions\Index::class)->name('account.subscriptions.index');
+        Route::get('/subscriptions/{id}',                \App\Livewire\Account\Subscriptions\Show::class)->whereNumber('id')->name('account.subscriptions.show');
+        Route::get('/orders',                            \App\Livewire\Account\Orders\Index::class)->name('account.orders.index');
+        Route::get('/orders/{id}',                       \App\Livewire\Account\Orders\Show::class)->whereNumber('id')->name('account.orders.show');
+        Route::get('/wallet',                            \App\Livewire\Account\Wallet::class)->name('account.wallet');
+        Route::get('/profile',                           \App\Livewire\Account\Profile::class)->name('account.profile');
+    });
+});
