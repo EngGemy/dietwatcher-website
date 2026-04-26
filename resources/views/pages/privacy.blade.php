@@ -1,19 +1,22 @@
 @extends('layouts.app')
 
-@section('title', __('Privacy Policy') . ' - ' . config('app.name'))
+@section('title', ($dynamicTitle ?? __('Privacy Policy')) . ' - ' . config('app.name'))
 
 @section('content')
     <section class="bg-gray-200 pt-20 pb-28">
         <div class="container">
             <header class="section-header max-w-3xl">
-                <h2 class="section-header__title">{{ __('Privacy Policy') }}</h2>
+                <h2 class="section-header__title">{{ $dynamicTitle ?? __('Privacy Policy') }}</h2>
                 <p class="section-header__desc">
-                    {{ __('Your privacy matters to us. This policy explains how we collect, use, and protect your personal information.') }}
+                    {{ $dynamicExcerpt ?: __('Your privacy matters to us. This policy explains how we collect, use, and protect your personal information.') }}
                 </p>
             </header>
 
             <div class="mx-auto max-w-4xl rounded-md bg-white p-6 md:p-10 text-start">
                 <div class="legal-body max-w-none space-y-5 text-gray-800 [&_h3]:mt-8 [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-gray-900 [&_h4]:mt-4 [&_h4]:font-semibold [&_h4]:text-gray-900 [&_p]:mb-3 [&_p]:leading-relaxed [&_ul]:my-3 [&_ul]:list-disc [&_ul]:ps-5 [&_li]:my-1 [&_a]:text-blue-600 [&_a]:underline">
+                    @if(!empty($dynamicHtml))
+                        {!! $dynamicHtml !!}
+                    @else
 
                     <h3>{{ __('Introduction') }}</h3>
                     <p>{{ __('Diet Watchers ("we", "us", or "our") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our website and mobile application.') }}</p>
@@ -78,6 +81,7 @@
                         <li>{{ __('Email') }}: <a href="mailto:info@diet-watchers.sa">info@diet-watchers.sa</a></li>
                         <li>{{ __('Phone') }}: <a href="tel:+966920015428">(966) 920015428</a></li>
                     </ul>
+                    @endif
 
                 </div>
             </div>

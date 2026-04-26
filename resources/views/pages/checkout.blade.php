@@ -282,13 +282,20 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                                 <ul class="max-h-64 space-y-2 overflow-y-auto" x-show="!addingNewAddress">
                                     <template x-for="addr in savedAddresses" :key="addr.id">
                                         <li>
-                                            <button type="button"
-                                                    class="w-full rounded-lg border px-3 py-2.5 text-left text-sm text-gray-800 transition hover:border-blue-400 hover:bg-blue-50/50"
-                                                    :class="String(addr.id) === String(selectedAddressId) ? 'border-blue-500 bg-white shadow-sm ring-1 ring-blue-200' : 'border-gray-200 bg-white'"
-                                                    @click="applySavedAddress(addr)">
-                                                <span class="line-clamp-2" x-text="addr.description || addr.title || ''"></span>
-                                                <span class="mt-1 block text-xs text-gray-500" x-text="savedAddressDistrict(addr)"></span>
-                                            </button>
+                                            <div class="w-full rounded-lg border px-3 py-2.5 text-sm text-gray-800 transition hover:border-blue-400 hover:bg-blue-50/50"
+                                                 :class="String(addr.id) === String(selectedAddressId) ? 'border-blue-500 bg-white shadow-sm ring-1 ring-blue-200' : 'border-gray-200 bg-white'">
+                                                <div class="flex items-start justify-between gap-3">
+                                                    <div class="min-w-0 flex-1">
+                                                        <span class="line-clamp-2 block text-left" x-text="addr.description || addr.title || ''"></span>
+                                                        <span class="mt-1 block text-xs text-gray-500 text-left" x-text="savedAddressDistrict(addr)"></span>
+                                                    </div>
+                                                    <button type="button"
+                                                            class="shrink-0 rounded-md border border-blue-500 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
+                                                            @click="selectSavedAddress(addr)">
+                                                        {{ __('Select') }} / اختيار
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </li>
                                     </template>
                                 </ul>
@@ -301,7 +308,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                     </div>
 
                     {{-- Delivery address: map (home) or branch (pickup) — toggles live in Select Options --}}
-                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5">
+                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-ref="paymentCard">
                         <input type="hidden" name="selected_address_id" :value="selectedAddressId || ''" :disabled="deliveryType !== 'home'" />
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Delivery Address') }}</h3>
 
@@ -1792,6 +1799,13 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                 this.$nextTick(() => this.scheduleMoyasarRefresh());
             },
 
+            selectSavedAddress(addr) {
+                this.applySavedAddress(addr);
+                this.$nextTick(() => {
+                    this.$refs.paymentCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            },
+
             async refreshCustomerFromServer() {
                 try {
                     const res = await fetch('{{ route('checkout.customer-state') }}', {
@@ -1811,10 +1825,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                         const isNewUser = !!(d.is_continue);
                         this.isContinueUser = isNewUser;
                         this.showNameField = isNewUser || !hasName;
-                        // Auto-apply first saved address if existing user with addresses
-                        if (!isNewUser && this.savedAddresses.length > 0 && !this.addressStreet) {
-                            this.$nextTick(() => this.applySavedAddress(this.savedAddresses[0]));
-                        }
+                        // Keep selection manual: user confirms address with "Select / اختيار" button.
                     }
                 } catch (e) {}
             },
@@ -2111,13 +2122,8 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                             this.showNameField = true;
                         }
 
-                        // Auto-apply first saved address for existing users
-                        if (!isNewUser && this.savedAddresses.length > 0) {
-                            this.$nextTick(() => {
-                                this.applySavedAddress(this.savedAddresses[0]);
-                                this.$refs.checkoutUserCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            });
-                        } else if (isNewUser) {
+                        // Keep selection manual: user confirms address with "Select / اختيار" button.
+                        if (isNewUser) {
                             this.$nextTick(() => this.$refs.checkoutUserCard?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
                         }
 

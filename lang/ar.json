@@ -1134,5 +1134,17 @@
     "account.birthdate": "تاريخ الميلاد",
     "account.save_changes": "حفظ التغييرات",
     "account.profile_saved": "تم تحديث الملف الشخصي.",
-    "account.go_to_dashboard": "الذهاب إلى لوحة التحكم"
+    "account.go_to_dashboard": "الذهاب إلى لوحة التحكم",
+    "payment.confirmed_title": "تم تأكيد اشتراكك",
+    "payment.confirmed_subtitle": "شكرًا لك! اشتراكك أصبح فعالًا وجدول التوصيل جاهز.",
+    "payment.meal_type": "نوع الوجبة",
+    "payment.order_number_label": "رقم الطلب",
+    "payment.as_selected": "حسب الاختيار",
+    "payment.confirmed_notice": "تم إرسال رسالة تأكيد الاشتراك إلى بريدك الإلكتروني/رقم هاتفك.",
+    "payment.manage_meals_title": "تحكم بوجباتك من التطبيق",
+    "payment.manage_meals_subtitle": "بدّل الوجبات، تتبع السعرات، حدّث عنوانك، وأوقف اشتراكك مؤقتًا من هاتفك.",
+    "payment.download_invoice": "تحميل الفاتورة",
+    "payment.subscription_plan": "خطة الاشتراك",
+    "payment.mixed": "متنوع",
+    "Once": "مرة واحدة"
 }
