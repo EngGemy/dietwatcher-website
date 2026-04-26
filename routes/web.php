@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\BlogController;
 use App\Http\Controllers\MarketMealController;
 use App\Http\Controllers\MealPlanController;
+use App\Http\Controllers\PageContentController;
 use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
 
@@ -113,8 +114,8 @@ Route::get('/api/branches', function () {
 })->name('api.branches');
 
 // Legal pages
-Route::get('/privacy-policy', fn () => view('pages.privacy'))->name('privacy');
-Route::get('/terms-and-conditions', fn () => view('pages.terms'))->name('terms');
+Route::get('/privacy-policy', [PageContentController::class, 'privacy'])->name('privacy');
+Route::get('/terms-and-conditions', [PageContentController::class, 'terms'])->name('terms');
 
 // OTP verification
 Route::post('/otp/send', [\App\Http\Controllers\OtpController::class, 'send'])

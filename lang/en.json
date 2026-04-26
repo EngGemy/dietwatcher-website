@@ -927,5 +927,17 @@
     "account.birthdate": "Birthdate",
     "account.save_changes": "Save changes",
     "account.profile_saved": "Profile updated.",
-    "account.go_to_dashboard": "Go to my dashboard"
+    "account.go_to_dashboard": "Go to my dashboard",
+    "payment.confirmed_title": "Your Subscription Is Confirmed",
+    "payment.confirmed_subtitle": "Thank you! Your subscription is active and your delivery schedule is ready.",
+    "payment.meal_type": "Meal type",
+    "payment.order_number_label": "Order Number",
+    "payment.as_selected": "As selected",
+    "payment.confirmed_notice": "Subscription confirmation message sent to your Email/Phone number.",
+    "payment.manage_meals_title": "Manage Your Meals in the App",
+    "payment.manage_meals_subtitle": "Swap meals, track calories, update your address, and pause your subscription from your phone.",
+    "payment.download_invoice": "Download Invoice",
+    "payment.subscription_plan": "Subscription plan",
+    "payment.mixed": "Mixed",
+    "Once": "Once"
 }

@@ -8,9 +8,9 @@
         @if($success)
             @php
                 $firstItem = collect($payment->cart_items ?? [])->first();
-                $planTitle = $firstItem['name'] ?? __('Subscription plan');
+                $planTitle = $firstItem['name'] ?? __('payment.subscription_plan');
                 $itemOptions = $firstItem['options'] ?? [];
-                $mealType = $itemOptions['mealType'] ?? __('Mixed');
+                $mealType = $itemOptions['mealType'] ?? __('payment.mixed');
                 $calories = $itemOptions['calories'] ?? null;
                 $durationLabel = $payment->duration ? __(ucfirst($payment->duration)) : __('Monthly');
                 $startDateLabel = $payment->start_date ?: now()->format('d M Y');
@@ -19,9 +19,9 @@
             <div class="confirm-page space-y-8" data-confirm-page>
                 <header class="confirm-hero text-center md:text-start">
                     <img src="{{ asset('assets/images/icons/check-success.svg') }}" class="confirm-check mb-3 size-24 md:size-32" alt="" />
-                    <h2 class="section-header__title">{{ __('Your Subscription Is Confirmed') }}</h2>
+                    <h2 class="section-header__title">{{ __('payment.confirmed_title') }}</h2>
                     <p class="section-header__desc max-w-none">
-                        {{ __('Thank you! Your subscription is active and your delivery schedule is ready.') }}
+                        {{ __('payment.confirmed_subtitle') }}
                     </p>
                 </header>
 
@@ -36,9 +36,9 @@
 
                     <div class="grid grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-0">
                         <div class="space-y-3 pr-0 md:pr-10">
-                            <div class="confirm-row"><span>{{ __('Meal type') }}</span><span>{{ __(ucfirst($mealType)) }}</span></div>
-                            <div class="confirm-row"><span>{{ __('Calories') }}</span><span>{{ $calories ? $calories : __('As selected') }}</span></div>
-                            <div class="confirm-row"><span>{{ __('Order Number') }}</span><span>{{ $payment->order_number }}</span></div>
+                            <div class="confirm-row"><span>{{ __('payment.meal_type') }}</span><span>{{ __(ucfirst($mealType)) }}</span></div>
+                            <div class="confirm-row"><span>{{ __('Calories') }}</span><span>{{ $calories ? $calories : __('payment.as_selected') }}</span></div>
+                            <div class="confirm-row"><span>{{ __('payment.order_number_label') }}</span><span>{{ $payment->order_number }}</span></div>
                         </div>
 
                         <div class="space-y-3 pl-0 md:border-l md:border-gray-300 md:pl-10">
@@ -51,14 +51,14 @@
 
                 <div class="confirm-alert bg-red/20 flex gap-4 rounded-md px-6 py-4">
                     <svg class="size-8 shrink-0 text-black"><use href="{{ asset('assets/images/icons/sprite.svg#messages') }}"></use></svg>
-                    <p class="text-lg">{{ __('Subscription confirmation message sent to your Email/Phone number.') }}</p>
+                    <p class="text-lg">{{ __('payment.confirmed_notice') }}</p>
                 </div>
 
                 <div class="confirm-app bg-yellow grid items-center gap-6 rounded-md px-8 py-10 text-white md:grid-cols-2 md:px-20">
                     <div>
-                        <h2 class="section-header__title">{{ __('Manage Your Meals in the App') }}</h2>
+                        <h2 class="section-header__title">{{ __('payment.manage_meals_title') }}</h2>
                         <p class="section-header__desc text-white !max-w-none">
-                            {{ __('Swap meals, track calories, update your address, and pause your subscription from your phone.') }}
+                            {{ __('payment.manage_meals_subtitle') }}
                         </p>
                         <div class="mt-6 md:mt-12">
                             <p class="mb-4 text-lg font-semibold md:text-2xl">{{ __('Download app') }}</p>
@@ -82,9 +82,9 @@
                         {{ __('account.go_to_dashboard') }}
                     </a>
                     <a href="{{ route('payment.invoice', ['order' => $payment->order_number]) }}" class="btn btn--outline btn--md" id="invoice-download-link">
-                        {{ __('Download Invoice') }}
+                        {{ __('payment.download_invoice') }}
                     </a>
-                    <a href="{{ route('home') }}" class="btn btn--outline btn--md">{{ __('Back to home') }}</a>
+                    <a href="{{ route('home') }}" class="btn btn--outline btn--md">{{ __('payment.back_to_home') }}</a>
                 </div>
             </div>
         @else
@@ -108,16 +108,57 @@
 
 @push('styles')
 <style>
+    .confirm-page {
+        position: relative;
+    }
+    .confirm-page::before {
+        content: "";
+        position: absolute;
+        inset: -24px -18px auto;
+        height: 220px;
+        background: radial-gradient(circle at 50% 0%, rgba(39,159,249,.16), transparent 70%);
+        pointer-events: none;
+        z-index: 0;
+    }
+    .confirm-page > * {
+        position: relative;
+        z-index: 1;
+    }
     .confirm-page [data-row] { opacity: 0; transform: translateY(14px); }
     .confirm-hero, .confirm-summary, .confirm-alert, .confirm-app { opacity: 0; transform: translateY(20px); }
     .confirm-check { opacity: 0; transform: scale(.85); }
     .confirm-row { display:flex; justify-content:space-between; gap:10px; color:#374151; font-size:.98rem; }
     .confirm-row span:last-child { font-weight: 600; color: #111827; }
+    .confirm-summary {
+        border: 1px solid rgba(209,213,219,.85);
+        background: linear-gradient(180deg, #fff 0%, #fdfefe 100%);
+    }
     .confirm-store { display:inline-block; transition: transform .28s cubic-bezier(.16,1,.3,1), filter .28s ease; }
     .confirm-store:hover { transform: translateY(-4px) scale(1.03); filter: drop-shadow(0 10px 20px rgba(0,0,0,.18)); }
     .confirm-phone { opacity:0; transform: translateY(24px) scale(.96); animation: confirmFloat 5.5s ease-in-out 2.2s infinite; }
     .confirm-summary { transition: transform .35s cubic-bezier(.16,1,.3,1), box-shadow .35s ease; }
     .confirm-summary:hover { transform: translateY(-4px); box-shadow: 0 14px 34px rgba(15,23,42,.12); }
+    .confirm-alert {
+        border: 1px solid rgba(251,113,133,.24);
+        box-shadow: 0 6px 20px rgba(244,63,94,.08);
+    }
+    .confirm-app {
+        box-shadow: 0 20px 40px rgba(0,0,0,.14);
+        overflow: hidden;
+        position: relative;
+    }
+    .confirm-app::after {
+        content: "";
+        position: absolute;
+        inset-inline-end: -40px;
+        inset-block-start: -40px;
+        width: 160px;
+        height: 160px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.12);
+        filter: blur(2px);
+        pointer-events: none;
+    }
     @keyframes confirmFloat { 0%,100%{ transform:translateY(0) scale(1);} 50%{ transform:translateY(-10px) scale(1.01);} }
     @media (prefers-reduced-motion: reduce) {
         .confirm-hero, .confirm-summary, .confirm-alert, .confirm-app, .confirm-check, .confirm-phone, .confirm-store { animation:none !important; transition:none !important; }

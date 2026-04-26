@@ -1182,6 +1182,186 @@ class ExternalDataService
     }
 
     /**
+     * Get CMS pages from API (/pages).
+     *
+     * Returns normalized items:
+     * id, slug, title, excerpt, content_html
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getPages(): array
+    {
+        return Cache::remember($this->cacheKey('pages'), 1800, function () {
+            try {
+                $response = $this->http()->get("{$this->baseUrl}/pages");
+                if ($response->successful()) {
+                    $rows = $response->json('data', []);
+                    if (! is_array($rows)) {
+                        $rows = [];
+                    }
+
+                    return array_values(array_filter(array_map(function ($row) {
+                        if (! is_array($row)) {
+                            return null;
+                        }
+
+                        $title = (string) ($row['title'] ?? $row['name'] ?? '');
+                        $slug = (string) ($row['slug'] ?? Str::slug($title));
+                        $contentRaw = $row['content'] ?? $row['body'] ?? $row['description'] ?? '';
+
+                        return [
+                            'id' => (int) ($row['id'] ?? 0),
+                            'slug' => $slug,
+                            'title' => $title,
+                            'excerpt' => trim(strip_tags((string) ($row['excerpt'] ?? ''))),
+                            'content_html' => $this->sanitizeHtml((string) $contentRaw),
+                        ];
+                    }, $rows)));
+                }
+            } catch (\Exception $e) {
+                Log::warning('External API /pages failed: '.$e->getMessage());
+            }
+
+            return [];
+        });
+    }
+
+    /**
+     * Get single CMS page from API (/pages/{id}) and normalize.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getPage(int $id): ?array
+    {
+        try {
+            $response = $this->http()->get("{$this->baseUrl}/pages/{$id}");
+            if ($response->successful()) {
+                $row = $response->json('data', []);
+                if (! is_array($row) || empty($row)) {
+                    $row = $response->json();
+                }
+                if (is_array($row) && ! empty($row)) {
+                    $title = (string) ($row['title'] ?? $row['name'] ?? '');
+                    $slug = (string) ($row['slug'] ?? Str::slug($title));
+                    $contentRaw = $row['content'] ?? $row['body'] ?? $row['description'] ?? '';
+
+                    return [
+                        'id' => (int) ($row['id'] ?? $id),
+                        'slug' => $slug,
+                        'title' => $title,
+                        'excerpt' => trim(strip_tags((string) ($row['excerpt'] ?? ''))),
+                        'content_html' => $this->sanitizeHtml((string) $contentRaw),
+                    ];
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning("External API /pages/{$id} failed: ".$e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve page by likely slug/title keyword.
+     *
+     * @param  array<int, string>  $aliases
+     * @return array<string, mixed>|null
+     */
+    public function getPageByAlias(array $aliases): ?array
+    {
+        $aliases = array_values(array_filter(array_map(static fn ($a) => Str::lower(trim((string) $a)), $aliases)));
+        if (empty($aliases)) {
+            return null;
+        }
+
+        $pages = $this->getPages();
+        foreach ($pages as $page) {
+            $haystack = Str::lower(implode(' ', [
+                (string) ($page['slug'] ?? ''),
+                (string) ($page['title'] ?? ''),
+                (string) ($page['excerpt'] ?? ''),
+            ]));
+            foreach ($aliases as $alias) {
+                if ($alias !== '' && str_contains($haystack, $alias)) {
+                    $id = (int) ($page['id'] ?? 0);
+                    if ($id > 0) {
+                        $fresh = $this->getPage($id);
+                        if ($fresh) {
+                            return $fresh;
+                        }
+                    }
+
+                    return $page;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Get common questions from API (/commonQuestions).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getCommonQuestions(): array
+    {
+        return Cache::remember($this->cacheKey('common_questions'), 1800, function () {
+            try {
+                $response = $this->http()->get("{$this->baseUrl}/commonQuestions");
+                if ($response->successful()) {
+                    $rows = $response->json('data', []);
+                    if (! is_array($rows)) {
+                        $rows = [];
+                    }
+
+                    return array_values(array_filter(array_map(function ($row) {
+                        if (! is_array($row)) {
+                            return null;
+                        }
+
+                        $question = trim((string) ($row['question'] ?? $row['title'] ?? ''));
+                        $answerRaw = $row['answer'] ?? $row['content'] ?? $row['description'] ?? '';
+                        $category = (string) ($row['category'] ?? $row['section'] ?? $row['group'] ?? __('General'));
+                        if ($question === '') {
+                            return null;
+                        }
+
+                        return [
+                            'id' => (int) ($row['id'] ?? 0),
+                            'question' => $question,
+                            'answer_html' => $this->sanitizeHtml((string) $answerRaw),
+                            'answer_text' => trim(strip_tags((string) $answerRaw)),
+                            'category' => $category !== '' ? $category : __('General'),
+                        ];
+                    }, $rows)));
+                }
+            } catch (\Exception $e) {
+                Log::warning('External API /commonQuestions failed: '.$e->getMessage());
+            }
+
+            return [];
+        });
+    }
+
+    protected function sanitizeHtml(string $html): string
+    {
+        $clean = trim($html);
+        if ($clean === '') {
+            return '';
+        }
+
+        $clean = html_entity_decode($clean, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $clean = preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', '', $clean) ?? $clean;
+        $clean = preg_replace('/\son\w+=(["\']).*?\1/iu', '', $clean) ?? $clean;
+        $clean = preg_replace('/javascript:/iu', '', $clean) ?? $clean;
+
+        $allowed = '<p><br><strong><b><em><i><u><ul><ol><li><a><h1><h2><h3><h4><blockquote><span><div>';
+
+        return trim(strip_tags($clean, $allowed));
+    }
+
+    /**
      * POST /addresses — same auth as other external calls (EXTERNAL_API_TOKEN).
      * Expected form fields: title, longitude, latitude, description, type, district_id, pickup_type.
      *

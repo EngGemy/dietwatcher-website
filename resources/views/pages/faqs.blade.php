@@ -58,13 +58,16 @@
             {{-- FAQs Accordion --}}
             <div class="hs-accordion-group mx-auto max-w-4xl space-y-4">
                 @forelse ($faqs as $index => $faq)
+                    @php
+                        $faqId = data_get($faq, 'id') ?: ('faq-'.$index);
+                    @endphp
                     <div
                         class="hs-accordion {{ $index === 0 ? 'active' : '' }} hs-accordion-active:border-blue/10 hs-accordion-active:bg-white rounded-xl border border-transparent">
                         <button
                             class="hs-accordion-toggle inline-flex w-full items-center justify-between gap-x-3 px-5 py-4 text-start text-lg font-medium text-black focus:outline-hidden md:text-xl"
                             aria-expanded="{{ $index === 0 ? 'true' : 'false' }}"
-                            aria-controls="hs-faq-collapse-{{ $faq->id }}">
-                            {{ $faq->question }}
+                            aria-controls="hs-faq-collapse-{{ $faqId }}">
+                            {{ data_get($faq, 'question') }}
                             <svg class="hs-accordion-active:hidden size-5">
                                 <use href="{{ asset('assets/images/icons/sprite.svg#plus') }}"></use>
                             </svg>
@@ -74,11 +77,11 @@
                         </button>
                         <div
                             role="region"
-                            id="hs-faq-collapse-{{ $faq->id }}"
+                            id="hs-faq-collapse-{{ $faqId }}"
                             class="hs-accordion-content {{ $index === 0 ? '' : 'hidden' }} w-full overflow-hidden transition-[height] duration-300">
                             <div class="px-5 pb-4">
                                 <div class="prose prose-gray max-w-none text-gray-600">
-                                    {!! $faq->answer !!}
+                                    {!! data_get($faq, 'answer') !!}
                                 </div>
                             </div>
                         </div>
