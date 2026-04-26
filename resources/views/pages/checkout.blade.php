@@ -292,7 +292,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                                                     <button type="button"
                                                             class="shrink-0 rounded-md border border-blue-500 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
                                                             @click="selectSavedAddress(addr)">
-                                                        {{ __('Select') }} / اختيار
+                                                        اختيار العنوان
                                                     </button>
                                                 </div>
                                             </div>
@@ -1756,6 +1756,30 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                         cityId = match.id;
                     }
                 }
+                // Last-resort fallback: infer zone from address text/title
+                // when API does not return city/zone IDs in saved addresses.
+                if (! cityId && Array.isArray(this.zones) && this.zones.length > 0) {
+                    const text = String(
+                        addr.description
+                        || addr.line1
+                        || addr.title
+                        || addr.address
+                        || ''
+                    ).toLowerCase();
+                    if (text) {
+                        const matchByName = this.zones.find((z) => {
+                            let zoneName = z?.name ?? '';
+                            if (zoneName && typeof zoneName === 'object') {
+                                zoneName = zoneName['{{ app()->getLocale() }}'] || zoneName.en || Object.values(zoneName)[0] || '';
+                            }
+                            zoneName = String(zoneName || '').toLowerCase();
+                            return zoneName && text.includes(zoneName);
+                        });
+                        if (matchByName) {
+                            cityId = matchByName.id;
+                        }
+                    }
+                }
                 if (cityId) {
                     this.selectedZoneId = String(cityId);
                 }
@@ -1825,7 +1849,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                         const isNewUser = !!(d.is_continue);
                         this.isContinueUser = isNewUser;
                         this.showNameField = isNewUser || !hasName;
-                        // Keep selection manual: user confirms address with "Select / اختيار" button.
+                        // Keep selection manual: user confirms address with "اختيار العنوان" button.
                     }
                 } catch (e) {}
             },
@@ -2122,7 +2146,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                             this.showNameField = true;
                         }
 
-                        // Keep selection manual: user confirms address with "Select / اختيار" button.
+                        // Keep selection manual: user confirms address with "اختيار العنوان" button.
                         if (isNewUser) {
                             this.$nextTick(() => this.$refs.checkoutUserCard?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
                         }
