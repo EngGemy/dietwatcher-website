@@ -1,6 +1,9 @@
 @php
     $o = $order;
     $oStatus = strtolower((string) ($o['status'] ?? ''));
+    $oStatusKey = 'account.status_'.$oStatus;
+    $oStatusLabel = __($oStatusKey);
+    if ($oStatusLabel === $oStatusKey) $oStatusLabel = ucfirst($oStatus);
     $oDate = $o['delivery_date'] ?? $o['date'] ?? $o['created_at'] ?? '';
     $addr = $o['address']['description'] ?? $o['address']['line1'] ?? $o['address_line'] ?? '';
     $branch = $o['branch']['name'] ?? '';
@@ -30,7 +33,12 @@
     </div>
 
     @if($error)
-        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ $error }}</div>
+        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-center justify-between gap-3 flex-wrap">
+            <span>{{ $error }}</span>
+            @if($error === __('account.login_required'))
+                <a href="{{ route('account.login') }}" class="acc-btn acc-btn--primary acc-btn--sm">{{ __('account.go_to_login') }}</a>
+            @endif
+        </div>
     @endif
 
     @if($loading)
@@ -76,7 +84,7 @@
                 <div class="acc-card">
                     <div class="acc-card-head">{{ __('account.order_summary') }}</div>
                     <div class="acc-card-body text-sm space-y-2">
-                        <div class="flex justify-between"><span class="text-gray-500">{{ __('account.status') }}</span><span><span class="acc-chip acc-chip--muted">{{ $oStatus ?: '—' }}</span></span></div>
+                        <div class="flex justify-between"><span class="text-gray-500">{{ __('account.status') }}</span><span><span class="acc-chip acc-chip--muted">{{ $oStatus ? $oStatusLabel : '—' }}</span></span></div>
                         <div class="flex justify-between"><span class="text-gray-500">{{ __('account.delivery_date') }}</span><span>{{ $oDate ?: '—' }}</span></div>
                         @if($branch)
                             <div class="flex justify-between"><span class="text-gray-500">{{ __('account.branch') }}</span><span>{{ $branch }}</span></div>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Account\Subscriptions;
 
+use App\Livewire\Account\Concerns\NormalizesAccountPayload;
 use App\Services\AccountApiService;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -13,6 +14,8 @@ use Livewire\Component;
 #[Title('تفاصيل الاشتراك')]
 class Show extends Component
 {
+    use NormalizesAccountPayload;
+
     public int $subscriptionId = 0;
 
     public string $focusDate = '';
@@ -63,33 +66,14 @@ class Show extends Component
         }
 
         $data = $result['data'] ?? [];
-        // Shape varies — try common paths
-        $sub = [];
-        $days = [];
-
-        if (is_array($data)) {
-            // Some APIs wrap the target subscription
-            $sub = $data['subscription'] ?? $data['response'] ?? $data['data'] ?? $data;
-
-            // Days might be in subscription.days, data.days, or inside the subscription's menus
-            $days = $sub['days']
-                ?? $sub['menu_days']
-                ?? $sub['subscription_days']
-                ?? $data['days']
-                ?? [];
-
-            if (! is_array($sub)) $sub = [];
-            if (! is_array($days)) $days = [];
-
-            // If $sub is a list of subscriptions, pick the one matching our id
-            if (isset($sub[0]) && is_array($sub[0])) {
-                $match = collect($sub)->first(fn ($s) => is_array($s) && (int) ($s['id'] ?? 0) === $this->subscriptionId);
-                if ($match) $sub = $match;
-            }
+        $sub = $this->extractOne($data, ['subscription']);
+        $days = $this->extractRows($sub['days'] ?? null, ['menu_days', 'subscription_days']);
+        if ($days === []) {
+            $days = $this->extractRows($data, ['days', 'menu_days', 'subscription_days']);
         }
 
         $this->subscription = $sub;
-        $this->days = array_values(array_filter($days, 'is_array'));
+        $this->days = $days;
         $this->loading = false;
     }
 

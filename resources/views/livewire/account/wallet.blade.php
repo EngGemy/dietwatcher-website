@@ -5,7 +5,12 @@
     </div>
 
     @if($error)
-        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ $error }}</div>
+        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-center justify-between gap-3 flex-wrap">
+            <span>{{ $error }}</span>
+            @if($error === __('account.login_required'))
+                <a href="{{ route('account.login') }}" class="acc-btn acc-btn--primary acc-btn--sm">{{ __('account.go_to_login') }}</a>
+            @endif
+        </div>
     @endif
 
     {{-- Balance hero --}}
