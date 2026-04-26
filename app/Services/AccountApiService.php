@@ -127,6 +127,7 @@ class AccountApiService
             $params = array_filter([
                 'subscription_id' => $subscriptionId,
                 'date' => $date,
+                'device_id' => $this->deviceId(),
             ], fn ($v) => $v !== null && $v !== '');
 
             return $this->decode(
@@ -292,8 +293,13 @@ class AccountApiService
     public function listOrders(string $status = 'active'): array
     {
         try {
+            $params = array_filter([
+                'status' => $status,
+                'device_id' => $this->deviceId(),
+            ], fn ($v) => $v !== null && $v !== '');
+
             return $this->decode(
-                $this->authed()->get($this->url('orders'), ['status' => $status])
+                $this->authed()->get($this->url('orders'), $params)
             );
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::listOrders failed', ['error' => $e->getMessage()]);
@@ -343,6 +349,7 @@ class AccountApiService
                 'date_from' => $dateFrom,
                 'date_to' => $dateTo,
                 'page' => $page,
+                'device_id' => $this->deviceId(),
             ], fn ($v) => $v !== null && $v !== '');
 
             return $this->decode(

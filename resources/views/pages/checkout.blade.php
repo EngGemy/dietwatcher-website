@@ -199,6 +199,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
                                     <input type="text" name="coupon" class="form-control bg-blue/5"
                                            placeholder="{{ __('Promo code') }}" value="{{ old('coupon') }}"
                                            x-model="couponCode" :disabled="couponApplied" />
+                                    <input type="hidden" name="promocode_name" :value="couponCode || ''" />
                                     <template x-if="!couponApplied">
                                         <button type="button" class="form-input-action__btn"
                                                 @click="applyCoupon()" :disabled="couponLoading || !couponCode.trim()">

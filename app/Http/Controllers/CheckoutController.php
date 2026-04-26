@@ -341,6 +341,7 @@ class CheckoutController extends Controller
             'duration' => 'required|in:once,weekly,monthly,3months',
             'delivery_type' => 'required|in:home,pickup',
             'coupon' => 'nullable|string|max:50',
+            'promocode_name' => 'nullable|string|max:50',
             'name' => 'required|string|max:255',
             'phone' => 'required|string|max:20',
             'branch_id' => 'required_if:delivery_type,pickup|nullable|integer',
@@ -422,7 +423,7 @@ class CheckoutController extends Controller
         // Handle coupon discount
         $discountAmount = 0.0;
         $coupon = null;
-        $couponCode = $validated['coupon'] ?? null;
+        $couponCode = $validated['promocode_name'] ?? ($validated['coupon'] ?? null);
 
         if ($couponCode) {
             $coupon = Coupon::where('code', strtoupper($couponCode))->first();
@@ -754,6 +755,7 @@ class CheckoutController extends Controller
             'duration' => 'required|in:once,weekly,monthly,3months',
             'delivery_type' => 'required|in:home,pickup',
             'coupon' => 'nullable|string|max:50',
+            'promocode_name' => 'nullable|string|max:50',
             'branch_id' => 'required_if:delivery_type,pickup|nullable|integer',
             'zone_id' => 'required_if:delivery_type,home|nullable|integer',
             'selected_address_id' => 'nullable|integer',
@@ -906,7 +908,7 @@ class CheckoutController extends Controller
 
         $discountAmount = 0.0;
         $coupon = null;
-        $couponCode = $validated['coupon'] ?? null;
+        $couponCode = $validated['promocode_name'] ?? ($validated['coupon'] ?? null);
 
         if ($couponCode) {
             $coupon = Coupon::where('code', strtoupper($couponCode))->first();

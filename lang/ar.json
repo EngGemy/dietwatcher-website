@@ -1146,5 +1146,6 @@
     "payment.download_invoice": "تحميل الفاتورة",
     "payment.subscription_plan": "خطة الاشتراك",
     "payment.mixed": "متنوع",
+    "payment.total_paid": "إجمالي المدفوع",
     "Once": "مرة واحدة"
 }

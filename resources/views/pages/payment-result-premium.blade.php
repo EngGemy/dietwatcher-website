@@ -7,14 +7,26 @@
     <div class="container max-w-[1080px]">
         @if($success)
             @php
+                $isAr = app()->getLocale() === 'ar';
                 $firstItem = collect($payment->cart_items ?? [])->first();
                 $planTitle = $firstItem['name'] ?? __('payment.subscription_plan');
                 $itemOptions = $firstItem['options'] ?? [];
-                $mealType = $itemOptions['mealType'] ?? __('payment.mixed');
+                $mealType = trim((string) ($itemOptions['mealType'] ?? ''));
+                if ($mealType === '') {
+                    $mealType = __('payment.mixed');
+                }
                 $calories = $itemOptions['calories'] ?? null;
-                $durationLabel = $payment->duration ? __(ucfirst($payment->duration)) : __('Monthly');
+                $durationRaw = strtolower((string) ($payment->duration ?? ''));
+                $durationMap = [
+                    'once' => __('Once'),
+                    'weekly' => __('Weekly'),
+                    'monthly' => __('Monthly'),
+                    '3months' => __('3 Months'),
+                ];
+                $durationLabel = $durationMap[$durationRaw] ?? ($payment->duration ? __(ucfirst($payment->duration)) : __('Monthly'));
                 $startDateLabel = $payment->start_date ?: now()->format('d M Y');
                 $deliveryLabel = $payment->delivery_type === 'pickup' ? __('Pickup from Branch') : __('Home Delivery');
+                $caloriesLabel = $calories ? ((string) $calories . ' ' . __('kcal')) : __('payment.as_selected');
             @endphp
             <div class="confirm-page space-y-8" data-confirm-page>
                 <header class="confirm-hero text-center md:text-start">
@@ -29,22 +41,40 @@
                     <div class="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                         <h3 class="text-xl font-bold text-gray-900 md:text-2xl">{{ $planTitle }}</h3>
                         <p class="text-lg md:text-xl">
-                            {{ __('Total Paid') }}:
+                            {{ __('payment.total_paid') }}:
                             <span class="text-green font-semibold">SAR {{ number_format($payment->amount_in_sar, 2) }}</span>
                         </p>
                     </div>
 
-                    <div class="grid grid-cols-1 gap-y-4 md:grid-cols-2 md:gap-x-0">
-                        <div class="space-y-3 pr-0 md:pr-10">
-                            <div class="confirm-row"><span>{{ __('payment.meal_type') }}</span><span>{{ __(ucfirst($mealType)) }}</span></div>
-                            <div class="confirm-row"><span>{{ __('Calories') }}</span><span>{{ $calories ? $calories : __('payment.as_selected') }}</span></div>
-                            <div class="confirm-row"><span>{{ __('payment.order_number_label') }}</span><span>{{ $payment->order_number }}</span></div>
+                    <div class="grid grid-cols-1 gap-y-5 md:grid-cols-2 md:gap-x-10">
+                        <div class="space-y-3">
+                            <div class="confirm-row">
+                                <span class="confirm-row__label">{{ __('payment.meal_type') }}</span>
+                                <span class="confirm-row__value">{{ $mealType }}</span>
+                            </div>
+                            <div class="confirm-row">
+                                <span class="confirm-row__label">{{ __('Calories') }}</span>
+                                <span class="confirm-row__value" dir="ltr">{{ $caloriesLabel }}</span>
+                            </div>
+                            <div class="confirm-row">
+                                <span class="confirm-row__label">{{ __('payment.order_number_label') }}</span>
+                                <span class="confirm-row__value font-mono" dir="ltr">{{ $payment->order_number }}</span>
+                            </div>
                         </div>
 
-                        <div class="space-y-3 pl-0 md:border-l md:border-gray-300 md:pl-10">
-                            <div class="confirm-row"><span>{{ __('Duration') }}</span><span>{{ $durationLabel }}</span></div>
-                            <div class="confirm-row"><span>{{ __('Start Date') }}</span><span>{{ $startDateLabel }}</span></div>
-                            <div class="confirm-row"><span>{{ __('Delivery') }}</span><span>{{ $deliveryLabel }}</span></div>
+                        <div class="space-y-3">
+                            <div class="confirm-row">
+                                <span class="confirm-row__label">{{ __('Duration') }}</span>
+                                <span class="confirm-row__value">{{ $durationLabel }}</span>
+                            </div>
+                            <div class="confirm-row">
+                                <span class="confirm-row__label">{{ __('Start Date') }}</span>
+                                <span class="confirm-row__value" dir="ltr">{{ $startDateLabel }}</span>
+                            </div>
+                            <div class="confirm-row">
+                                <span class="confirm-row__label">{{ __('Delivery') }}</span>
+                                <span class="confirm-row__value">{{ $deliveryLabel }}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -127,8 +157,28 @@
     .confirm-page [data-row] { opacity: 0; transform: translateY(14px); }
     .confirm-hero, .confirm-summary, .confirm-alert, .confirm-app { opacity: 0; transform: translateY(20px); }
     .confirm-check { opacity: 0; transform: scale(.85); }
-    .confirm-row { display:flex; justify-content:space-between; gap:10px; color:#374151; font-size:.98rem; }
-    .confirm-row span:last-child { font-weight: 600; color: #111827; }
+    .confirm-row {
+        display: grid;
+        grid-template-columns: minmax(130px, 42%) minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        color:#374151;
+        font-size:.98rem;
+        border-bottom: 1px dashed rgba(209, 213, 219, .8);
+        padding: 8px 0;
+    }
+    .confirm-row__label {
+        color: #6b7280;
+        font-weight: 600;
+    }
+    .confirm-row__value {
+        color: #111827;
+        font-weight: 700;
+        text-align: start;
+    }
+    html[dir="rtl"] .confirm-row__value {
+        text-align: start;
+    }
     .confirm-summary {
         border: 1px solid rgba(209,213,219,.85);
         background: linear-gradient(180deg, #fff 0%, #fdfefe 100%);
@@ -162,6 +212,12 @@
     @keyframes confirmFloat { 0%,100%{ transform:translateY(0) scale(1);} 50%{ transform:translateY(-10px) scale(1.01);} }
     @media (prefers-reduced-motion: reduce) {
         .confirm-hero, .confirm-summary, .confirm-alert, .confirm-app, .confirm-check, .confirm-phone, .confirm-store { animation:none !important; transition:none !important; }
+    }
+    @media (max-width: 768px) {
+        .confirm-row {
+            grid-template-columns: 1fr;
+            gap: 4px;
+        }
     }
 </style>
 @endpush

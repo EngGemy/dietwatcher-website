@@ -939,5 +939,6 @@
     "payment.download_invoice": "Download Invoice",
     "payment.subscription_plan": "Subscription plan",
     "payment.mixed": "Mixed",
+    "payment.total_paid": "Total Paid",
     "Once": "Once"
 }
