@@ -11,7 +11,12 @@
     </div>
 
     @if($error)
-        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ $error }}</div>
+        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-center justify-between gap-3 flex-wrap">
+            <span>{{ $error }}</span>
+            @if($error === __('account.login_required'))
+                <a href="{{ route('account.login') }}" class="acc-btn acc-btn--primary acc-btn--sm">{{ __('account.go_to_login') }}</a>
+            @endif
+        </div>
     @endif
 
     <div class="acc-card">
@@ -38,13 +43,16 @@
                         $total   = $s['total']    ?? $s['amount']     ?? null;
                         $remain  = $s['remaining_days'] ?? $s['days_remaining'] ?? null;
                         $isActive = in_array($status, ['active','running','started'], true);
+                        $statusKey = 'account.status_'.$status;
+                        $statusLabel = __($statusKey);
+                        if ($statusLabel === $statusKey) $statusLabel = ucfirst($status);
                     @endphp
                     <li class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-4 md:p-5 hover:bg-gray-50 transition">
                         <div class="min-w-0">
                             <div class="flex items-center gap-2">
                                 <span class="font-semibold text-gray-900">{{ $plan ?: (__('account.subscription') . ' #' . ($id ?? '—')) }}</span>
                                 @if($status)
-                                    <span class="acc-chip {{ $isActive ? 'acc-chip--success' : 'acc-chip--muted' }}">{{ $status }}</span>
+                                    <span class="acc-chip {{ $isActive ? 'acc-chip--success' : 'acc-chip--muted' }}">{{ $statusLabel }}</span>
                                 @endif
                             </div>
                             <div class="text-xs text-gray-500 mt-1 flex items-center gap-3 flex-wrap">

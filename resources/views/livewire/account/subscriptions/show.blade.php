@@ -1,6 +1,9 @@
 @php
     $sub = $subscription;
     $status = strtolower((string) ($sub['status'] ?? ''));
+    $statusKey = 'account.status_'.$status;
+    $statusLabel = __($statusKey);
+    if ($statusLabel === $statusKey) $statusLabel = ucfirst($status);
     $isActive = in_array($status, ['active','running','started'], true);
     $isPaused = in_array($status, ['paused','pausing','hold'], true);
     $plan = $sub['plan']['name'] ?? $sub['program']['name'] ?? $sub['name'] ?? '';
@@ -43,7 +46,12 @@
         <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">{{ $notice }}</div>
     @endif
     @if($error)
-        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">{{ $error }}</div>
+        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800 flex items-center justify-between gap-3 flex-wrap">
+            <span>{{ $error }}</span>
+            @if($error === __('account.login_required'))
+                <a href="{{ route('account.login') }}" class="acc-btn acc-btn--primary acc-btn--sm">{{ __('account.go_to_login') }}</a>
+            @endif
+        </div>
     @endif
 
     {{-- Overview --}}
@@ -51,7 +59,7 @@
         <div class="acc-stat">
             <span class="acc-stat__label">{{ __('account.status') }}</span>
             <span class="acc-stat__value" style="font-size:1rem;">
-                <span class="acc-chip {{ $isActive ? 'acc-chip--success' : ($isPaused ? 'acc-chip--warn' : 'acc-chip--muted') }}">{{ $status ?: '—' }}</span>
+                <span class="acc-chip {{ $isActive ? 'acc-chip--success' : ($isPaused ? 'acc-chip--warn' : 'acc-chip--muted') }}">{{ $status ? $statusLabel : '—' }}</span>
             </span>
         </div>
         <div class="acc-stat">
@@ -100,6 +108,9 @@
                             $dDate = $day['date'] ?? $day['delivery_date'] ?? '';
                             $dietId = (int) ($day['id'] ?? $day['diet_id'] ?? 0);
                             $dayStatus = strtolower((string) ($day['status'] ?? ''));
+                            $dayStatusKey = 'account.status_'.$dayStatus;
+                            $dayStatusLabel = __($dayStatusKey);
+                            if ($dayStatusLabel === $dayStatusKey) $dayStatusLabel = ucfirst($dayStatus);
                             $meals = $day['meals'] ?? $day['menus'] ?? [];
                             if (! is_array($meals)) $meals = [];
                             $isSkipped = in_array($dayStatus, ['skipped','skip','paused_day'], true);
@@ -109,7 +120,7 @@
                                 <div>
                                     <div class="font-semibold text-gray-900">{{ $dDate }}</div>
                                     @if($dayStatus)
-                                        <span class="acc-chip {{ $isSkipped ? 'acc-chip--warn' : 'acc-chip--success' }}">{{ $dayStatus }}</span>
+                                        <span class="acc-chip {{ $isSkipped ? 'acc-chip--warn' : 'acc-chip--success' }}">{{ $dayStatusLabel }}</span>
                                     @endif
                                 </div>
                                 @if($dietId > 0)

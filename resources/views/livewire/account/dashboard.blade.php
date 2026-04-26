@@ -3,6 +3,9 @@
     $displayName = trim((string) ($profile['name'] ?? '')) ?: __('account.customer');
     $sub = $activeSubscription ?? [];
     $subStatus = strtolower((string) ($sub['status'] ?? ''));
+    $subStatusKey = 'account.status_'.$subStatus;
+    $subStatusLabel = __($subStatusKey);
+    if ($subStatusLabel === $subStatusKey) $subStatusLabel = ucfirst($subStatus);
     $planName = $sub['plan']['name'] ?? $sub['program']['name'] ?? '';
     if (is_array($planName)) {
         $planName = $planName[app()->getLocale()] ?? $planName['en'] ?? '';
@@ -12,6 +15,14 @@
 @endphp
 
 <div class="space-y-6">
+    @if(!empty($error))
+        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-center justify-between gap-3 flex-wrap">
+            <span>{{ $error }}</span>
+            @if($error === __('account.login_required'))
+                <a href="{{ route('account.login') }}" class="acc-btn acc-btn--primary acc-btn--sm">{{ __('account.go_to_login') }}</a>
+            @endif
+        </div>
+    @endif
 
     {{-- Greeting row --}}
     <section class="acc-card acc-card-head-less p-5 md:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
@@ -35,7 +46,7 @@
                 <span class="acc-stat__value text-base md:text-lg" style="font-size:1.1rem;">{{ $planName ?: __('account.current_plan') }}</span>
                 <span class="acc-stat__meta">
                     @if($subStatus)
-                        <span class="acc-chip {{ in_array($subStatus, ['active','running','started'], true) ? 'acc-chip--success' : 'acc-chip--muted' }}">{{ __('account.status_'.$subStatus, [], app()->getLocale()) !== 'account.status_'.$subStatus ? __('account.status_'.$subStatus) : ucfirst($subStatus) }}</span>
+                        <span class="acc-chip {{ in_array($subStatus, ['active','running','started'], true) ? 'acc-chip--success' : 'acc-chip--muted' }}">{{ $subStatusLabel }}</span>
                     @endif
                     @if($startAt) · {{ $startAt }} @if($endAt) → {{ $endAt }} @endif @endif
                 </span>
@@ -98,7 +109,7 @@
                         <div>
                             <dt class="text-gray-500">{{ __('account.status') }}</dt>
                             <dd class="mt-1">
-                                <span class="acc-chip {{ in_array($subStatus, ['active','running','started'], true) ? 'acc-chip--success' : 'acc-chip--muted' }}">{{ $subStatus ?: '—' }}</span>
+                                <span class="acc-chip {{ in_array($subStatus, ['active','running','started'], true) ? 'acc-chip--success' : 'acc-chip--muted' }}">{{ $subStatus ? $subStatusLabel : '—' }}</span>
                             </dd>
                         </div>
                         <div>
@@ -129,6 +140,9 @@
                             @php
                                 $oid = $order['id'] ?? $order['order_id'] ?? null;
                                 $oStatus = strtolower((string) ($order['status'] ?? ''));
+                                $oStatusKey = 'account.status_'.$oStatus;
+                                $oStatusLabel = __($oStatusKey);
+                                if ($oStatusLabel === $oStatusKey) $oStatusLabel = ucfirst($oStatus);
                                 $oDate = $order['delivery_date'] ?? $order['created_at'] ?? $order['date'] ?? '';
                                 $oTotal = $order['total'] ?? $order['amount'] ?? $order['grand_total'] ?? null;
                             @endphp
@@ -142,7 +156,7 @@
                                         <div class="font-semibold text-gray-900">{{ number_format((float)$oTotal, 2) }} <span class="text-xs text-gray-500">{{ __('SAR') }}</span></div>
                                     @endif
                                     @if($oStatus)
-                                        <span class="acc-chip acc-chip--muted mt-1">{{ $oStatus }}</span>
+                                        <span class="acc-chip acc-chip--muted mt-1">{{ $oStatusLabel }}</span>
                                     @endif
                                 </div>
                             </li>

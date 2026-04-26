@@ -15,8 +15,8 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
 
 $sessionVerifiedPhone = session('phone_verified');
 $oldPhone = old('phone', '');
-$phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
-    && str_replace(' ', '', (string) $sessionVerifiedPhone) === str_replace(' ', '', (string) $oldPhone);
+$initialPhone = $oldPhone !== '' ? $oldPhone : (string) ($sessionVerifiedPhone ?? '');
+$phoneVerifiedFromSession = filled($sessionVerifiedPhone);
 @endphp
 
 @section('title', __('Checkout') . ' | ' . $siteName)
@@ -1307,7 +1307,7 @@ $phoneVerifiedFromSession = $sessionVerifiedPhone && $oldPhone !== ''
             durationMultipliers: @json($durationMultipliers),
 
             // Phone / OTP state
-            phone: '{{ old('phone', '') }}',
+            phone: '{{ $initialPhone }}',
             phoneVerified: @json($phoneVerifiedFromSession ?? false),
             otpModalOpen: false,
             otpSent: false,
