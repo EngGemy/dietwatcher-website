@@ -107,15 +107,7 @@
                             >
                                 <span class="nav-enjoy-wrap" x-cloak x-show="line.lang === 'en' && idx === index" x-transition.opacity.duration.300ms>
                                     <span class="nav-enjoy-text" x-text="line.text"></span>
-                                    <img
-                                        src="{{ asset('assets/smile_icon.svg') }}"
-                                        class="nav-enjoy-smile"
-                                        style="width:74px;height:20px;max-width:74px;max-height:20px"
-                                        alt=""
-                                        aria-hidden="true"
-                                        decoding="async"
-                                        loading="lazy"
-                                    />
+                                    <img src="{{ asset('assets/images/icons/smile.svg') }}" class="nav-enjoy-smile" alt="" aria-hidden="true" decoding="async" loading="lazy" />
                                 </span>
                                 <span x-cloak x-show="!(line.lang === 'en' && idx === index)" x-text="line.text"></span>
                             </span>

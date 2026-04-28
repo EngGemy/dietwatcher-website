@@ -17,7 +17,7 @@
                                     <span class="hero-line__phrase hero-line__phrase--blue text-blue hero-smile-wrap">
                                         <span class="hero-smile-word">محسوبة</span>
                                         <img
-                                            src="{{ asset('assets/smile_icon.svg') }}"
+                                            src="{{ asset('assets/images/icons/smile.svg') }}"
                                             class="hero-smile-icon"
                                             alt=""
                                             aria-hidden="true"
