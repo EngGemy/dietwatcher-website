@@ -24,12 +24,18 @@
 .meals-search__clear:hover{background:#ff707a;color:#fff}
 
 /* Filter Tags */
-.meals-tags{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
-.meals-tag{display:inline-flex;align-items:center;gap:.35rem;padding:.4rem 1rem;border-radius:100px;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .2s;border:1.5px solid #e0e0e8;background:#fff;color:#555;white-space:nowrap}
-.meals-tag:hover{border-color:#279ff9;color:#279ff9}
-.meals-tag--active{background:#279ff9;color:#fff;border-color:#279ff9;box-shadow:0 2px 8px rgba(39,159,249,.3)}
+.meals-filters{display:flex;flex-direction:column;gap:.6rem}
+.meals-tags{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;overflow-x:auto;scrollbar-width:thin}
+.meals-tags::-webkit-scrollbar{height:4px}
+.meals-tags::-webkit-scrollbar-thumb{background:#d4d4dc;border-radius:4px}
+.meals-tag{display:inline-flex;align-items:center;gap:.45rem;padding:.45rem 1rem;border-radius:100px;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .2s;border:1.5px solid #e0e0e8;background:#fff;color:#555;white-space:nowrap}
+.meals-tag:hover{border-color:#279ff9;color:#279ff9;transform:translateY(-1px)}
+.meals-tag--active{background:#279ff9;color:#fff;border-color:#279ff9;box-shadow:0 4px 12px rgba(39,159,249,.3)}
 .meals-tag--active:hover{background:#1e8de0;border-color:#1e8de0;color:#fff}
-.meals-tag__icon{width:16px;height:16px;border-radius:50%;object-fit:cover}
+.meals-tag__icon{width:18px;height:18px;border-radius:50%;object-fit:cover;flex-shrink:0}
+.meals-tag__count{font-size:.68rem;font-weight:700;background:rgba(0,0,0,.06);padding:.05rem .4rem;border-radius:100px;color:inherit;opacity:.85}
+.meals-tag--active .meals-tag__count{background:rgba(255,255,255,.22)}
+.meals-filters__label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#a0a0aa;margin-inline-end:.5rem;flex-shrink:0}
 
 /* Results info */
 .meals-info{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:.5rem}
@@ -197,22 +203,72 @@
         @endif
     </div>
 
-    @if(!empty($groups))
-        <div class="meals-tags">
-            <button type="button" wire:click="filterByGroup(null)"
-                class="meals-tag {{ $selectedGroup === null ? 'meals-tag--active' : '' }}">
-                {{ __('All') }}
-            </button>
-            @foreach($groups as $group)
-                <button type="button"
-                    wire:click="filterByGroup({{ $selectedGroup === $group['value'] ? 'null' : $group['value'] }})"
-                    class="meals-tag {{ $selectedGroup === $group['value'] ? 'meals-tag--active' : '' }}">
-                    @if(!empty($group['icon']))
-                        <img src="{{ $group['icon'] }}" alt="" class="meals-tag__icon" />
-                    @endif
-                    {{ $group['name'] }}
-                </button>
-            @endforeach
+    @if(!empty($groups) || !empty($menus) || !empty($tags))
+        <div class="meals-filters">
+            {{-- Categories / Groups --}}
+            @if(!empty($groups))
+                <div class="meals-tags">
+                    <button type="button" wire:click="filterByGroup(null)"
+                        class="meals-tag {{ $selectedGroup === null ? 'meals-tag--active' : '' }}">
+                        {{ __('All') }}
+                    </button>
+                    @foreach($groups as $group)
+                        <button type="button"
+                            wire:click="filterByGroup({{ $selectedGroup === $group['value'] ? 'null' : $group['value'] }})"
+                            class="meals-tag {{ $selectedGroup === $group['value'] ? 'meals-tag--active' : '' }}">
+                            @if(!empty($group['icon']))
+                                <img src="{{ $group['icon'] }}" alt="" class="meals-tag__icon"
+                                    onerror="this.style.display='none'" />
+                            @endif
+                            <span>{{ $group['name'] }}</span>
+                            @if(!empty($group['count']))
+                                <span class="meals-tag__count">{{ $group['count'] }}</span>
+                            @endif
+                        </button>
+                    @endforeach
+                </div>
+            @endif
+
+            {{-- Menus (only render when API actually returned any) --}}
+            @if(!empty($menus))
+                <div class="meals-tags">
+                    <span class="meals-filters__label">{{ __('Menu') }}</span>
+                    <button type="button" wire:click="filterByMenu(null)"
+                        class="meals-tag {{ $selectedMenu === null ? 'meals-tag--active' : '' }}">
+                        {{ __('All') }}
+                    </button>
+                    @foreach($menus as $menu)
+                        <button type="button"
+                            wire:click="filterByMenu({{ $selectedMenu === $menu['value'] ? 'null' : $menu['value'] }})"
+                            class="meals-tag {{ $selectedMenu === $menu['value'] ? 'meals-tag--active' : '' }}">
+                            @if(!empty($menu['icon']))
+                                <img src="{{ $menu['icon'] }}" alt="" class="meals-tag__icon"
+                                    onerror="this.style.display='none'" />
+                            @endif
+                            <span>{{ $menu['name'] }}</span>
+                        </button>
+                    @endforeach
+                </div>
+            @endif
+
+            {{-- Tags (multi-select) --}}
+            @if(!empty($tags))
+                <div class="meals-tags">
+                    <span class="meals-filters__label">{{ __('Tags') }}</span>
+                    @foreach($tags as $tag)
+                        @php $tagActive = in_array($tag['value'], $selectedTags, true); @endphp
+                        <button type="button"
+                            wire:click="toggleTag({{ $tag['value'] }})"
+                            class="meals-tag {{ $tagActive ? 'meals-tag--active' : '' }}">
+                            @if(!empty($tag['icon']))
+                                <img src="{{ $tag['icon'] }}" alt="" class="meals-tag__icon"
+                                    onerror="this.style.display='none'" />
+                            @endif
+                            <span>{{ $tag['name'] }}</span>
+                        </button>
+                    @endforeach
+                </div>
+            @endif
         </div>
     @endif
 </div>

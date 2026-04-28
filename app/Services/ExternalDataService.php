@@ -637,10 +637,86 @@ class ExternalDataService
         return array_map(function ($group) {
             return [
                 'value' => $group['value'] ?? $group['id'] ?? 0,
-                'name' => $group['name'] ?? '',
-                'icon' => $group['icon'] ?? '',
+                'name'  => $group['name'] ?? '',
+                'icon'  => $group['icon'] ?? '',
+                'count' => (int) ($group['count'] ?? $group['meals_count'] ?? 0),
             ];
         }, $home['shopMealGroups'] ?? []);
+    }
+
+    /**
+     * GET /meals/filters — canonical source for the store page filter bar.
+     * Returns groups (categories), menus and tags. Empty buckets are dropped
+     * so the UI only shows filters that actually contain meals.
+     *
+     * @return array{groups: array, menus: array, tags: array}
+     */
+    public function getMealFilters(): array
+    {
+        return Cache::remember($this->cacheKey('meals_filters'), 600, function () {
+            try {
+                $response = $this->http()->get("{$this->baseUrl}/meals/filters");
+
+                if ($response->successful()) {
+                    $body = $response->json();
+                    // The API may wrap the filters under `data` — accept both.
+                    $payload = $body['data'] ?? $body ?? [];
+
+                    return [
+                        'groups' => $this->normalizeFilterBucket(
+                            $payload['groups'] ?? $payload['categories'] ?? $payload['shopMealGroups'] ?? []
+                        ),
+                        'menus' => $this->normalizeFilterBucket(
+                            $payload['menus'] ?? []
+                        ),
+                        'tags' => $this->normalizeFilterBucket(
+                            $payload['tags'] ?? []
+                        ),
+                    ];
+                }
+            } catch (\Exception $e) {
+                Log::warning('External API /meals/filters failed: ' . $e->getMessage());
+            }
+
+            // Fallback to the legacy /home shop groups so the page still works.
+            return [
+                'groups' => $this->getShopMealGroups(),
+                'menus'  => [],
+                'tags'   => [],
+            ];
+        });
+    }
+
+    /**
+     * Normalize a filter bucket from /meals/filters into a consistent shape
+     * AND drop entries that have no meals attached (count === 0).
+     */
+    protected function normalizeFilterBucket(array $items): array
+    {
+        $normalized = array_map(function ($item) {
+            $count = (int) (
+                $item['meals_count']
+                ?? $item['count']
+                ?? $item['mealsCount']
+                ?? $item['programs_count']
+                ?? 0
+            );
+
+            return [
+                'value' => (int) ($item['id'] ?? $item['value'] ?? 0),
+                'name'  => $item['name'] ?? '',
+                'icon'  => $item['icon'] ?? $item['image'] ?? '',
+                'count' => $count,
+            ];
+        }, array_values($items));
+
+        // Hide filters whose count is 0 — only when the API actually reports
+        // counts; otherwise keep everything (graceful degradation).
+        $anyHasCount = collect($normalized)->contains(fn ($i) => $i['count'] > 0);
+
+        return $anyHasCount
+            ? array_values(array_filter($normalized, fn ($i) => $i['count'] > 0))
+            : $normalized;
     }
 
     // ─── Settings ────────────────────────────────────────────────

@@ -11,17 +11,29 @@ use Livewire\Component;
 class MealsList extends Component
 {
     public ?int $selectedGroup = null;
+    public ?int $selectedMenu = null;
+    /** @var int[] */
+    public array $selectedTags = [];
     public int $currentPage = 1;
     public int $lastPage = 1;
     public string $search = '';
 
-    /** Meal groups from /home API for the filter bar */
+    /** Filter buckets fetched from /meals/filters (only non-empty are kept) */
     public array $groups = [];
+    public array $menus  = [];
+    public array $tags   = [];
 
     public function mount(): void
     {
         $service = app(ExternalDataService::class);
-        $this->groups = $service->getShopMealGroups();
+
+        // /meals/filters is the canonical source — falls back to /home groups
+        // inside the service if the endpoint is not available yet.
+        $filters = $service->getMealFilters();
+
+        $this->groups = $filters['groups'] ?? [];
+        $this->menus  = $filters['menus']  ?? [];
+        $this->tags   = $filters['tags']   ?? [];
     }
 
     /** Re-render when cart changes so card qty controls stay in sync */
@@ -39,6 +51,22 @@ class MealsList extends Component
     public function filterByGroup(?int $groupId): void
     {
         $this->selectedGroup = $groupId;
+        $this->currentPage = 1;
+    }
+
+    public function filterByMenu(?int $menuId): void
+    {
+        $this->selectedMenu = $menuId;
+        $this->currentPage = 1;
+    }
+
+    public function toggleTag(int $tagId): void
+    {
+        if (in_array($tagId, $this->selectedTags, true)) {
+            $this->selectedTags = array_values(array_diff($this->selectedTags, [$tagId]));
+        } else {
+            $this->selectedTags[] = $tagId;
+        }
         $this->currentPage = 1;
     }
 
@@ -81,6 +109,12 @@ class MealsList extends Component
 
             if ($this->selectedGroup) {
                 $filters['group_id'] = $this->selectedGroup;
+            }
+            if ($this->selectedMenu) {
+                $filters['menu_id'] = $this->selectedMenu;
+            }
+            if (! empty($this->selectedTags)) {
+                $filters['tags'] = $this->selectedTags;
             }
 
             $result = $service->getMeals($filters);
