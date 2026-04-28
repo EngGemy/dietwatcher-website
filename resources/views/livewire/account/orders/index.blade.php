@@ -12,12 +12,7 @@
     </div>
 
     @if($error)
-        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-center justify-between gap-3 flex-wrap">
-            <span>{{ $error }}</span>
-            @if($error === __('account.login_required'))
-                <a href="{{ route('account.login') }}" class="acc-btn acc-btn--primary acc-btn--sm">{{ __('account.go_to_login') }}</a>
-            @endif
-        </div>
+        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ $error }}</div>
     @endif
 
     <div class="acc-card">
@@ -52,9 +47,6 @@
                                 $items = $order['items'] ?? $order['meals'] ?? [];
                                 $count = is_array($items) ? count($items) : 0;
                                 $oStatus = strtolower((string) ($order['status'] ?? ''));
-                                $oStatusKey = 'account.status_'.$oStatus;
-                                $oStatusLabel = __($oStatusKey);
-                                if ($oStatusLabel === $oStatusKey) $oStatusLabel = ucfirst($oStatus);
                                 $oTotal = $order['total'] ?? $order['amount'] ?? $order['grand_total'] ?? null;
                             @endphp
                             <tr>
@@ -63,7 +55,7 @@
                                 <td>{{ $count }}</td>
                                 <td>
                                     @if($oStatus)
-                                        <span class="acc-chip acc-chip--muted">{{ $oStatusLabel }}</span>
+                                        <span class="acc-chip acc-chip--muted">{{ $oStatus }}</span>
                                     @else — @endif
                                 </td>
                                 <td class="text-end font-semibold">

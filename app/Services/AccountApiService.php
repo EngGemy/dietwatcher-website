@@ -50,11 +50,6 @@ class AccountApiService
         return 'web-account-' . substr(hash('sha256', session()->getId()), 0, 40);
     }
 
-    protected function hasToken(): bool
-    {
-        return (string) session('external_api_token', '') !== '';
-    }
-
     protected function url(string $path): string
     {
         return $this->baseUrl . '/' . ltrim($path, '/');
@@ -73,23 +68,11 @@ class AccountApiService
             $body = [];
         }
 
-        $bodySuccess = $body['success'] ?? $body['ok'] ?? null;
-        $bodyStatus = $body['status'] ?? null;
-        $bodyMessage = (string) ($body['message'] ?? '');
-        $httpOk = $response->successful();
-        $logicalOk = $httpOk;
-        if ($bodySuccess !== null) {
-            $logicalOk = $logicalOk && filter_var($bodySuccess, FILTER_VALIDATE_BOOLEAN);
-        }
-        if (is_numeric($bodyStatus)) {
-            $logicalOk = $logicalOk && ((int) $bodyStatus < 400);
-        }
-
         return [
-            'ok' => $logicalOk,
+            'ok' => $response->successful(),
             'status' => $response->status(),
             'data' => $body['data'] ?? $body['response'] ?? $body,
-            'message' => $bodyMessage,
+            'message' => (string) ($body['message'] ?? ''),
             'raw' => $body,
         ];
     }
@@ -140,9 +123,6 @@ class AccountApiService
      */
     public function listSubscriptions(?int $subscriptionId = null, ?string $date = null): array
     {
-        if (! $this->hasToken()) {
-            return $this->empty(__('account.login_required'));
-        }
         try {
             $params = array_filter([
                 'subscription_id' => $subscriptionId,
@@ -312,9 +292,6 @@ class AccountApiService
 
     public function listOrders(string $status = 'active'): array
     {
-        if (! $this->hasToken()) {
-            return $this->empty(__('account.login_required'));
-        }
         try {
             $params = array_filter([
                 'status' => $status,
@@ -366,9 +343,6 @@ class AccountApiService
 
     public function getWallet(string $type = 'all', ?string $dateFrom = null, ?string $dateTo = null, int $page = 1): array
     {
-        if (! $this->hasToken()) {
-            return $this->empty(__('account.login_required'));
-        }
         try {
             $params = array_filter([
                 'type' => $type,

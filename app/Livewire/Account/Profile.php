@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Livewire\Account;
 
-use App\Livewire\Account\Concerns\NormalizesAccountPayload;
 use App\Services\AccountApiService;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -14,8 +13,6 @@ use Livewire\Component;
 #[Title('الملف الشخصي')]
 class Profile extends Component
 {
-    use NormalizesAccountPayload;
-
     public string $name = '';
 
     public string $email = '';
@@ -43,17 +40,16 @@ class Profile extends Component
         $this->error = '';
         $result = $api->getProfile();
 
-        if (! ($result['ok'] ?? false)) {
-            $this->error = $result['message'] ?: __('account.load_failed');
-        }
-
-        $p = $this->extractOne($result['data'] ?? null, ['profile', 'customer']);
-        if ($p !== []) {
-            $this->name      = (string) ($p['name'] ?? '');
-            $this->email     = (string) ($p['email'] ?? '');
-            $this->mobile    = (string) ($p['mobile'] ?? $p['phone'] ?? '');
-            $this->gender    = (string) ($p['gender'] ?? 'male');
-            $this->birthdate = (string) ($p['brithdate'] ?? $p['birthdate'] ?? '');
+        $data = $result['data'] ?? [];
+        if (is_array($data)) {
+            $p = $data['profile'] ?? $data['customer'] ?? $data;
+            if (is_array($p)) {
+                $this->name      = (string) ($p['name'] ?? '');
+                $this->email     = (string) ($p['email'] ?? '');
+                $this->mobile    = (string) ($p['mobile'] ?? $p['phone'] ?? '');
+                $this->gender    = (string) ($p['gender'] ?? 'male');
+                $this->birthdate = (string) ($p['brithdate'] ?? $p['birthdate'] ?? '');
+            }
         }
 
         // Fall back to session profile if API didn't return data

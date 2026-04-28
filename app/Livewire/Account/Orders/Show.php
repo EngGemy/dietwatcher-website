@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Livewire\Account\Orders;
 
-use App\Livewire\Account\Concerns\NormalizesAccountPayload;
 use App\Services\AccountApiService;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -14,8 +13,6 @@ use Livewire\Component;
 #[Title('تفاصيل الطلب')]
 class Show extends Component
 {
-    use NormalizesAccountPayload;
-
     public int $orderId = 0;
 
     public array $order = [];
@@ -46,10 +43,15 @@ class Show extends Component
         }
 
         $data = $result['data'] ?? [];
-        $this->order = $this->extractOne($data, ['order']);
+        $this->order = is_array($data) ? ($data['order'] ?? $data['response'] ?? $data['data'] ?? $data) : [];
+        if (! is_array($this->order)) $this->order = [];
 
         $track = $api->orderTrackings($this->orderId);
-        $this->trackings = $this->extractRows($track['data'] ?? null, ['trackings', 'items', 'rows']);
+        $td = $track['data'] ?? [];
+        if (is_array($td)) {
+            $rows = $td['trackings'] ?? $td['items'] ?? $td['data'] ?? $td;
+            $this->trackings = is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
+        }
 
         $this->loading = false;
     }
