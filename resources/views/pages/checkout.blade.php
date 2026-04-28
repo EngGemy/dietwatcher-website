@@ -1576,7 +1576,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                 }
                 const fd = new FormData(form);
                 try {
-                    await fetch('{{ route('checkout.sync-address') }}', {
+                    await fetch('{{ url('/checkout/sync-address') }}', {
                         method: 'POST',
                         body: fd,
                         headers: {
@@ -1680,7 +1680,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                 }
                 this.savingNewAddress = true;
                 try {
-                    const res = await fetch('{{ route('checkout.sync-address') }}', {
+                    const res = await fetch('{{ url('/checkout/sync-address') }}', {
                         method: 'POST',
                         body: payload,
                         headers: {
