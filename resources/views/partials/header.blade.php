@@ -84,7 +84,10 @@
 
             <div
                 class="header__brand-tagline"
-                x-data="brandTaglineRotator(@js($brandTaglines))"
+                x-data="brandTaglineRotator(@js($brandTaglines ?? [
+                    ['text' => __('common.brand_tagline_1'), 'lang' => 'en', 'dir' => 'ltr'],
+                    ['text' => __('common.brand_tagline_2'), 'lang' => 'ar', 'dir' => 'rtl'],
+                ]))"
                 x-bind:class="{ 'header__brand-tagline--static': reduced }"
                 x-init="init()"
                 x-on:mouseenter="pause()"

@@ -41,6 +41,12 @@ class Index extends Component
         }
 
         $this->subscriptions = $this->extractRows($result['data'] ?? null, ['subscriptions', 'items', 'rows']);
+        if ($this->subscriptions === []) {
+            $single = $this->extractOne($result['data'] ?? null, ['subscription']);
+            if ($single !== [] && isset($single['id'])) {
+                $this->subscriptions = [$single];
+            }
+        }
 
         $this->loading = false;
     }
