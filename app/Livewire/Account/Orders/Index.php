@@ -55,12 +55,6 @@ class Index extends Component
         }
 
         $this->orders = $this->extractRows($result['data'] ?? null, ['orders', 'items', 'rows']);
-        if ($this->orders === []) {
-            $single = $this->extractOne($result['data'] ?? null, ['order']);
-            if ($single !== [] && isset($single['id'])) {
-                $this->orders = [$single];
-            }
-        }
         $this->loading = false;
     }
 
