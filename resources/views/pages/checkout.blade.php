@@ -1833,7 +1833,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
 
             async refreshCustomerFromServer() {
                 try {
-                    const res = await fetch('{{ url('/checkout/customer-state') }}', {
+                    const res = await fetch('{{ route('checkout.customer-state') }}', {
                         headers: { 'Accept': 'application/json' },
                     });
                     const d = await res.json().catch(() => ({}));
@@ -2275,7 +2275,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                 const fd = new FormData(form);
                 fd.append('preview_only', '1');
                 try {
-                    const res = await fetch('{{ url('/checkout/moyasar-session') }}', {
+                    const res = await fetch('{{ route('checkout.moyasar-session') }}', {
                         method: 'POST',
                         body: fd,
                         headers: {
@@ -2346,7 +2346,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                 fd.set('selected_plan_id', String(this.selectedPlanId || ''));
                 fd.set('selected_duration', this.selectedDurationValue());
                 try {
-                    const res = await fetch('{{ url('/checkout/moyasar-session') }}', {
+                    const res = await fetch('{{ route('checkout.moyasar-session') }}', {
                         method: 'POST',
                         body: fd,
                         headers: {
@@ -2440,7 +2440,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                     setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 500);
                 }
 
-                fetch('{{ url('/api/branches') }}')
+                fetch('{{ route('api.branches') }}')
                     .then(r => r.json())
                     .then(data => {
                         this.branches = data;
