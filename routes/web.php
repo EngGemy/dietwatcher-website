@@ -99,9 +99,11 @@ Route::get('/api/branches', function () {
 Route::get('/privacy-policy', fn () => view('pages.privacy'))->name('privacy');
 Route::get('/terms-and-conditions', fn () => view('pages.terms'))->name('terms');
 
-// OTP verification
+// OTP verification + simple customer registration
 Route::post('/otp/send', [\App\Http\Controllers\OtpController::class, 'send'])->name('otp.send');
 Route::post('/otp/verify', [\App\Http\Controllers\OtpController::class, 'verify'])->name('otp.verify');
+Route::post('/auth/simple-register', [\App\Http\Controllers\OtpController::class, 'register'])->name('auth.simple-register');
+Route::post('/auth/logout', [\App\Http\Controllers\OtpController::class, 'logout'])->name('auth.logout');
 
 // Payment routes (Moyasar)
 Route::get('/payment', [\App\Http\Controllers\PaymentController::class, 'form'])->name('payment.form');

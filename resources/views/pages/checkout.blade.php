@@ -470,21 +470,36 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
                         </button>
 
-                        {{-- Icon --}}
-                        <div class="otp-modal__icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+                        {{-- Icon — swaps with the step --}}
+                        <div class="otp-modal__icon" :class="needsRegistration ? 'otp-modal__icon--reg' : ''">
+                            {{-- OTP step: chat-bubble icon --}}
+                            <svg x-show="!needsRegistration" xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 0 1 .778-.332 48.294 48.294 0 0 0 5.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
+                            </svg>
+                            {{-- Registration step: profile/user icon --}}
+                            <svg x-show="needsRegistration" x-cloak xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                             </svg>
                         </div>
 
                         {{-- Title --}}
-                        <h3 class="otp-modal__title">{{ __('Verify Phone Number') }}</h3>
+                        <h3 class="otp-modal__title" x-text="needsRegistration ? '{{ __('Complete Your Registration') }}' : '{{ __('Verify Phone Number') }}'"></h3>
 
                         {{-- Subtitle with phone --}}
-                        <p class="otp-modal__subtitle">
-                            {{ __('We sent a verification code to') }}
+                        <p class="otp-modal__subtitle"
+                           x-text="needsRegistration ? '{{ __('Just a few details so we can create your account') }}' : '{{ __('We sent a verification code to') }}'"></p>
+
+                        {{-- Phone — large in OTP step, small "verified" pill in register step --}}
+                        <p x-show="!needsRegistration" class="otp-modal__phone" dir="ltr" x-text="phone"></p>
+                        <p x-show="needsRegistration" x-cloak class="otp-modal__phone-pill" dir="ltr">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="otp-modal__phone-pill-check">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            <span x-text="phone"></span>
                         </p>
-                        <p class="otp-modal__phone" dir="ltr" x-text="phone"></p>
+
+                        {{-- ── OTP step ────────────────────────────── --}}
+                        <div x-show="!needsRegistration">
 
                         {{-- 4 OTP Digit Inputs --}}
                         <div class="otp-modal__digits" dir="ltr">
@@ -548,6 +563,72 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                 <span x-text="otpCooldown > 0 ? '{{ __('Resend in') }} ' + otpCooldown + 's' : '{{ __('Resend') }}'"></span>
                             </button>
                         </p>
+
+                        </div> {{-- /OTP step --}}
+
+                        {{-- ── Simple registration step (new phone) ── --}}
+                        <div x-show="needsRegistration" x-cloak class="otp-modal__reg">
+                            <div class="otp-modal__reg-field">
+                                <label class="otp-modal__reg-label" for="reg-name-input">{{ __('Full Name') }}</label>
+                                <input type="text" id="reg-name-input"
+                                       class="otp-modal__reg-input"
+                                       x-model="regName"
+                                       :disabled="regLoading"
+                                       placeholder="{{ __('Add your name') }}"
+                                       autocomplete="name" />
+                            </div>
+
+                            <div class="otp-modal__reg-field">
+                                <label class="otp-modal__reg-label" for="reg-email-input">
+                                    {{ __('Email') }}
+                                    <span class="otp-modal__reg-hint">({{ __('optional') }})</span>
+                                </label>
+                                <input type="email" id="reg-email-input"
+                                       class="otp-modal__reg-input"
+                                       x-model="regEmail"
+                                       :disabled="regLoading"
+                                       placeholder="{{ __('Add your email') }}"
+                                       autocomplete="email" dir="ltr" />
+                            </div>
+
+                            <div class="otp-modal__reg-field">
+                                <label class="otp-modal__reg-label">
+                                    {{ __('Gender') }}
+                                    <span class="otp-modal__reg-hint">({{ __('optional') }})</span>
+                                </label>
+                                <div class="otp-modal__reg-gender">
+                                    <button type="button"
+                                            class="otp-modal__reg-gender-btn"
+                                            :class="{ 'otp-modal__reg-gender-btn--active': regGender === 'male' }"
+                                            @click="regGender = 'male'"
+                                            :disabled="regLoading">
+                                        {{ __('Male') }}
+                                    </button>
+                                    <button type="button"
+                                            class="otp-modal__reg-gender-btn"
+                                            :class="{ 'otp-modal__reg-gender-btn--active': regGender === 'female' }"
+                                            @click="regGender = 'female'"
+                                            :disabled="regLoading">
+                                        {{ __('Female') }}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div x-show="regMessage" x-cloak class="otp-modal__message-wrap">
+                                <p :class="regMessageType === 'success' ? 'otp-modal__message--success' : 'otp-modal__message--error'"
+                                   class="otp-modal__message" x-text="regMessage"></p>
+                            </div>
+
+                            <button type="button" class="otp-modal__btn"
+                                    @click="submitRegistration()"
+                                    :disabled="regLoading || !regName.trim()">
+                                <span x-show="!regLoading">{{ __('Create Account') }}</span>
+                                <span x-show="regLoading" x-cloak style="display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                                    <svg style="width:18px;height:18px;" class="animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                                    {{ __('Saving...') }}
+                                </span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </template>
@@ -843,6 +924,31 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
         letter-spacing: 1px;
         margin-bottom: 28px;
     }
+    /* Compact verified pill — used after the phone has been verified */
+    .otp-modal__phone-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 6px auto 24px;
+        padding: 6px 12px;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        color: #15803d;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+    .otp-modal__phone-pill-check {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+    }
+    /* Icon swap colour for the registration step */
+    .otp-modal__icon--reg {
+        background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+        color: #16a34a;
+    }
 
     /* Digit inputs */
     .otp-modal__digits {
@@ -955,6 +1061,77 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
         cursor: not-allowed;
     }
 
+    /* ─── Simple registration block (inside OTP modal) ─── */
+    .otp-modal__reg {
+        text-align: {{ app()->getLocale() === 'ar' ? 'right' : 'left' }};
+        margin-top: 8px;
+    }
+    .otp-modal__reg-field {
+        margin-bottom: 14px;
+    }
+    .otp-modal__reg-label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: #334155;
+        margin-bottom: 6px;
+    }
+    .otp-modal__reg-hint {
+        color: #94a3b8;
+        font-weight: 500;
+    }
+    .otp-modal__reg-input {
+        width: 100%;
+        height: 48px;
+        padding: 0 14px;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        background: #f8fafc;
+        font-size: 15px;
+        color: #0f172a;
+        outline: none;
+        transition: all 0.2s;
+    }
+    .otp-modal__reg-input:focus {
+        border-color: #279ff9;
+        background: #fff;
+        box-shadow: 0 0 0 4px rgba(39,159,249,0.10);
+    }
+    .otp-modal__reg-input:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    .otp-modal__reg-gender {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+    .otp-modal__reg-gender-btn {
+        height: 44px;
+        border: 2px solid #e2e8f0;
+        background: #f8fafc;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #475569;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .otp-modal__reg-gender-btn:hover:not(:disabled) {
+        border-color: #cbd5e1;
+        background: #f1f5f9;
+    }
+    .otp-modal__reg-gender-btn--active,
+    .otp-modal__reg-gender-btn--active:hover {
+        border-color: #279ff9;
+        background: #eff6ff;
+        color: #1d4ed8;
+    }
+    .otp-modal__reg-gender-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
     @media (max-width: 420px) {
         .otp-modal {
             padding: 32px 20px 24px;
@@ -1013,6 +1190,15 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
             otpMessage: '',
             otpMessageType: '',
             otpCooldown: 0,
+
+            // Simple registration state (shown when OTP verifies a brand-new phone)
+            needsRegistration: false,
+            regName: '{{ old('name', '') }}',
+            regEmail: '{{ old('email', '') }}',
+            regGender: '',
+            regLoading: false,
+            regMessage: '',
+            regMessageType: '',
 
             // Coupon state
             couponCode: '{{ old('coupon', '') }}',
@@ -1201,10 +1387,22 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                     const data = await response.json();
 
                     if (data.success) {
-                        this.phoneVerified = true;
-                        this.otpMessageType = 'success';
-                        this.otpMessage = data.message;
-                        setTimeout(() => { this.otpModalOpen = false; }, 800);
+                        // New phone — backend wants a simple registration step.
+                        if (data.needs_registration) {
+                            this.needsRegistration = true;
+                            this.otpMessage = '';
+                            // Pre-fill name from the checkout form if present.
+                            const nameField = document.querySelector('input[name="name"]');
+                            if (nameField && nameField.value && !this.regName) {
+                                this.regName = nameField.value;
+                            }
+                            this.$nextTick(() => document.getElementById('reg-name-input')?.focus());
+                        } else {
+                            this.phoneVerified = true;
+                            this.otpMessageType = 'success';
+                            this.otpMessage = data.message;
+                            setTimeout(() => { this.otpModalOpen = false; }, 800);
+                        }
                     } else {
                         this.otpMessageType = 'error';
                         this.otpMessage = data.message;
@@ -1217,6 +1415,56 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                 }
 
                 this.otpLoading = false;
+            },
+
+            // Submit simple registration after OTP verified for a new phone.
+            async submitRegistration() {
+                if (!this.regName.trim()) return;
+
+                this.regLoading = true;
+                this.regMessage = '';
+
+                try {
+                    const response = await fetch('{{ route('auth.simple-register') }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+                            'Accept': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            name: this.regName.trim(),
+                            email: this.regEmail.trim() || null,
+                            gender: this.regGender || null,
+                        }),
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        this.phoneVerified = true;
+                        this.regMessageType = 'success';
+                        this.regMessage = data.message;
+
+                        // Sync the checkout form fields so submission has them.
+                        const nameField = document.querySelector('input[name="name"]');
+                        if (nameField && this.regName) nameField.value = this.regName;
+                        if (this.regEmail) this.email = this.regEmail;
+
+                        setTimeout(() => {
+                            this.otpModalOpen = false;
+                            this.needsRegistration = false;
+                        }, 800);
+                    } else {
+                        this.regMessageType = 'error';
+                        this.regMessage = data.message || '{{ __('auth.register_failed') }}';
+                    }
+                } catch (error) {
+                    this.regMessageType = 'error';
+                    this.regMessage = '{{ __('An error occurred. Please try again.') }}';
+                }
+
+                this.regLoading = false;
             },
 
             // Handle single digit input → auto-focus next
