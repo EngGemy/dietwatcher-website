@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class HowItWorksStep extends Model
 {
@@ -45,10 +46,25 @@ class HowItWorksStep extends Model
      */
     public function getImageUrlAttribute(): string
     {
-        if ($this->image) {
-            return asset('storage/' . $this->image);
+        if ($this->image && Storage::disk('public')->exists($this->image)) {
+            return asset('storage/' . ltrim($this->image, '/'));
         }
-        return asset('assets/images/how-old-1.png');
+
+        $fallbacks = [
+            1 => ['assets/images/how-old-1.png', 'assets/images/how-1.png'],
+            2 => ['assets/images/how-old-2.png', 'assets/images/how-2.png'],
+            3 => ['assets/images/how-old-3.png', 'assets/images/how-3.png'],
+        ];
+        $idx = max(1, min(3, (int) ($this->order_column ?: 1)));
+
+        $candidates = $fallbacks[$idx] ?? $fallbacks[1];
+        foreach ($candidates as $path) {
+            if (is_file(public_path($path))) {
+                return asset($path);
+            }
+        }
+
+        return asset('assets/images/plan-1.png');
     }
 
     /**

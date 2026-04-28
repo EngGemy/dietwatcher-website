@@ -8,13 +8,22 @@ $firstItem = collect($cart)->first();
 $planName = $firstItem['name'] ?? __('Order');
 $cartCount = collect($cart)->sum('quantity');
 $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['duration_days']));
+$firstPlanForPrice = $hasPlanItems ? collect($cart)->first(fn($item) => !empty($item['options']['duration_days'])) : null;
+$planDurationDays = (int) ($firstPlanForPrice['options']['duration_days'] ?? 28);
+$planLinePrice = (float) ($firstPlanForPrice['price'] ?? 0);
+$planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 0;
+
+$sessionVerifiedPhone = session('phone_verified');
+$oldPhone = old('phone', '');
+$initialPhone = $oldPhone !== '' ? $oldPhone : (string) ($sessionVerifiedPhone ?? '');
+$phoneVerifiedFromSession = filled($sessionVerifiedPhone);
 @endphp
 
 @section('title', __('Checkout') . ' | ' . $siteName)
 @section('description', __('Complete your order to start your healthy journey'))
 
 @section('content')
-<section class="bg-gray-200 pt-10 pb-28">
+<section class="checkout-page bg-gray-200 pt-10 pb-32 min-h-[60vh]">
     <div class="container max-w-[1420px]">
         {{-- Breadcrumb --}}
         <ol class="breadcrumb">
@@ -44,12 +53,18 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
             </li>
         </ol>
 
-        <form action="{{ route('checkout.store') }}" method="POST" x-data="checkoutPage()" @submit.prevent="submitForm($event)">
+        <form action="{{ route('checkout.store') }}" method="POST" class="checkout-page__form"
+              x-ref="checkoutForm"
+              x-data="checkoutPage()"
+              @address-selected.window="handleAddressFromMap($event)"
+              @map-address-draft.window="handleMapAddressDraft($event)"
+              @submit.prevent="submitForm($event)">
             @csrf
 
-            <div class="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                {{-- ── Left Column: Options & Info ─────────────────── --}}
-                <div>
+            {{-- Desktop: 50/50 two-column layout (matches Figma / static checkout) --}}
+            <div class="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start lg:gap-x-10">
+                {{-- Left: form steps --}}
+                <div class="order-1 min-w-0">
                     {{-- Select Options --}}
                     <div class="rounded-md border border-gray-200 bg-white p-5">
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Select Options') }}</h3>
@@ -66,7 +81,7 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                         readonly
                                         placeholder="{{ __('Select day') }}"
                                         class="date-picker-input @error('start_date') date-picker-input--error @enderror"
-                                        value="{{ old('start_date', date('Y-m-d', strtotime('+1 day'))) }}"
+                                        value="{{ old('start_date', now()->addHours(48)->format('Y-m-d')) }}"
                                     />
                                     <div class="date-picker-icon">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -75,7 +90,7 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                     </div>
                                     <div class="date-picker-label" id="date_display">
                                         @php
-                                            $defaultDate = old('start_date', date('Y-m-d', strtotime('+1 day')));
+                                            $defaultDate = old('start_date', now()->addHours(48)->format('Y-m-d'));
                                             $dateObj = \Carbon\Carbon::parse($defaultDate);
                                         @endphp
                                         <span class="date-picker-label__day">{{ $dateObj->format('d') }}</span>
@@ -87,120 +102,92 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                 @enderror
                             </div>
 
-                            {{-- Duration (only for meal plan subscriptions) --}}
+                            {{-- Duration: subscription = selectable cards (server + client fetch + cart fallback); meals = weekly/monthly radios --}}
                             @if($hasPlanItems)
-                            <div>
-                                <p class="mb-3 text-lg md:text-xl">{{ __('Duration') }}</p>
-                                <div class="choice-group">
-                                    <div class="choice-group__item">
-                                        <input type="radio" name="duration" id="weekly" class="choice-group__input"
-                                               value="weekly" {{ old('duration') === 'weekly' ? 'checked' : '' }}
-                                               x-model="duration">
-                                        <label for="weekly" class="choice-group__label">
-                                            <div class="choice-group__content">
-                                                <span class="choice-group__title">{{ __('Weekly') }}</span>
-                                            </div>
-                                            <span class="choice-group__icon"></span>
-                                        </label>
-                                    </div>
-                                    <div class="choice-group__item">
-                                        <input type="radio" name="duration" id="monthly" class="choice-group__input"
-                                               value="monthly" {{ old('duration', 'monthly') === 'monthly' ? 'checked' : '' }}
-                                               x-model="duration">
-                                        <label for="monthly" class="choice-group__label">
-                                            <div class="choice-group__content">
-                                                <span class="choice-group__title">{{ __('Monthly') }}</span>
-                                            </div>
-                                            <span class="choice-group__icon"></span>
-                                        </label>
-                                    </div>
-                                    <div class="choice-group__item">
-                                        <input type="radio" name="duration" id="3months" class="choice-group__input"
-                                               value="3months" {{ old('duration') === '3months' ? 'checked' : '' }}
-                                               x-model="duration">
-                                        <label for="3months" class="choice-group__label">
-                                            <div class="choice-group__content">
-                                                <span class="choice-group__title">{{ __('3 Months') }}</span>
-                                            </div>
-                                            <span class="choice-group__icon"></span>
-                                        </label>
-                                    </div>
-                                </div>
-                                @error('duration')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
-                            </div>
-                            @else
                                 <input type="hidden" name="duration" value="once" />
-                            @endif
-
-                            {{-- Delivery Preference --}}
-                            <div>
-                                <p class="mb-3 text-lg md:text-xl">{{ __('Delivery Preference') }}</p>
-                                <div class="choice-group choice-group--two">
-                                    <div class="choice-group__item">
-                                        <input type="radio" name="delivery_type" id="home" class="choice-group__input"
-                                               value="home" {{ old('delivery_type', 'home') === 'home' ? 'checked' : '' }}
-                                               x-model="deliveryType">
-                                        <label for="home" class="choice-group__label">
-                                            <div class="choice-group__content">
-                                                <span class="choice-group__title">{{ __('Home Delivery') }}</span>
-                                            </div>
-                                            <span class="choice-group__icon"></span>
-                                        </label>
-                                    </div>
-                                    <div class="choice-group__item">
-                                        <input type="radio" name="delivery_type" id="pickup" class="choice-group__input"
-                                               value="pickup" {{ old('delivery_type') === 'pickup' ? 'checked' : '' }}
-                                               x-model="deliveryType">
-                                        <label for="pickup" class="choice-group__label">
-                                            <div class="choice-group__content">
-                                                <span class="choice-group__title">{{ __('Pickup from Branch') }}</span>
-                                            </div>
-                                            <span class="choice-group__icon"></span>
-                                        </label>
-                                    </div>
-                                </div>
-                                @error('delivery_type')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
-
-                                {{-- Branch selector — shown right under the pickup option --}}
-                                <div x-show="deliveryType === 'pickup'" x-transition class="mt-4">
-                                    <template x-if="branchesLoading">
-                                        <p class="text-sm text-gray-500">{{ __('Loading branches...') }}</p>
-                                    </template>
-                                    <template x-if="!branchesLoading">
-                                        <div class="space-y-3">
-                                            <select name="branch_id" class="form-control" x-model="selectedBranchId">
-                                                <option value="">{{ __('Select pickup branch') }}</option>
-                                                <template x-for="branch in branches" :key="branch.id">
-                                                    <option :value="branch.id" x-text="(typeof branch.name === 'object' ? (branch.name['{{ app()->getLocale() }}'] || branch.name['en'] || '') : branch.name) + (branch.address ? ' — ' + branch.address : '')"></option>
-                                                </template>
-                                            </select>
-
-                                            {{-- Selected branch detail card --}}
-                                            <template x-if="selectedBranchId">
-                                                <div class="rounded-lg bg-blue-50 p-3">
-                                                    <template x-for="branch in branches.filter(b => String(b.id) === String(selectedBranchId))" :key="branch.id">
-                                                        <div class="flex items-start gap-3">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" style="width:20px;height:20px;flex-shrink:0;margin-top:2px;color:#279ff9" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
-                                                            </svg>
-                                                            <div>
-                                                                <p class="font-semibold text-sm" x-text="typeof branch.name === 'object' ? (branch.name['{{ app()->getLocale() }}'] || branch.name['en'] || '') : branch.name"></p>
-                                                                <p class="text-xs text-gray-600" x-show="branch.address" x-text="branch.address"></p>
-                                                                <p class="text-xs text-gray-600" x-show="branch.phone" dir="ltr" x-text="branch.phone"></p>
-                                                            </div>
-                                                        </div>
-                                                    </template>
+                                <div>
+                                    <p class="mb-3 text-lg md:text-xl">{{ __('Duration') }}</p>
+                                    <p x-show="durationsLoading" x-cloak class="mb-3 text-sm text-gray-500">{{ __('Loading...') }}</p>
+                                    <div x-show="! durationsLoading && planDurations.length" x-cloak class="duration-pills">
+                                        <template x-for="(d, idx) in planDurations" :key="'pd-' + idx + '-' + (d.id ?? 'x')">
+                                            <div class="duration-pills__item">
+                                                <div x-show="Number(d.id) > 0">
+                                                    <input
+                                                        type="radio"
+                                                        name="plan_duration_id"
+                                                        class="duration-pills__input"
+                                                        :id="'plan-dur-' + d.id"
+                                                        :value="String(d.id)"
+                                                        x-model="selectedPlanDurationId"
+                                                    />
+                                                    <label class="duration-pills__face" :for="'plan-dur-' + d.id">
+                                                        <span class="duration-pills__offer-badge" x-show="durationPlanHasOffer(d)" x-cloak>{{ __('Offer') }}</span>
+                                                        <span class="duration-pills__title" x-text="durationCardTitle(d)"></span>
+                                                        <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="'{{ __('SAR') }} ' + durationPlanListTotalStr(d)"></span>
+                                                        <span class="duration-pills__total-line" x-text="'{{ __('SAR') }} ' + durationPlanEffectiveTotalStr(d)"></span>
+                                                        <span class="duration-pills__avg" x-show="durationPlanAvgLine(d)" x-text="durationPlanAvgLine(d)"></span>
+                                                    </label>
                                                 </div>
-                                            </template>
-                                        </div>
-                                    </template>
+                                                <div x-show="Number(d.id) <= 0" class="duration-pills__face duration-pills__face--static">
+                                                    <span class="duration-pills__offer-badge" x-show="durationPlanHasOffer(d)" x-cloak>{{ __('Offer') }}</span>
+                                                    <span class="duration-pills__title" x-text="durationCardTitle(d)"></span>
+                                                    <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="'{{ __('SAR') }} ' + durationPlanListTotalStr(d)"></span>
+                                                    <span class="duration-pills__total-line" x-text="'{{ __('SAR') }} ' + durationPlanEffectiveTotalStr(d)"></span>
+                                                    <span class="duration-pills__avg" x-show="durationPlanAvgLine(d)" x-text="durationPlanAvgLine(d)"></span>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <p x-show="! durationsLoading && ! planDurations.length" x-cloak class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                        {{ __('Could not load duration options. Please return to the meal plan and try again.') }}
+                                    </p>
+                                    @error('plan_duration_id')
+                                        <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                                    @enderror
                                 </div>
-                            </div>
+                            @else
+                                <div>
+                                    <p class="mb-3 text-lg md:text-xl">{{ __('Duration') }}</p>
+                                    <div class="choice-group">
+                                        <div class="choice-group__item">
+                                            <input type="radio" name="duration" id="weekly" class="choice-group__input"
+                                                   value="weekly" {{ old('duration') === 'weekly' ? 'checked' : '' }}
+                                                   x-model="duration">
+                                            <label for="weekly" class="choice-group__label">
+                                                <div class="choice-group__content">
+                                                    <span class="choice-group__title">{{ __('Weekly') }}</span>
+                                                </div>
+                                                <span class="choice-group__icon"></span>
+                                            </label>
+                                        </div>
+                                        <div class="choice-group__item">
+                                            <input type="radio" name="duration" id="monthly" class="choice-group__input"
+                                                   value="monthly" {{ old('duration', 'monthly') === 'monthly' ? 'checked' : '' }}
+                                                   x-model="duration">
+                                            <label for="monthly" class="choice-group__label">
+                                                <div class="choice-group__content">
+                                                    <span class="choice-group__title">{{ __('Monthly') }}</span>
+                                                </div>
+                                                <span class="choice-group__icon"></span>
+                                            </label>
+                                        </div>
+                                        <div class="choice-group__item">
+                                            <input type="radio" name="duration" id="3months" class="choice-group__input"
+                                                   value="3months" {{ old('duration') === '3months' ? 'checked' : '' }}
+                                                   x-model="duration">
+                                            <label for="3months" class="choice-group__label">
+                                                <div class="choice-group__content">
+                                                    <span class="choice-group__title">{{ __('3 Months') }}</span>
+                                                </div>
+                                                <span class="choice-group__icon"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    @error('duration')
+                                        <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                                    @enderror
+                                </div>
+                            @endif
 
                             {{-- Coupon Code --}}
                             <div>
@@ -212,6 +199,7 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                     <input type="text" name="coupon" class="form-control bg-blue/5"
                                            placeholder="{{ __('Promo code') }}" value="{{ old('coupon') }}"
                                            x-model="couponCode" :disabled="couponApplied" />
+                                    <input type="hidden" name="promocode_name" :value="couponCode || ''" />
                                     <template x-if="!couponApplied">
                                         <button type="button" class="form-input-action__btn"
                                                 @click="applyCoupon()" :disabled="couponLoading || !couponCode.trim()">
@@ -234,23 +222,32 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                     </div>
 
                     {{-- User Information --}}
-                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5">
+                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-ref="checkoutUserCard">
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('User Information') }}</h3>
 
                         <div class="space-y-4">
-                            <div>
+                            {{-- Name field: hidden initially, shown after OTP verification --}}
+                            <div x-show="phoneVerified && showNameField" x-cloak
+                                 x-transition:enter="transition ease-out duration-300"
+                                 x-transition:enter-start="opacity-0 -translate-y-2"
+                                 x-transition:enter-end="opacity-100 translate-y-0">
                                 <input type="text" name="name" class="form-control @error('name') border-red-500 @enderror"
-                                       placeholder="{{ __('Add your name') }}" value="{{ old('name') }}" required />
+                                       placeholder="{{ __('Add your name') }}" x-model="customerName" required />
                                 @error('name')
                                     <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
                                 @enderror
                             </div>
+                            {{-- Hidden name input when field is not shown (existing user with name already set) --}}
+                            <template x-if="phoneVerified && !showNameField && customerName">
+                                <input type="hidden" name="name" :value="customerName" />
+                            </template>
 
                             <div>
                                 <div class="form-input-action">
                                     <input type="tel" name="phone" class="form-control @error('phone') border-red-500 @enderror"
                                            placeholder="{{ __('Add your phone number') }}" value="{{ old('phone') }}" required dir="ltr"
-                                           x-model="phone" :disabled="phoneVerified" />
+                                           x-model="phone" :readonly="phoneVerified"
+                                           :class="phoneVerified ? 'bg-gray-50 cursor-default' : ''" />
                                     <template x-if="!phoneVerified">
                                         <button type="button" class="form-input-action__btn"
                                                 @click="openOtpModal()" :disabled="otpLoading || !phone.trim()">
@@ -270,104 +267,292 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                 @enderror
                             </div>
 
-                            <div>
-                                <input type="email" name="email" class="form-control @error('email') border-red-500 @enderror"
-                                       placeholder="{{ __('Add your email') }}" value="{{ old('email') }}" required dir="ltr"
-                                       x-model="email" />
-                                @error('email')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
+                            <div x-show="phoneVerified && savedAddresses.length > 0" x-cloak class="rounded-lg border border-blue-100 bg-blue-50/80 p-4">
+                                <div class="mb-2 flex items-center justify-between gap-2">
+                                    <p class="text-sm font-semibold text-gray-900">{{ __('checkout.saved_addresses_title') }}</p>
+                                    <button type="button"
+                                            class="inline-flex items-center gap-1 rounded-lg border border-blue-500 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
+                                            @click="startAddingAddress()">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                        </svg>
+                                        <span x-text="addingNewAddress ? '{{ __('Cancel') }}' : '{{ __('Add new address') }}'"></span>
+                                    </button>
+                                </div>
+                                <p class="mb-3 text-xs text-gray-600">{{ __('checkout.saved_addresses_hint') }}</p>
+                                <ul class="max-h-64 space-y-2 overflow-y-auto" x-show="!addingNewAddress">
+                                    <template x-for="addr in savedAddresses" :key="addr.id">
+                                        <li>
+                                            <div class="w-full rounded-lg border px-3 py-2.5 text-sm text-gray-800 transition hover:border-blue-400 hover:bg-blue-50/50"
+                                                 :class="String(addr.id) === String(selectedAddressId) ? 'border-blue-500 bg-white shadow-sm ring-1 ring-blue-200' : 'border-gray-200 bg-white'">
+                                                <div class="flex items-start justify-between gap-3">
+                                                    <div class="min-w-0 flex-1">
+                                                        <span class="line-clamp-2 block text-left" x-text="addr.description || addr.title || ''"></span>
+                                                        <span class="mt-1 block text-xs text-gray-500 text-left" x-text="savedAddressDistrict(addr)"></span>
+                                                    </div>
+                                                    <button type="button"
+                                                            class="shrink-0 rounded-md border border-blue-500 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
+                                                            @click="selectSavedAddress(addr)">
+                                                        اختيار العنوان
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </li>
+                                    </template>
+                                </ul>
+                                <p x-show="addingNewAddress" x-cloak class="text-xs text-blue-700">
+                                    {{ __('Fill the map and address fields below, then tap "Save address".') }}
+                                </p>
                             </div>
+
                         </div>
                     </div>
 
-                    {{-- Delivery Address --}}
-                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-show="deliveryType === 'home'" x-transition>
+                    {{-- Delivery address: map (home) or branch (pickup) — toggles live in Select Options --}}
+                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-ref="paymentCard">
+                        <input type="hidden" name="selected_address_id" :value="selectedAddressId || ''" :disabled="deliveryType !== 'home'" />
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Delivery Address') }}</h3>
 
-                        <div class="space-y-4">
+                        {{-- Delivery preference (under heading — matches reference layout) --}}
+                        <div class="mb-6">
+                            <p class="mb-3 text-lg md:text-xl">{{ __('Delivery Preference') }}</p>
+                            <div class="choice-group choice-group--two">
+                                <div class="choice-group__item">
+                                    <input type="radio" name="delivery_type" id="home" class="choice-group__input"
+                                           value="home" {{ old('delivery_type', 'home') === 'home' ? 'checked' : '' }}
+                                           x-model="deliveryType">
+                                    <label for="home" class="choice-group__label">
+                                        <div class="choice-group__content">
+                                            <span class="choice-group__title">{{ __('Home Delivery') }}</span>
+                                        </div>
+                                        <span class="choice-group__icon"></span>
+                                    </label>
+                                </div>
+                                <div class="choice-group__item">
+                                    <input type="radio" name="delivery_type" id="pickup" class="choice-group__input"
+                                           value="pickup" {{ old('delivery_type') === 'pickup' ? 'checked' : '' }}
+                                           x-model="deliveryType">
+                                    <label for="pickup" class="choice-group__label">
+                                        <div class="choice-group__content">
+                                            <span class="choice-group__title">{{ __('Pickup from Branch') }}</span>
+                                        </div>
+                                        <span class="choice-group__icon"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            @error('delivery_type')
+                                <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
 
-                            {{-- Zone (kept for delivery-fee calculation) --}}
-                            <div>
-                                <select name="zone_id" class="form-control @error('zone_id') border-red-500 @enderror"
-                                        x-model="selectedZoneId" @change="onZoneChange()">
-                                    <option value="">{{ __('Select Zone') }}</option>
-                                    @foreach($zones as $zone)
-                                        @if($zone['is_active'] ?? true)
-                                        <option value="{{ $zone['id'] }}" {{ old('zone_id') == $zone['id'] ? 'selected' : '' }}>
-                                            {{ is_array($zone['name']) ? ($zone['name'][app()->getLocale()] ?? $zone['name']['en'] ?? '') : $zone['name'] }}
-                                        </option>
-                                        @endif
-                                    @endforeach
-                                </select>
-                                @error('zone_id')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
+                        {{-- Pickup: choose branch → search list → confirmed --}}
+                        <div x-show="deliveryType === 'pickup'" x-transition class="space-y-4">
+                            <input type="hidden" name="branch_id" :value="selectedBranchId" :disabled="deliveryType === 'home'" />
+
+                            <p x-show="branchesLoading" class="text-sm text-gray-500">{{ __('Loading branches...') }}</p>
+
+                            <div x-show="!branchesLoading && pickupPhase === 'cta'" x-transition>
+                                <button type="button" class="btn btn--primary btn--md w-full py-4 text-base font-semibold" @click="openBranchPicker()">
+                                    {{ __('Choose Branch') }}
+                                </button>
                             </div>
 
-                            {{-- Google Maps Address Picker --}}
-                            <div
-                                x-data="{
-                                    streetVal: '{{ old('street') }}',
-                                    buildingVal: '{{ old('building') }}',
-                                    onAddressSelected(detail) {
-                                        this.streetVal   = detail.description || '';
-                                        this.buildingVal = detail.description || '';
-                                    }
-                                }"
-                                @address-selected.window="onAddressSelected($event.detail)"
-                            >
-                                {{-- Map picker trigger --}}
-                                <x-google-map-picker
-                                    field-prefix="delivery"
-                                    :placeholder="__('Pick delivery location on map')"
-                                />
+                            <div x-show="!branchesLoading && pickupPhase === 'list'" x-cloak x-transition class="space-y-3">
+                                <input type="search" class="form-control w-full" x-model="branchSearch"
+                                       placeholder="{{ __('Search branches') }}" autocomplete="off" />
+                                <ul class="checkout-branch-list max-h-80 space-y-2 overflow-y-auto pe-1">
+                                    <template x-for="branch in filterBranches()" :key="branch.id">
+                                        <li>
+                                            <button type="button" class="checkout-branch-list__item" @click="selectBranch(branch.id)">
+                                                <span class="checkout-branch-list__name" x-text="branchLabel(branch)"></span>
+                                                <span class="checkout-branch-list__addr" x-show="branch.address" x-text="branch.address"></span>
+                                                <span class="checkout-branch-list__phone" x-show="branch.phone" dir="ltr" x-text="branch.phone"></span>
+                                            </button>
+                                        </li>
+                                    </template>
+                                </ul>
+                                <p x-show="!branchesLoading && filterBranches().length === 0" class="text-sm text-gray-500">{{ __('No branches match your search.') }}</p>
+                            </div>
 
-                                {{-- Hidden fields sent to CheckoutController --}}
-                                <input type="hidden" name="street"   x-model="streetVal" />
-                                <input type="hidden" name="building" x-model="buildingVal" />
+                            <div x-show="!branchesLoading && pickupPhase === 'done' && selectedBranchId" x-cloak x-transition>
+                                <div class="checkout-branch-selected">
+                                    <div class="checkout-branch-selected__head">
+                                        <p class="font-semibold text-gray-900" x-text="branchLabel(selectedBranchObj())"></p>
+                                        <button type="button" class="text-sm font-bold text-blue-600 hover:underline" @click="editBranchSelection()">{{ __('Edit') }}</button>
+                                    </div>
+                                    <template x-if="selectedBranchObj()">
+                                        <div>
+                                            <p class="mt-1 text-sm text-gray-600" x-show="selectedBranchObj().address" x-text="selectedBranchObj().address"></p>
+                                            <p class="mt-1 text-sm text-gray-600" x-show="selectedBranchObj().phone" dir="ltr" x-text="selectedBranchObj().phone"></p>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                            @error('branch_id')
+                                <p class="text-red-500 text-sm">{{ $message }}</p>
+                            @enderror
+                        </div>
 
-                                {{-- Editable confirmation of picked address --}}
-                                <div x-show="streetVal" x-transition class="mt-3">
-                                    <label class="block text-sm font-medium text-gray-600 mb-1">{{ __('Address Notes') }}</label>
-                                    <input
-                                        type="text"
-                                        x-model="buildingVal"
-                                        @input="streetVal = buildingVal"
-                                        class="form-control"
-                                        placeholder="{{ __('Apartment, floor, landmark…') }}"
-                                    />
+                        {{-- Home: city + inline map + address — no x-transition (can leave map invisible); x-show keeps block in DOM --}}
+                        <div x-show="deliveryType === 'home' && (savedAddresses.length === 0 || addingNewAddress)" class="space-y-4">
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('City') }}</label>
+                                    <select name="zone_id" class="form-control @error('zone_id') border-red-500 @enderror"
+                                            x-model="selectedZoneId" @change="onZoneChange()"
+                                            :disabled="deliveryType === 'pickup'"
+                                            :required="deliveryType === 'home'">
+                                        <option value="">{{ __('Select city') }}</option>
+                                        @foreach($zones as $zone)
+                                            @if($zone['is_active'] ?? true)
+                                            <option value="{{ $zone['id'] }}" {{ old('zone_id') == $zone['id'] ? 'selected' : '' }}>
+                                                {{ is_array($zone['name']) ? ($zone['name'][app()->getLocale()] ?? $zone['name']['en'] ?? '') : $zone['name'] }}
+                                            </option>
+                                            @endif
+                                        @endforeach
+                                    </select>
+                                    @error('zone_id')
+                                        <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                                    @enderror
                                 </div>
 
-                                @error('street')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
-                                @error('building')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
-                            </div>
+                                <div class="space-y-3">
+                                    <p class="text-sm text-gray-600">{{ __('checkout.map_address_hint') }}</p>
+                                    <div class="checkout-map-embed relative z-[1] min-h-[360px] w-full overflow-hidden rounded-xl border border-gray-200 bg-white">
+                                        <x-google-map-picker
+                                            field-prefix="delivery"
+                                            variant="inline"
+                                            :placeholder="__('Search for an address')"
+                                        />
+                                    </div>
+                                    @unless(config('services.google_maps.key'))
+                                        <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                            {{ __('Add GOOGLE_MAPS_API_KEY to your .env file to load the live map.') }}
+                                        </p>
+                                    @endunless
+
+                                    <div>
+                                        <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Address') }}</label>
+                                        <textarea name="street" rows="3"
+                                                  class="form-control @error('street') border-red-500 @enderror"
+                                                  placeholder="{{ __('Street, district, details…') }}"
+                                                  x-model="addressStreet"
+                                                  :required="deliveryType === 'home'"
+                                                  :disabled="deliveryType === 'pickup'"></textarea>
+                                        @error('street')
+                                            <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                                        @enderror
+                                    </div>
+
+                                    <div x-show="deliveryType === 'home' && addingNewAddress" x-cloak>
+                                        <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Phone') }}</label>
+                                        <input type="tel" class="form-control" autocomplete="tel" inputmode="tel" dir="ltr"
+                                               name="address_phone"
+                                               placeholder="{{ __('e.g. 05XXXXXXXX') }}"
+                                               x-model="addressPhone"
+                                               :disabled="deliveryType === 'pickup'" />
+                                        <p class="mt-1 text-xs text-gray-500">{{ __('Used for delivery coordination on this address.') }}</p>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3" x-show="deliveryType === 'home'" x-cloak>
+                                        <div>
+                                            <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Building') }}</label>
+                                            <input type="text" class="form-control" autocomplete="section-shipping address-line2"
+                                                   placeholder="{{ __('Building no.') }}"
+                                                   x-model="deliveryBuilding"
+                                                   @input.debounce.300ms="composeBuildingNotes()"
+                                                   :disabled="deliveryType === 'pickup'" />
+                                        </div>
+                                        <div>
+                                            <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Floor') }}</label>
+                                            <input type="text" class="form-control" inputmode="numeric" autocomplete="off"
+                                                   placeholder="{{ __('Floor no.') }}"
+                                                   x-model="deliveryFloor"
+                                                   @input.debounce.300ms="composeBuildingNotes()"
+                                                   :disabled="deliveryType === 'pickup'" />
+                                        </div>
+                                        <div>
+                                            <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Door') }}</label>
+                                            <input type="text" class="form-control" inputmode="numeric" autocomplete="off"
+                                                   placeholder="{{ __('Door no.') }}"
+                                                   x-model="deliveryDoor"
+                                                   @input.debounce.300ms="composeBuildingNotes()"
+                                                   :disabled="deliveryType === 'pickup'" />
+                                        </div>
+                                    </div>
+
+                                    <input type="hidden" name="building" :value="buildingNotes" :disabled="deliveryType === 'pickup'" />
+
+                                    <div x-show="addingNewAddress" x-cloak class="flex items-center gap-3 pt-2">
+                                        <button type="button"
+                                                class="btn btn--primary btn--md flex-1"
+                                                :disabled="savingNewAddress"
+                                                @click="saveNewAddress()">
+                                            <span x-show="!savingNewAddress">{{ __('Save address') }}</span>
+                                            <span x-show="savingNewAddress" x-cloak>{{ __('Saving...') }}</span>
+                                        </button>
+                                        <button type="button"
+                                                class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                                                @click="addingNewAddress = false">
+                                            {{ __('Cancel') }}
+                                        </button>
+                                    </div>
+                                    <p x-show="newAddressError" x-cloak class="text-sm text-red-600" x-text="newAddressError"></p>
+                                </div>
                         </div>
                     </div>
 
-                    {{-- Payment Info --}}
-                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5">
-                        <h3 class="mb-4 text-2xl font-semibold md:text-2xl">{{ __('Payment') }}</h3>
-                        <div class="flex items-center gap-3 rounded-lg bg-blue-50 p-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-blue flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    {{-- Payment: Moyasar (fields visible, pay button disabled until phone verified) --}}
+                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5"
+                         :class="{ 'checkout-pay-locked': !phoneVerified }"
+                    >
+                        <h3 class="mb-2 text-2xl font-semibold md:text-2xl">{{ __('Payment') }}</h3>
+                        <p class="mb-4 text-sm text-gray-600">{{ __('payment.pay_with_moyasar') }}</p>
+
+                        <div class="mb-3 flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3">
+                            <svg x-show="phoneVerified" xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                            </svg>
+                            <svg x-show="!phoneVerified" x-cloak xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                             </svg>
                             <div>
                                 <p class="text-sm font-semibold text-gray-800">{{ __('payment.secure_checkout') }}</p>
-                                <p class="text-xs text-gray-500 mt-0.5">{{ __('payment.methods_available') }}</p>
+                                <p class="text-xs text-gray-500">{{ __('payment.secure_note') }}</p>
                             </div>
+                        </div>
+
+                        <div x-show="moyasarError" x-cloak class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" x-text="moyasarError"></div>
+
+                        <div class="relative min-h-[160px] rounded-xl border border-gray-200 bg-gray-50 p-4">
+                            <div
+                                x-show="!canProceedToPayment()"
+                                x-cloak
+                                class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                                x-text="paymentBlockerMessage()"></div>
+                            {{-- Info banner when phone not verified --}}
+                            <div
+                                x-show="!phoneVerified"
+                                x-cloak
+                                x-transition:leave="transition ease-in duration-200"
+                                x-transition:leave-start="opacity-100 max-h-20"
+                                x-transition:leave-end="opacity-0 max-h-0"
+                                class="mb-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                                </svg>
+                                <span>{{ __('payment.verify_phone_to_pay') }}</span>
+                            </div>
+
+                            <div id="moyasar-form-checkout" class="relative z-[1] min-h-[120px] w-full"></div>
                         </div>
                     </div>
                 </div>
 
-                {{-- ── Right Column: Order Summary ──────────────────── --}}
-                <div class="space-y-6">
-                    <div class="rounded-md border border-gray-200 bg-white p-5">
-                        <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Order Summary') }}</h3>
+                {{-- Right: Plan summary (sticky on desktop — matches Figma) --}}
+                <div class="order-2 min-w-0 space-y-6">
+                    <div class="rounded-md border border-gray-200 bg-white p-5 lg:sticky lg:top-24 lg:z-10">
+                        <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Plan Summary') }}</h3>
 
                         <div class="space-y-4">
                             {{-- Cart Items --}}
@@ -389,8 +574,15 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                                                 <span class="mx-1">&bull;</span> {{ $item['options']['calories'] }} {{ __('Kcal') }}
                                             @endif
                                         </p>
+                                        @if($hasPlanItems)
+                                            <p class="mt-1 text-sm text-gray-600" x-show="!durationsLoading && planDurationSummaryLabel()" x-text="planDurationSummaryLabel()"></p>
+                                        @endif
                                     </div>
-                                    <span class="font-bold text-gray-900 whitespace-nowrap">SAR {{ number_format($item['price'] * $item['quantity'], 2) }}</span>
+                                    @if($hasPlanItems)
+                                        <span class="font-bold text-gray-900 whitespace-nowrap" x-text="'SAR ' + subtotalInclVat().toFixed(2)"></span>
+                                    @else
+                                        <span class="font-bold text-gray-900 whitespace-nowrap">SAR {{ number_format($item['price'] * $item['quantity'], 2) }}</span>
+                                    @endif
                                 </div>
                             @endforeach
 
@@ -401,8 +593,12 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
 
                                     <div class="space-y-2">
                                         <div class="flex items-center justify-between">
-                                            <span class="text-gray-600">{{ __('Items Total') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></span>
+                                            <span class="text-gray-600">{{ $hasPlanItems ? __('Plan Price') : __('Items Total') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></span>
                                             <span class="font-bold text-gray-900">SAR <span x-text="subtotalInclVat().toFixed(2)"></span></span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-sm" x-show="isPlanCheckout && planSelectedAvgPerDayAmount()" x-cloak>
+                                            <span class="text-gray-600">{{ __('Avg. per day') }} <span class="text-xs text-gray-400">({{ __('Incl. VAT') }})</span></span>
+                                            <span class="font-semibold text-gray-800" x-text="planSelectedAvgPerDayAmount()"></span>
                                         </div>
                                         <div class="flex items-center justify-between">
                                             <span class="text-gray-600">{{ __('Delivery fees') }}</span>
@@ -428,7 +624,8 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
 
                             {{-- Proceed to Payment Button --}}
                             <div class="pt-2">
-                                <button type="submit" class="btn btn--primary btn--md w-full">
+                                <button type="submit" class="btn btn--primary btn--md w-full"
+                                        :disabled="!phoneVerified || !canProceedToPayment()">
                                     {{ __('payment.proceed') }} — SAR <span x-text="total().toFixed(2)"></span>
                                 </button>
                             </div>
@@ -638,9 +835,35 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
 </section>
 @endsection
 
+@push('head')
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/moyasar-payment-form/dist/moyasar.css" />
+@endpush
+
 @push('styles')
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <style>
+    /* ─── Smooth Page Animations ───────────────────── */
+    .checkout-page .rounded-md {
+        animation: checkout-fade-up 0.5s ease both;
+    }
+    .checkout-page .rounded-md:nth-child(1) { animation-delay: 0s; }
+    .checkout-page .rounded-md:nth-child(2) { animation-delay: 0.1s; }
+    .checkout-page .rounded-md:nth-child(3) { animation-delay: 0.2s; }
+    .checkout-page .order-2 { animation: checkout-fade-up 0.5s ease 0.15s both; }
+
+    @keyframes checkout-fade-up {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Smooth transitions for interactive elements */
+    .choice-group__label,
+    .duration-pills__face,
+    .form-control,
+    .form-input-action__btn {
+        transition: all 0.25s ease !important;
+    }
+
     /* Breadcrumb styles */
     .breadcrumb {
         @apply flex flex-wrap items-center gap-1 text-sm text-gray-600 mb-6;
@@ -845,7 +1068,8 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
         color: #ccc !important;
     }
 
-    [x-cloak] { display: none !important; }
+    /* Only hide cloaked nodes inside checkout — avoids stuck hidden UI if Alpine loads late */
+    .checkout-page [x-cloak] { display: none !important; }
 
     /* ─── OTP Modal ─────────────────────────────────── */
     .otp-overlay {
@@ -1145,10 +1369,47 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
         }
         .otp-modal__digits { gap: 8px; }
     }
+
+    /* Pickup branch list (checkout) */
+    .checkout-branch-list { list-style: none; margin: 0; padding: 0; }
+    .checkout-branch-list__item {
+        display: block; width: 100%; text-align: start;
+        border: 1px solid #e5e7eb; border-radius: 12px; padding: 0.85rem 1rem;
+        background: #fff; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+    }
+    .checkout-branch-list__item:hover {
+        border-color: #279ff9; box-shadow: 0 2px 8px rgba(39,159,249,.12);
+    }
+    .checkout-branch-list__name { display: block; font-weight: 700; color: #111827; }
+    .checkout-branch-list__addr { display: block; font-size: 0.8rem; color: #6b7280; margin-top: 0.2rem; }
+    .checkout-branch-list__phone { display: block; font-size: 0.8rem; color: #6b7280; margin-top: 0.15rem; }
+    .checkout-branch-selected {
+        border: 2px solid #bfdbfe; border-radius: 12px; background: #eff6ff; padding: 1rem 1.1rem;
+    }
+    .checkout-branch-selected__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+
+    #moyasar-form-checkout .mysr-form {
+        font-family: inherit !important;
+    }
+    #moyasar-form-checkout .mysr-form button[type="submit"],
+    #moyasar-form-checkout .mysr-form .mysr-form-button {
+        background: #279ff9 !important;
+        border-radius: 10px !important;
+        transition: opacity 0.3s, filter 0.3s;
+    }
+    /* Disable pay button when phone not verified */
+    .checkout-pay-locked #moyasar-form-checkout .mysr-form button[type="submit"],
+    .checkout-pay-locked #moyasar-form-checkout .mysr-form .mysr-form-button {
+        pointer-events: none !important;
+        opacity: 0.5 !important;
+        filter: grayscale(0.3) !important;
+        cursor: not-allowed !important;
+    }
 </style>
 @endpush
 
 @push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/moyasar-payment-form/dist/moyasar.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 @if($locale === 'ar')
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ar.js"></script>
@@ -1158,31 +1419,73 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
         return {
             // Reactive state
             baseSubtotal: {{ $baseSubtotal }},
-            duration: '{{ old('duration', 'monthly') }}',
+            isPlanCheckout: @json($hasPlanItems),
+            duration: @json($hasPlanItems ? 'once' : old('duration', 'monthly')),
+            selectedPlanDurationId: @json((string) ($preferredPlanDurationId ?? '')),
+            planDurationPrices: @json($planDurationPrices ?? []),
             deliveryType: '{{ old('delivery_type', 'home') }}',
+            selectedPlanId: @json((int) (collect($cart)->first()['id'] ?? 0)),
+            hasCartItems: @json(!empty($cart)),
+            startDate: '{{ old('start_date', now()->addHours(48)->format('Y-m-d')) }}',
             vatRate: {{ $vatRate }},
             deliveryFeeAmount: {{ $deliveryFeeAmount }},
             discount: 0,
-            email: '{{ old('email', '') }}',
+            addressStreet: @json(old('street', '')),
+            buildingNotes: @json(old('building', '')),
+            customerName: @json(old('name', '')),
+            showNameField: false,
+            isContinueUser: false,
+            savedAddresses: [],
+            selectedAddressId: null,
+            addingNewAddress: false,
+            savingNewAddress: false,
+            newAddressError: '',
+            addressPhone: '{{ old('phone', '') }}',
+            deviceId: (function () {
+                try {
+                    const k = 'dw_checkout_device_id';
+                    let v = localStorage.getItem(k);
+                    if (! v && typeof crypto !== 'undefined' && crypto.randomUUID) {
+                        v = 'web-' + crypto.randomUUID();
+                        localStorage.setItem(k, v);
+                    }
+
+                    return v || 'web-checkout-device';
+                } catch (e) {
+                    return 'web-checkout-device';
+                }
+            })(),
+            deliveryBuilding: '',
+            deliveryFloor: '',
+            deliveryDoor: '',
+            addressConfirmedForSync: false,
+            _syncExtTimer: null,
 
             // Zone state
             selectedZoneId: '{{ old('zone_id', '') }}',
             zones: @json($zones),
 
-            // Plan durations from API
+            checkoutProgramId: {{ (int) ($checkoutProgramId ?? 0) }},
+            /** Matches cart line duration_days — used when API duration_id differs from list ids */
+            cartDurationDaysHint: {{ (int) ($planDurationDays ?? 0) }},
+            cartDurationFallback: @json($cartDurationFallback ?? null),
+            durationsLoading: @json($hasPlanItems),
+            // Plan durations (filled from server, client fetch, or cart fallback)
             planDurations: @json($planDurations ?? []),
 
             // Branch pickup state
             selectedBranchId: '{{ old('branch_id', '') }}',
             branches: [],
             branchesLoading: true,
+            pickupPhase: @json(old('branch_id') && old('delivery_type') === 'pickup' ? 'done' : 'cta'),
+            branchSearch: '',
 
             // Duration multiplier map from backend
             durationMultipliers: @json($durationMultipliers),
 
             // Phone / OTP state
-            phone: '{{ old('phone', '') }}',
-            phoneVerified: false,
+            phone: '{{ $initialPhone }}',
+            phoneVerified: @json($phoneVerifiedFromSession ?? false),
             otpModalOpen: false,
             otpSent: false,
             otpDigits: ['', '', '', ''],
@@ -1206,11 +1509,639 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
             couponLoading: false,
             couponMessage: '',
 
+            moyasarError: '',
+            _moyasarTimer: null,
+
+            getCsrfToken() {
+                const fromMeta = document.querySelector('meta[name="csrf-token"]')?.content;
+                if (fromMeta) {
+                    return fromMeta;
+                }
+                const fromForm = this.$refs.checkoutForm?.querySelector('input[name="_token"]')?.value;
+                if (fromForm) {
+                    return fromForm;
+                }
+                return '{{ csrf_token() }}';
+            },
+
+            getXsrfTokenFromCookie() {
+                const m = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/);
+                return m ? decodeURIComponent(m[1]) : '';
+            },
+
+            buildCsrfHeaders() {
+                const csrf = this.getCsrfToken();
+                const xsrf = this.getXsrfTokenFromCookie();
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                };
+                if (xsrf) {
+                    headers['X-XSRF-TOKEN'] = xsrf;
+                }
+                return { headers, csrf };
+            },
+
             // ─── PRICES FROM API ARE VAT-INCLUSIVE (like mobile app) ───
             // The baseSubtotal already includes VAT. We extract VAT for display only.
 
-            // Computed: subtotal with duration multiplier (VAT-inclusive price from API)
+            durationCardTitle(d) {
+                if (! d) {
+                    return '';
+                }
+                let label = d.label;
+                if (typeof label === 'object' && label !== null && ! Array.isArray(label)) {
+                    label = label['{{ $locale }}'] || label['en'] || '';
+                }
+                if (label) {
+                    return String(label);
+                }
+                if (d.days) {
+                    return String(d.days) + ' {{ __('days') }}';
+                }
+
+                return '';
+            },
+
+            /** Total SAR when available (matches meal-plan duration chips); else price / day */
+            durationPillPriceLine(d) {
+                if (! d) {
+                    return '';
+                }
+                const total = parseFloat(d.effective_price) || 0;
+                if (total > 0) {
+                    const n = Math.round(total * 100) / 100;
+
+                    return 'SAR ' + (Number.isInteger(n) ? String(n) : n.toFixed(2));
+                }
+                const ppd = parseFloat(d.price_per_day) || 0;
+                if (ppd > 0) {
+                    return 'SAR ' + ppd.toFixed(2) + ' / {{ __('day') }}';
+                }
+
+                return '';
+            },
+
+            durationPlanHasOffer(d) {
+                if (! d) {
+                    return false;
+                }
+                if (d.has_offer === true) {
+                    return true;
+                }
+                const p = parseFloat(d.price) || 0;
+                const o = parseFloat(d.offer_price) || 0;
+
+                return o > 0 && o < p;
+            },
+
+            durationPlanListTotalStr(d) {
+                const lp = parseFloat(d.list_price);
+                const raw = ! Number.isNaN(lp) && lp > 0 ? lp : parseFloat(d.price) || 0;
+                const n = Math.round(raw * 100) / 100;
+
+                return Number.isInteger(n) ? String(n) : n.toFixed(2);
+            },
+
+            durationPlanEffectiveTotal(d) {
+                const eff = parseFloat(d.effective_price);
+                if (! Number.isNaN(eff) && eff > 0) {
+                    return eff;
+                }
+                const p = parseFloat(d.price) || 0;
+                const o = parseFloat(d.offer_price) || 0;
+
+                return o > 0 && o < p ? o : p;
+            },
+
+            durationPlanEffectiveTotalStr(d) {
+                const n = Math.round(this.durationPlanEffectiveTotal(d) * 100) / 100;
+
+                return Number.isInteger(n) ? String(n) : n.toFixed(2);
+            },
+
+            durationPlanAvgLine(d) {
+                const days = parseInt(d.days, 10) || 0;
+                const e = this.durationPlanEffectiveTotal(d);
+                if (days <= 0 || e <= 0) {
+                    return '';
+                }
+                const avg = Math.round((e / days) * 100) / 100;
+                const ns = Number.isInteger(avg) ? String(avg) : avg.toFixed(2);
+
+                return '{{ __('SAR') }} ' + ns + ' · {{ __('per day') }}';
+            },
+
+            planSelectedAvgPerDayAmount() {
+                if (! this.isPlanCheckout) {
+                    return '';
+                }
+                const id = this.selectedPlanDurationId;
+                const row = (this.planDurations || []).find((r) => String(r.id) === String(id));
+                if (! row) {
+                    return '';
+                }
+                const days = parseInt(row.days, 10) || 0;
+                const e = this.durationPlanEffectiveTotal(row);
+                if (days <= 0 || e <= 0) {
+                    return '';
+                }
+                const avg = Math.round((e / days) * 100) / 100;
+
+                return '{{ __('SAR') }} ' + (Number.isInteger(avg) ? String(avg) : avg.toFixed(2));
+            },
+
+            normalizeDurationRow(row) {
+                const p = parseFloat(row.price) || 0;
+                const o = parseFloat(row.offer_price) || 0;
+                const eff = parseFloat(row.effective_price);
+                const effective = ! Number.isNaN(eff) && eff > 0
+                    ? eff
+                    : (o > 0 && o < p ? o : p);
+                const days = parseInt(row.days, 10) || 0;
+                const ppd = days > 0 ? Math.round((effective / days) * 100) / 100 : (parseFloat(row.price_per_day) || 0);
+                const hasOffer = o > 0 && o < p;
+
+                return { ...row, effective_price: effective, price_per_day: ppd, list_price: p, has_offer: hasOffer };
+            },
+
+            async hydratePlanDurations() {
+                let list = Array.isArray(this.planDurations) ? [...this.planDurations] : [];
+                list = list.map((row) => this.normalizeDurationRow(row));
+                if (list.length === 0 && this.checkoutProgramId) {
+                    try {
+                        const res = await fetch('{{ url('/api/plan') }}/' + this.checkoutProgramId + '/durations');
+                        const data = await res.json();
+                        const raw = Array.isArray(data) ? data : [];
+                        list = raw.map((row) => this.normalizeDurationRow(row));
+                    } catch (e) {}
+                }
+                if (list.length === 0 && this.cartDurationFallback) {
+                    list = [this.normalizeDurationRow(this.cartDurationFallback)];
+                }
+                this.planDurations = list;
+                this.planDurationPrices = {};
+                list.forEach((row) => {
+                    const id = String(row.id);
+                    const eff = parseFloat(row.effective_price) || 0;
+                    this.planDurationPrices[id] = eff;
+                });
+                const idOk = (s) => s && list.some((r) => String(r.id) === String(s));
+                let sel = @json((string) old('plan_duration_id', $preferredPlanDurationId ?? ''));
+                if (! idOk(sel)) {
+                    let pick = this.cartDurationDaysHint > 0
+                        ? list.find((r) => parseInt(r.days, 10) === this.cartDurationDaysHint)
+                        : null;
+                    if (! pick) {
+                        pick = list.find((r) => r.is_default && Number(r.id) > 0) || list.find((r) => Number(r.id) > 0);
+                    }
+                    sel = pick ? String(pick.id) : (list[0] ? String(list[0].id) : '');
+                }
+                this.selectedPlanDurationId = sel;
+                if (sel !== '' && this.planDurationPrices[sel] != null) {
+                    this.baseSubtotal = Math.round(this.planDurationPrices[sel] * 100) / 100;
+                }
+                this.durationsLoading = false;
+            },
+
+            planDurationSummaryLabel() {
+                const id = this.selectedPlanDurationId;
+                const row = (this.planDurations || []).find((d) => String(d.id) === String(id));
+                if (! row) {
+                    return '';
+                }
+                let label = row.label;
+                if (typeof label === 'object' && label !== null && ! Array.isArray(label)) {
+                    label = label['{{ $locale }}'] || label['en'] || '';
+                }
+                const labelStr = String(label || '').trim();
+                const daysNum = parseInt(row.days, 10) || 0;
+                if (labelStr && daysNum > 0 && labelStr.includes(String(daysNum))) {
+                    return labelStr;
+                }
+                if (! labelStr && daysNum > 0) {
+                    return `${daysNum} {{ __('days') }}`;
+                }
+                if (labelStr && daysNum > 0) {
+                    return labelStr + ` · ${daysNum} {{ __('days') }}`;
+                }
+
+                return labelStr;
+            },
+
+            composeBuildingNotes() {
+                const p = [];
+                const b = (this.deliveryBuilding || '').trim();
+                const f = (this.deliveryFloor || '').trim();
+                const d = (this.deliveryDoor || '').trim();
+                if (b) {
+                    p.push('{{ __("Building") }}: ' + b);
+                }
+                if (f) {
+                    p.push('{{ __("Floor") }}: ' + f);
+                }
+                if (d) {
+                    p.push('{{ __("Door") }}: ' + d);
+                }
+                this.buildingNotes = p.join(', ');
+                if (this.addressConfirmedForSync) {
+                    clearTimeout(this._syncExtTimer);
+                    this._syncExtTimer = setTimeout(() => this.syncExternalAddress(), 1200);
+                }
+            },
+
+            async syncExternalAddress() {
+                if (this.deliveryType !== 'home') {
+                    return;
+                }
+                const form = this.$refs.checkoutForm;
+                if (! form) {
+                    return;
+                }
+                const fd = new FormData(form);
+                try {
+                    await fetch('{{ route('checkout.sync-address') }}', {
+                        method: 'POST',
+                        body: fd,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+                        },
+                    });
+                } catch (e) {}
+            },
+
+            handleAddressFromMap(event) {
+                const d = event.detail || {};
+                if (d.description) {
+                    this.addressStreet = d.description;
+                }
+                this.deliveryBuilding = d.building_num != null && d.building_num !== '' ? String(d.building_num) : '';
+                this.deliveryFloor = d.floor != null && d.floor !== '' ? String(d.floor) : '';
+                this.deliveryDoor = d.door != null && d.door !== '' ? String(d.door) : '';
+                if (d.building_notes) {
+                    this.buildingNotes = d.building_notes;
+                } else {
+                    this.composeBuildingNotes();
+                }
+                this.addressConfirmedForSync = true;
+                this.$nextTick(() => this.syncExternalAddress());
+            },
+
+            handleMapAddressDraft(event) {
+                const d = event.detail || {};
+                if (d.description) {
+                    this.addressStreet = d.description;
+                }
+            },
+
+            savedAddressDistrict(addr) {
+                if (! addr || ! addr.district) {
+                    return '';
+                }
+                const d = addr.district;
+                if (typeof d.name === 'string') {
+                    return d.name;
+                }
+                if (d.name && typeof d.name === 'object') {
+                    return d.name['{{ $locale }}'] || d.name['en'] || '';
+                }
+
+                return '';
+            },
+
+            startAddingAddress() {
+                this.addingNewAddress = !this.addingNewAddress;
+                this.newAddressError = '';
+                if (this.addingNewAddress) {
+                    this.selectedAddressId = null;
+                    this.addressStreet = '';
+                    this.deliveryBuilding = '';
+                    this.deliveryFloor = '';
+                    this.deliveryDoor = '';
+                    this.buildingNotes = '';
+                    this.deliveryType = 'home';
+                    if (! (this.addressPhone || '').trim()) {
+                        this.addressPhone = (this.phone || '').trim();
+                    }
+                    setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 200);
+                }
+            },
+
+            async saveNewAddress() {
+                this.newAddressError = '';
+                const form = this.$refs.checkoutForm;
+                if (! form) return;
+                const fd = new FormData(form);
+                // Only send the fields the sync-address endpoint needs.
+                const payload = new FormData();
+                const keep = ['delivery_lat', 'delivery_lng', 'delivery_district_id', 'delivery_description',
+                              'delivery_kind', 'delivery_title', 'delivery_pickup_type', 'building', 'zone_id'];
+                keep.forEach(k => { if (fd.has(k)) payload.append(k, fd.get(k)); });
+                // The sync-address endpoint still expects the field named `delivery_type`.
+                // On the form it is `delivery_kind` to avoid colliding with the home/pickup radio.
+                if (payload.has('delivery_kind')) {
+                    payload.append('delivery_type', payload.get('delivery_kind'));
+                    payload.delete('delivery_kind');
+                }
+                const phoneForAddress = (this.addressPhone || this.phone || '').trim();
+                if (! phoneForAddress) {
+                    this.newAddressError = '{{ __('Please enter a phone number for this address.') }}';
+                    return;
+                }
+                payload.set('phone', phoneForAddress);
+                if (! payload.get('delivery_lat') || ! payload.get('delivery_lng')) {
+                    this.newAddressError = '{{ __('Please set a location on the map first.') }}';
+                    return;
+                }
+                if (! payload.get('delivery_district_id')) {
+                    this.newAddressError = '{{ __('Please confirm the address (district) on the map.') }}';
+                    return;
+                }
+                if (! payload.get('zone_id')) {
+                    this.newAddressError = '{{ __('Please select a city first.') }}';
+                    return;
+                }
+                this.savingNewAddress = true;
+                try {
+                    const res = await fetch('{{ route('checkout.sync-address') }}', {
+                        method: 'POST',
+                        body: payload,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+                        },
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (! res.ok || ! data.success) {
+                        const errs = data && data.errors && typeof data.errors === 'object'
+                            ? Object.values(data.errors).flat().filter(Boolean)
+                            : [];
+                        this.newAddressError = errs[0] || data.message || '{{ __('address.save_failed') }}';
+                        return;
+                    }
+                    await this.refreshCustomerFromServer();
+                    if (data.data && data.data.id) {
+                        let fresh = this.savedAddresses.find(a => String(a.id) === String(data.data.id));
+                        if (!fresh) {
+                            fresh = {
+                                id: data.data.id,
+                                latitude: payload.get('delivery_lat'),
+                                longitude: payload.get('delivery_lng'),
+                                city_id: payload.get('zone_id'),
+                                line1: payload.get('delivery_description') || this.addressStreet || '',
+                                description: payload.get('delivery_description') || this.addressStreet || '',
+                                district_id: payload.get('delivery_district_id'),
+                            };
+                            this.savedAddresses = [fresh, ...this.savedAddresses];
+                        }
+                        this.applySavedAddress(fresh);
+                    }
+                    this.addingNewAddress = false;
+                } catch (e) {
+                    this.newAddressError = '{{ __('An error occurred. Please try again.') }}';
+                } finally {
+                    this.savingNewAddress = false;
+                }
+            },
+
+            applySavedAddress(addr) {
+                if (! addr || this.deliveryType !== 'home') {
+                    return;
+                }
+                this.selectedAddressId = addr.id ?? null;
+                this.addingNewAddress = false;
+                this.newAddressError = '';
+                this.addressConfirmedForSync = true;
+                this.moyasarError = '';
+                const districtId = addr.district?.id ?? addr.district_id;
+                // Resolve zone/city id across every known field shape the external
+                // API might return, then fall back to matching the district against
+                // the locally known zones list. Without a valid zone the server
+                // can't compute the correct delivery fee and the Moyasar session
+                // fails silently — so we *must* have one populated.
+                let cityId = addr.city?.id
+                    ?? addr.city_id
+                    ?? addr.zone_id
+                    ?? addr.zone?.id
+                    ?? addr.district?.city_id
+                    ?? addr.district?.zone_id
+                    ?? addr.district?.city?.id
+                    ?? addr.district?.zone?.id
+                    ?? '';
+                if (! cityId && districtId && Array.isArray(this.zones)) {
+                    const match = this.zones.find((z) => {
+                        const districtList = z.districts || z.district_ids || [];
+                        return districtList.some((d) => {
+                            const id = typeof d === 'object' ? (d.id ?? d.district_id) : d;
+                            return String(id) === String(districtId);
+                        });
+                    });
+                    if (match) {
+                        cityId = match.id;
+                    }
+                }
+                // Last-resort fallback: infer zone from address text/title
+                // when API does not return city/zone IDs in saved addresses.
+                if (! cityId && Array.isArray(this.zones) && this.zones.length > 0) {
+                    const text = String(
+                        addr.description
+                        || addr.line1
+                        || addr.title
+                        || addr.address
+                        || ''
+                    ).toLowerCase();
+                    if (text) {
+                        const matchByName = this.zones.find((z) => {
+                            let zoneName = z?.name ?? '';
+                            if (zoneName && typeof zoneName === 'object') {
+                                zoneName = zoneName['{{ app()->getLocale() }}'] || zoneName.en || Object.values(zoneName)[0] || '';
+                            }
+                            zoneName = String(zoneName || '').toLowerCase();
+                            return zoneName && text.includes(zoneName);
+                        });
+                        if (matchByName) {
+                            cityId = matchByName.id;
+                        }
+                    }
+                }
+                if (cityId) {
+                    this.selectedZoneId = String(cityId);
+                }
+                let pickup = 'hand_it_to_me';
+                const pt = addr.pickupType;
+                if (pt && typeof pt === 'object') {
+                    const id = String(pt.id ?? '').toLowerCase();
+                    const tx = String(pt.text ?? '').toLowerCase();
+                    if (id.includes('leave') || tx.includes('leave') || tx.includes('door')) {
+                        pickup = 'leave_at_door';
+                    }
+                }
+                window.dispatchEvent(new CustomEvent('gmp-external-address-apply', {
+                    detail: {
+                        latitude: addr.latitude,
+                        longitude: addr.longitude,
+                        description: addr.description || '',
+                        district_id: districtId,
+                        type: addr.type || 'residential',
+                        title: addr.title || '',
+                        pickup_type: pickup,
+                    },
+                }));
+                window.dispatchEvent(new CustomEvent('address-selected', {
+                    detail: {
+                        id: addr.id ?? null,
+                        latitude: addr.latitude,
+                        longitude: addr.longitude,
+                        city_id: cityId || null,
+                        line1: addr.line1 || addr.description || '',
+                        description: addr.description || '',
+                        district_id: districtId || null,
+                        building_num: addr.building_num ?? this.deliveryBuilding,
+                        floor: addr.floor ?? this.deliveryFloor,
+                        door: addr.door ?? this.deliveryDoor,
+                    },
+                }));
+                if (addr.description) {
+                    this.addressStreet = addr.description;
+                }
+                this.$nextTick(() => this.scheduleMoyasarRefresh());
+            },
+
+            selectSavedAddress(addr) {
+                this.applySavedAddress(addr);
+                this.$nextTick(() => {
+                    this.$refs.paymentCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            },
+
+            async refreshCustomerFromServer() {
+                try {
+                    const res = await fetch('{{ route('checkout.customer-state') }}', {
+                        headers: { 'Accept': 'application/json' },
+                    });
+                    const d = await res.json().catch(() => ({}));
+                    if (! d.success) {
+                        return;
+                    }
+                    this.savedAddresses = Array.isArray(d.addresses) ? d.addresses : [];
+                    if (d.profile && d.profile.name && ! (this.customerName || '').trim()) {
+                        this.customerName = String(d.profile.name);
+                    }
+                    // If already verified (page reload), determine name field visibility
+                    if (this.phoneVerified) {
+                        const hasName = !!(d.profile && d.profile.name);
+                        const isNewUser = !!(d.is_continue);
+                        this.isContinueUser = isNewUser;
+                        this.showNameField = isNewUser || !hasName;
+                        // Keep selection manual: user confirms address with "اختيار العنوان" button.
+                    }
+                } catch (e) {}
+            },
+
+            branchLabel(branch) {
+                if (!branch) return '';
+                if (typeof branch.name === 'object' && branch.name !== null) {
+                    return branch.name['{{ app()->getLocale() }}'] || branch.name['en'] || '';
+                }
+                return branch.name || '';
+            },
+
+            filterBranches() {
+                const q = (this.branchSearch || '').trim().toLowerCase();
+                if (!q) return this.branches;
+                return this.branches.filter((b) => {
+                    const name = this.branchLabel(b).toLowerCase();
+                    const addr = (b.address || '').toLowerCase();
+                    const phone = (b.phone || '').toLowerCase();
+                    return name.includes(q) || addr.includes(q) || phone.includes(q);
+                });
+            },
+
+            selectedBranchObj() {
+                if (!this.selectedBranchId) return null;
+                return this.branches.find((b) => String(b.id) === String(this.selectedBranchId)) || null;
+            },
+
+            openBranchPicker() {
+                this.pickupPhase = 'list';
+                this.branchSearch = '';
+            },
+
+            selectBranch(id) {
+                this.selectedBranchId = String(id);
+                this.pickupPhase = 'done';
+                this.moyasarError = '';
+                this.scheduleMoyasarRefresh();
+            },
+
+            editBranchSelection() {
+                this.pickupPhase = 'list';
+                this.branchSearch = '';
+            },
+
+            syncPickupPhase() {
+                if (this.deliveryType !== 'pickup') return;
+                if (this.selectedBranchId) {
+                    this.pickupPhase = 'done';
+                } else {
+                    this.pickupPhase = 'cta';
+                }
+            },
+
+            selectedDurationValue() {
+                if (this.isPlanCheckout) {
+                    return this.selectedPlanDurationId ? String(this.selectedPlanDurationId) : '';
+                }
+                return this.duration ? String(this.duration) : '';
+            },
+
+            hasStartDate() {
+                const localValue = String(this.startDate || '').trim();
+                if (localValue.length > 0) {
+                    return true;
+                }
+                const inputValue = String(document.getElementById('start_date_input')?.value || '').trim();
+                if (inputValue.length > 0) {
+                    this.startDate = inputValue;
+                    return true;
+                }
+                return false;
+            },
+
+            deliveryReady() {
+                if (this.deliveryType === 'pickup') {
+                    return !!this.selectedBranchId;
+                }
+                return !!this.selectedAddressId;
+            },
+
+            canProceedToPayment() {
+                const hasSelectedPlan = this.hasCartItems;
+                const hasSelectedDuration = this.isPlanCheckout
+                    ? (this.selectedDurationValue() !== '' || Number(this.cartDurationDaysHint || 0) > 0)
+                    : this.selectedDurationValue() !== '';
+
+                return this.deliveryReady()
+                    && hasSelectedPlan
+                    && hasSelectedDuration
+                    && this.hasStartDate();
+            },
+
+            paymentBlockerMessage() {
+                if (this.deliveryType === 'pickup') {
+                    return 'اختر المدة وتاريخ البداية والفرع حتى يتطابق المبلغ قبل الدفع';
+                }
+                return 'اختر المدة، المدينة، والعنوان على الخريطة حتى يتطابق المبلغ قبل الدفع';
+            },
+
+            // Computed: subscription line total is fixed; meals use duration multiplier
             subtotal() {
+                if (this.isPlanCheckout) {
+                    return Math.round(this.baseSubtotal * 100) / 100;
+                }
                 const multiplier = this.durationMultipliers[this.duration] || 1;
                 return Math.round(this.baseSubtotal * multiplier * 100) / 100;
             },
@@ -1270,7 +2201,7 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                         body: JSON.stringify({
                             code: this.couponCode.trim(),
                             subtotal: this.subtotal(),
-                            identifier: this.email || '',
+                            identifier: this.phone || '',
                         }),
                     });
 
@@ -1330,18 +2261,15 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                 this.otpDigits = ['', '', '', ''];
 
                 try {
+                    const { headers, csrf } = this.buildCsrfHeaders();
                     const response = await fetch('{{ route('otp.send') }}', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
-                            'Accept': 'application/json',
-                        },
-                        body: JSON.stringify({ phone: this.phone.trim() }),
+                        credentials: 'same-origin',
+                        headers,
+                        body: JSON.stringify({ phone: this.phone.trim(), _token: csrf }),
                     });
 
                     const data = await response.json();
-                    // Show OTP in message for testing (backend sends it in non-production)
                     this.otpMessage = data.otp
                         ? data.message + ' (Code: ' + data.otp + ')'
                         : data.message;
@@ -1371,16 +2299,16 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                 this.otpMessage = '';
 
                 try {
+                    const { headers, csrf } = this.buildCsrfHeaders();
                     const response = await fetch('{{ route('otp.verify') }}', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
-                            'Accept': 'application/json',
-                        },
+                        credentials: 'same-origin',
+                        headers,
                         body: JSON.stringify({
                             phone: this.phone.trim(),
                             otp: code,
+                            device_id: this.deviceId,
+                            _token: csrf,
                         }),
                     });
 
@@ -1527,21 +2455,247 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
                     this.openOtpModal();
                     return;
                 }
+                if (!this.canProceedToPayment()) {
+                    this.moyasarError = '{{ __('payment.fill_delivery_first') }}';
+                    return;
+                }
                 event.target.submit();
             },
 
-            // Watch for duration changes to re-validate coupon
-            init() {
-                this.$watch('duration', () => this.revalidateCoupon());
+            scheduleMoyasarRefresh() {
+                clearTimeout(this._moyasarTimer);
+                this._moyasarTimer = setTimeout(() => {
+                    const el = document.getElementById('moyasar-form-checkout');
+                    if (! this.canProceedToPayment()) {
+                        this.moyasarError = '';
+                        if (el) {
+                            el.innerHTML = '';
+                        }
+                        return;
+                    }
+                    if (! this.phoneVerified) {
+                        this.moyasarError = '';
+                        if (el) {
+                            el.innerHTML = '';
+                        }
+                        return;
+                    }
+                    this.bootstrapMoyasar();
+                }, 450);
+            },
 
-                // Fetch branches for pickup option
+            async bootstrapMoyasarPreview() {
+                if (this.phoneVerified) {
+                    return;
+                }
+                const hasSdk = await this.waitForMoyasar();
+                if (! hasSdk) {
+                    this.moyasarError = '{{ __('payment.moyasar_load_failed') }}';
+
+                    return;
+                }
+                const form = this.$refs.checkoutForm;
+                if (! form) {
+                    return;
+                }
+                this.moyasarError = '';
+                const fd = new FormData(form);
+                fd.append('preview_only', '1');
+                try {
+                    const res = await fetch('{{ route('checkout.moyasar-session') }}', {
+                        method: 'POST',
+                        body: fd,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+                        },
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (this.phoneVerified) {
+                        return;
+                    }
+                    if (! res.ok || ! data.success) {
+                        this.moyasarError = data.message || '{{ __('payment.fill_delivery_first') }}';
+                        const el = document.getElementById('moyasar-form-checkout');
+                        if (el) {
+                            el.innerHTML = '';
+                        }
+
+                        return;
+                    }
+                    this.initMoyasarWidget(data);
+                } catch (e) {
+                    this.moyasarError = '{{ __('An error occurred. Please try again.') }}';
+                }
+            },
+
+            waitForMoyasar(maxMs = 8000) {
+                return new Promise((resolve) => {
+                    if (typeof Moyasar !== 'undefined') {
+                        resolve(true);
+
+                        return;
+                    }
+                    const start = Date.now();
+                    const tick = () => {
+                        if (typeof Moyasar !== 'undefined') {
+                            resolve(true);
+
+                            return;
+                        }
+                        if (Date.now() - start >= maxMs) {
+                            resolve(false);
+
+                            return;
+                        }
+                        setTimeout(tick, 100);
+                    };
+                    tick();
+                });
+            },
+
+            async bootstrapMoyasar() {
+                if (! this.phoneVerified) {
+                    return;
+                }
+                const hasSdk = await this.waitForMoyasar();
+                if (! hasSdk) {
+                    this.moyasarError = '{{ __('payment.moyasar_load_failed') }}';
+
+                    return;
+                }
+                const form = this.$refs.checkoutForm;
+                if (! form) {
+                    return;
+                }
+                this.moyasarError = '';
+                const fd = new FormData(form);
+                fd.set('selected_plan_id', String(this.selectedPlanId || ''));
+                fd.set('selected_duration', this.selectedDurationValue());
+                try {
+                    const res = await fetch('{{ route('checkout.moyasar-session') }}', {
+                        method: 'POST',
+                        body: fd,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+                        },
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (! this.phoneVerified) {
+                        return;
+                    }
+                    if (! res.ok || ! data.success) {
+                        this.moyasarError = data.message || '{{ __('payment.fill_delivery_first') }}';
+                        const el = document.getElementById('moyasar-form-checkout');
+                        if (el) {
+                            el.innerHTML = '';
+                        }
+
+                        return;
+                    }
+                    this.initMoyasarWidget(data);
+                } catch (e) {
+                    this.moyasarError = '{{ __('An error occurred. Please try again.') }}';
+                }
+            },
+
+            initMoyasarWidget(data) {
+                const el = document.getElementById('moyasar-form-checkout');
+                if (! el || typeof Moyasar === 'undefined') {
+                    return;
+                }
+                el.innerHTML = '';
+                let cb = (data.callback_url || '').trim();
+                if (data.order_number) {
+                    const sep = cb.includes('?') ? '&' : '?';
+                    cb = cb + sep + 'order=' + encodeURIComponent(data.order_number);
+                }
+                Moyasar.init({
+                    element: '#moyasar-form-checkout',
+                    amount: data.amount_halalas,
+                    currency: data.currency || 'SAR',
+                    description: data.description || '',
+                    publishable_api_key: data.publishable_key,
+                    callback_url: cb,
+                    methods: ['creditcard', 'applepay', 'stcpay'],
+                    metadata: data.metadata || {},
+                    supported_networks: ['visa', 'mastercard', 'mada'],
+                    apple_pay: {
+                        country: 'SA',
+                        label: 'Diet Watchers',
+                        validate_merchant_url: 'https://api.moyasar.com/v1/applepay/initiate',
+                    },
+                    language: '{{ $locale }}',
+                });
+            },
+
+            // Watch for duration changes to re-validate coupon
+            async init() {
+                if (this.isPlanCheckout) {
+                    await this.hydratePlanDurations();
+                } else {
+                    this.durationsLoading = false;
+                }
+                this.$watch('selectedPlanDurationId', (id) => {
+                    if (! this.isPlanCheckout || id === undefined || id === null) {
+                        return;
+                    }
+                    const p = this.planDurationPrices[String(id)];
+                    if (p != null) {
+                        this.baseSubtotal = Math.round(p * 100) / 100;
+                        this.revalidateCoupon();
+                    }
+                    this.scheduleMoyasarRefresh();
+                });
+                this.$watch('duration', () => this.revalidateCoupon());
+                this.$watch('duration', () => this.scheduleMoyasarRefresh());
+                this.$watch('selectedZoneId', () => this.scheduleMoyasarRefresh());
+                this.$watch('selectedAddressId', () => this.scheduleMoyasarRefresh());
+                this.$watch('selectedBranchId', () => this.scheduleMoyasarRefresh());
+                this.$watch('deliveryType', (v) => {
+                    if (v === 'pickup') {
+                        this.syncPickupPhase();
+                    }
+                    if (v === 'home') {
+                        setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 300);
+                    }
+                    this.scheduleMoyasarRefresh();
+                });
+                this.$watch('couponApplied', () => this.scheduleMoyasarRefresh());
+                if (this.deliveryType === 'home') {
+                    setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 500);
+                }
+
                 fetch('{{ route('api.branches') }}')
                     .then(r => r.json())
-                    .then(data => { this.branches = data; this.branchesLoading = false; })
+                    .then(data => {
+                        this.branches = data;
+                        this.branchesLoading = false;
+                        if (this.deliveryType === 'pickup' && !this.selectedBranchId && this.branches.length === 1) {
+                            this.selectBranch(this.branches[0].id);
+                        }
+                        this.syncPickupPhase();
+                    })
                     .catch(() => { this.branches = []; this.branchesLoading = false; });
+
+                if (this.phoneVerified) {
+                    await this.refreshCustomerFromServer();
+                }
+                const startDateInput = document.getElementById('start_date_input');
+                if (startDateInput) {
+                    this.startDate = String(startDateInput.value || this.startDate || '');
+                    startDateInput.addEventListener('change', () => {
+                        this.startDate = String(startDateInput.value || '');
+                        this.scheduleMoyasarRefresh();
+                    });
+                }
+                this.scheduleMoyasarRefresh();
             }
         }
     }
+
+    window.checkoutPage = checkoutPage;
 
     document.addEventListener('DOMContentLoaded', function() {
         const locale = '{{ $locale }}';
@@ -1559,16 +2713,37 @@ $hasPlanItems = collect($cart)->contains(fn($item) => !empty($item['options']['d
             }
         }
 
+        const startDateInput = document.getElementById('start_date_input');
+        const minDate48h = new Date(Date.now() + (48 * 60 * 60 * 1000));
+        const minDateStr = [
+            minDate48h.getFullYear(),
+            String(minDate48h.getMonth() + 1).padStart(2, '0'),
+            String(minDate48h.getDate()).padStart(2, '0'),
+        ].join('-');
+
+        // Enforce a real 48h minimum in the user's local timezone.
+        if (startDateInput) {
+            const currentValue = String(startDateInput.value || '').trim();
+            if (! currentValue || currentValue < minDateStr) {
+                startDateInput.value = minDateStr;
+                updateDisplay(minDateStr);
+            }
+        }
+
         flatpickr('#start_date_input', {
             dateFormat: 'Y-m-d',
-            minDate: 'today',
-            defaultDate: '{{ old('start_date', date('Y-m-d', strtotime('+1 day'))) }}',
+            minDate: minDateStr,
+            defaultDate: (startDateInput && startDateInput.value) ? startDateInput.value : minDateStr,
             disableMobile: true,
             @if($locale === 'ar')
             locale: 'ar',
             @endif
             onChange: function(selectedDates, dateStr) {
                 updateDisplay(dateStr);
+                const input = document.getElementById('start_date_input');
+                if (input) {
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                }
             },
         });
 

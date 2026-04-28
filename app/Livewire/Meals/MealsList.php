@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Meals;
 
+use App\Livewire\Cart\CartManager;
 use App\Services\ExternalDataService;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -15,7 +16,9 @@ class MealsList extends Component
     /** @var int[] */
     public array $selectedTags = [];
     public int $currentPage = 1;
+
     public int $lastPage = 1;
+
     public string $search = '';
 
     /** Filter buckets fetched from /meals/filters (only non-empty are kept) */
@@ -122,11 +125,15 @@ class MealsList extends Component
             $this->lastPage = (int) ($result['meta']['lastPage'] ?? 1);
         }
 
-        // Pass current cart state so each card can show its qty
-        $cartItems = session()->get('cart', []);
+        $rawCart = session()->get(CartManager::SESSION_MARKET, []);
+        $cartItems = array_filter(
+            $rawCart,
+            static fn ($key) => is_string($key) && str_starts_with($key, 'meal_'),
+            ARRAY_FILTER_USE_KEY
+        );
 
         return view('livewire.meals.meals-list', [
-            'meals'     => $meals,
+            'meals' => $meals,
             'cartItems' => $cartItems,
         ]);
     }

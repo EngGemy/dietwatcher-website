@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class OtpController extends Controller
 {
@@ -34,6 +35,7 @@ class OtpController extends Controller
 
         if ($lastSentAt && (time() - $lastSentAt) < 60) {
             $remaining = 60 - (time() - $lastSentAt);
+
             return response()->json([
                 'success' => false,
                 'message' => __('otp.wait_seconds', ['seconds' => $remaining]),

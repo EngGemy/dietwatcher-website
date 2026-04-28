@@ -135,9 +135,42 @@
 <div class="header-sticky-wrap" id="header-wrap">
 <header class="header" id="site-header">
     <nav class="header__nav">
-        <a href="{{ route('home') }}" class="header__logo">
-            <img src="{{ $siteLogo }}" alt="{{ $siteName }}" />
-        </a>
+        <div class="header__brand header__brand-lockup">
+            <a href="{{ route('home') }}" class="header__logo" aria-label="{{ $siteName }}">
+                <img src="{{ $siteLogo }}" alt="{{ $siteName }}" decoding="async" />
+            </a>
+
+            <div
+                class="header__brand-tagline"
+                x-data="brandTaglineRotator(@js($brandTaglines))"
+                x-bind:class="{ 'header__brand-tagline--static': reduced }"
+                x-init="init()"
+                x-on:mouseenter="pause()"
+                x-on:mouseleave="resume()"
+                x-on:focusin="pause()"
+                x-on:focusout="resume()"
+            >
+                <p id="brand-tagline-announcer" class="sr-only" aria-live="polite" aria-atomic="true" x-text="lines[index].text"></p>
+                <span class="header__brand-tagline__stack" aria-hidden="true">
+                    <span class="header__brand-tagline__viewport">
+                        <template x-for="(line, idx) in lines" :key="idx">
+                            <span
+                                class="header__brand-tagline__line"
+                                x-bind:class="{ 'is-active': idx === index }"
+                                x-bind:lang="line.lang"
+                                x-bind:dir="line.dir"
+                            >
+                                <span class="nav-enjoy-wrap" x-cloak x-show="line.lang === 'en' && idx === index" x-transition.opacity.duration.300ms>
+                                    <span class="nav-enjoy-text" x-text="line.text"></span>
+                                    <img src="{{ asset('assets/images/icons/smile.svg') }}" class="nav-enjoy-smile" alt="" aria-hidden="true" decoding="async" loading="lazy" />
+                                </span>
+                                <span x-cloak x-show="!(line.lang === 'en' && idx === index)" x-text="line.text"></span>
+                            </span>
+                        </template>
+                    </span>
+                </span>
+            </div>
+        </div>
 
         <div class="header__actions">
             <button
@@ -236,6 +269,18 @@
 
             {{-- Cart Component --}}
             <livewire:cart.cart-manager />
+
+            {{-- My Account quick link (visible once logged in via OTP) --}}
+            @if(session('external_api_token') && session('phone_verified'))
+                <a href="{{ route('account.dashboard') }}"
+                   class="header__icon-btn ms-2 inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition hover:border-blue-400 hover:text-blue-600"
+                   title="{{ __('account.my_account') }}"
+                   aria-label="{{ __('account.my_account') }}">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
+                    </svg>
+                </a>
+            @endif
 
             @foreach($headerActions as $action)
                 @if($action->type === 'button')
@@ -488,6 +533,88 @@
 </style>
 
 <script>
+/**
+ * Navbar secondary taglines: crossfade, 7s (desktop) / 10s (mobile), pause on hover/focus-in,
+ * no auto-rotation when prefers-reduced-motion (first line only).
+ */
+window.brandTaglineRotator = function (lines) {
+    return {
+        lines: Array.isArray(lines) && lines.length
+            ? lines
+            : [
+                  { text: 'Enjoy it', lang: 'en', dir: 'ltr' },
+                  { text: 'كلها محسوبة!', lang: 'ar', dir: 'rtl' },
+              ],
+        index: 0,
+        timer: null,
+        paused: false,
+        reduced: false,
+        mobile: false,
+        _onReduce: null,
+        _onMobile: null,
+        init: function () {
+            var self = this;
+            self.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            self.mobile = window.matchMedia('(max-width: 639px)').matches;
+            var mqR = window.matchMedia('(prefers-reduced-motion: reduce)');
+            var mqM = window.matchMedia('(max-width: 639px)');
+            self._onReduce = function (e) {
+                self.reduced = e.matches;
+                self.resetTimer();
+            };
+            self._onMobile = function (e) {
+                self.mobile = e.matches;
+                self.resetTimer();
+            };
+            mqR.addEventListener('change', self._onReduce);
+            mqM.addEventListener('change', self._onMobile);
+            if (!self.reduced) {
+                self.startTimer();
+            }
+        },
+        intervalMs: function () {
+            if (this.reduced) {
+                return null;
+            }
+            return this.mobile ? 10000 : 7000;
+        },
+        clearTimer: function () {
+            if (this.timer) {
+                clearInterval(this.timer);
+                this.timer = null;
+            }
+        },
+        startTimer: function () {
+            this.clearTimer();
+            var ms = this.intervalMs();
+            if (!ms) {
+                return;
+            }
+            var self = this;
+            this.timer = setInterval(function () {
+                if (!self.paused) {
+                    self.next();
+                }
+            }, ms);
+        },
+        resetTimer: function () {
+            this.clearTimer();
+            if (!this.reduced) {
+                this.startTimer();
+            }
+        },
+        next: function () {
+            this.index = (this.index + 1) % this.lines.length;
+        },
+        pause: function () {
+            this.paused = true;
+        },
+        resume: function () {
+            this.paused = false;
+        },
+    };
+};
+
 (function () {
     /* ─── 1. Sticky header — scroll shadow + spacer sync ─── */
     var wrap   = document.getElementById('header-wrap');

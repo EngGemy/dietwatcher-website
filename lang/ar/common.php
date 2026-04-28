@@ -15,4 +15,8 @@ return [
     'submit' => 'إرسال',
     'close' => 'إغلاق',
     'confirm' => 'تأكيد',
+
+    /** Navbar rotating secondary taglines */
+    'brand_tagline_1' => 'Enjoy it',
+    'brand_tagline_2' => 'كلها محسوبة!',
 ];

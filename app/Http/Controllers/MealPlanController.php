@@ -35,9 +35,11 @@ class MealPlanController extends Controller
                 ->with('info', __('Plan details coming soon.'));
         }
 
-        // Fetch dynamic calorie options and durations from API
-        $apiCalories = $this->externalDataService->getPlanCalories((int) $id);
-        $apiDurations = $this->externalDataService->getPlanDurations((int) $id);
+        $hasNestedPlans = ! empty($plan->subscription_plans);
+
+        // Nested subscription plans include calories & durations; avoid /programs/{id}/calories on program id.
+        $apiCalories = $hasNestedPlans ? [] : $this->externalDataService->getPlanCalories((int) $id);
+        $apiDurations = $hasNestedPlans ? [] : $this->externalDataService->getPlanDurations((int) $id);
 
         return view('pages.meal-plan-detail', compact('plan', 'apiCalories', 'apiDurations'));
     }

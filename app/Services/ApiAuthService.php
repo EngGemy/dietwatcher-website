@@ -52,14 +52,17 @@ class ApiAuthService
     public function sendOtp(string $phone): array
     {
         try {
-            $response = $this->http()->post($this->url('login/ordinary/reset'), [
+            $response = $this->http()->asForm()->post($this->url('login/ordinary/reset'), [
                 'mobile' => $phone,
             ]);
+            $json = $response->json() ?? [];
+            $json['_http_ok'] = $response->successful();
 
-            return $response->json() ?? [];
+            return $json;
         } catch (\Exception $e) {
             Log::error('ApiAuthService::sendOtp failed', ['phone' => $phone, 'error' => $e->getMessage()]);
-            return ['success' => false, 'message' => __('auth.otp_send_failed')];
+
+            return ['success' => false, 'message' => __('auth.otp_send_failed'), '_http_ok' => false];
         }
     }
 
@@ -70,18 +73,24 @@ class ApiAuthService
      *   is_continue = false → existing customer, token is ready
      *   is_continue = true  → new phone, must register
      */
-    public function verifyOtp(string $phone, string $code): array
+    public function verifyOtp(string $phone, string $code, ?string $deviceId = null): array
     {
         try {
-            $response = $this->http()->post($this->url('login/ordinary/verify'), [
-                'mobile' => $phone,
-                'code'   => $code,
-            ]);
+            $deviceId ??= 'web-checkout-' . substr(hash('sha256', session()->getId()), 0, 40);
 
-            return $response->json() ?? [];
+            $response = $this->http()->asForm()->post($this->url('login/ordinary/verify'), [
+                'mobile' => $phone,
+                'code' => $code,
+                'device_id' => $deviceId,
+            ]);
+            $json = $response->json() ?? [];
+            $json['_http_ok'] = $response->successful();
+
+            return $json;
         } catch (\Exception $e) {
             Log::error('ApiAuthService::verifyOtp failed', ['phone' => $phone, 'error' => $e->getMessage()]);
-            return ['success' => false, 'message' => __('auth.otp_verify_failed')];
+
+            return ['success' => false, 'message' => __('auth.otp_verify_failed'), '_http_ok' => false];
         }
     }
 
@@ -158,11 +167,15 @@ class ApiAuthService
     public function storeAddress(string $token, array $data): array
     {
         try {
-            $response = $this->httpWithToken($token)->post($this->url('addresses'), $data);
-            return $response->json() ?? [];
+            $response = $this->httpWithToken($token)->asForm()->post($this->url('addresses'), $data);
+            $json = $response->json() ?? [];
+            $json['_http_ok'] = $response->successful();
+
+            return $json;
         } catch (\Exception $e) {
             Log::error('ApiAuthService::storeAddress failed', ['error' => $e->getMessage()]);
-            return ['success' => false, 'message' => __('address.save_failed')];
+
+            return ['success' => false, 'message' => __('address.save_failed'), '_http_ok' => false];
         }
     }
 

@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\BlogController;
+use App\Http\Controllers\MarketMealController;
 use App\Http\Controllers\MealPlanController;
+use App\Http\Controllers\PageContentController;
 use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
 
@@ -13,35 +15,35 @@ Route::get('/', function () {
         ->orderBy('published_at', 'desc')
         ->take(4)
         ->get();
-    
+
     $testimonials = \App\Models\Testimonial::active()
         ->orderBy('order_column')
         ->take(6)
         ->get();
-    
+
     $howItWorksSteps = \App\Models\HowItWorksStep::active()
         ->ordered()
         ->get();
-    
+
     // Fetch programs from external API (shown as meal plan categories on homepage)
     $externalDataService = app(\App\Services\ExternalDataService::class);
     $mealPlanCategories = collect($externalDataService->getCategoriesForDisplay())->take(6);
 
     // Fetch instant order meals from /meals API (group_id=29)
-    $instantMeals = $externalDataService->getMealsByGroup(29);
+    $instantMeals = array_slice($externalDataService->getMealsByGroup(29), 0, 4);
 
     return view('pages.home', compact('latestPosts', 'testimonials', 'howItWorksSteps', 'mealPlanCategories', 'instantMeals'));
 })->name('home');
 
 Route::get('/locale/{locale}', function (string $locale) {
     // Validate locale
-    if (!in_array($locale, ['en', 'ar'])) {
+    if (! in_array($locale, ['en', 'ar'])) {
         abort(404);
     }
-    
+
     // Store in session
     session(['locale' => $locale]);
-    
+
     // Redirect back
     return redirect()->back();
 })->name('locale.switch');
@@ -63,7 +65,13 @@ Route::get('/meal-plans/{id}', [MealPlanController::class, 'show'])->name('meal-
 
 // Meals (products) route — also accessible as /store (Market link)
 Route::get('/store', fn () => view('pages.meals'))->name('store.index');
+Route::get('/store/{meal}', [MarketMealController::class, 'show'])
+    ->whereNumber('meal')
+    ->name('store.show');
 Route::get('/meals', fn () => view('pages.meals'))->name('meals.index');
+Route::get('/meals/{meal}', [MarketMealController::class, 'show'])
+    ->whereNumber('meal')
+    ->name('meals.show');
 
 // Checkout routes
 Route::get('/checkout', [\App\Http\Controllers\CheckoutController::class, 'index'])->name('checkout.index');
@@ -77,27 +85,37 @@ Route::get('/subscriptions/{id}', [SubscriptionController::class, 'show'])->name
 // AJAX: get plan durations/calories/zones for dynamic checkout
 Route::get('/api/plan/{id}/durations', function (int $id) {
     $service = app(\App\Services\ExternalDataService::class);
+
     return response()->json($service->getPlanDurations($id));
 })->name('api.plan.durations');
 
 Route::get('/api/plan/{id}/calories', function (int $id) {
     $service = app(\App\Services\ExternalDataService::class);
+
     return response()->json($service->getPlanCalories($id));
 })->name('api.plan.calories');
 
+Route::get('/api/plan/{id}/meals', function (int $id) {
+    $service = app(\App\Services\ExternalDataService::class);
+
+    return response()->json($service->getProgramMeals($id));
+})->name('api.plan.meals');
+
 Route::get('/api/zones', function () {
     $service = app(\App\Services\ExternalDataService::class);
+
     return response()->json($service->getZones());
 })->name('api.zones');
 
 Route::get('/api/branches', function () {
     $service = app(\App\Services\ExternalDataService::class);
+
     return response()->json($service->getBranches());
 })->name('api.branches');
 
 // Legal pages
-Route::get('/privacy-policy', fn () => view('pages.privacy'))->name('privacy');
-Route::get('/terms-and-conditions', fn () => view('pages.terms'))->name('terms');
+Route::get('/privacy-policy', [PageContentController::class, 'privacy'])->name('privacy');
+Route::get('/terms-and-conditions', [PageContentController::class, 'terms'])->name('terms');
 
 // OTP verification + simple customer registration
 Route::post('/otp/send', [\App\Http\Controllers\OtpController::class, 'send'])->name('otp.send');
@@ -109,8 +127,25 @@ Route::post('/auth/logout', [\App\Http\Controllers\OtpController::class, 'logout
 Route::get('/payment', [\App\Http\Controllers\PaymentController::class, 'form'])->name('payment.form');
 Route::get('/payment/callback', [\App\Http\Controllers\PaymentController::class, 'callback'])->name('payment.callback');
 Route::get('/payment/result', [\App\Http\Controllers\PaymentController::class, 'result'])->name('payment.result');
+Route::get('/payment/invoice', [\App\Http\Controllers\PaymentController::class, 'downloadInvoice'])->name('payment.invoice');
 
 // ─── AJAX: districts for address picker (Google Maps component) ──────
 Route::get('/api/districts', function () {
     return response()->json(app(\App\Services\ApiAuthService::class)->getDistricts());
 })->name('api.districts');
+
+// ─── Customer account area ──────────────────────────────────────────
+Route::prefix('account')->group(function () {
+    Route::get('/login',  [\App\Http\Controllers\Account\AccountAuthController::class, 'showLogin'])->name('account.login');
+    Route::post('/logout', [\App\Http\Controllers\Account\AccountAuthController::class, 'logout'])->middleware('customer.auth')->name('account.logout');
+
+    Route::middleware('customer.auth')->group(function () {
+        Route::get('/',                                  \App\Livewire\Account\Dashboard::class)->name('account.dashboard');
+        Route::get('/subscriptions',                     \App\Livewire\Account\Subscriptions\Index::class)->name('account.subscriptions.index');
+        Route::get('/subscriptions/{id}',                \App\Livewire\Account\Subscriptions\Show::class)->whereNumber('id')->name('account.subscriptions.show');
+        Route::get('/orders',                            \App\Livewire\Account\Orders\Index::class)->name('account.orders.index');
+        Route::get('/orders/{id}',                       \App\Livewire\Account\Orders\Show::class)->whereNumber('id')->name('account.orders.show');
+        Route::get('/wallet',                            \App\Livewire\Account\Wallet::class)->name('account.wallet');
+        Route::get('/profile',                           \App\Livewire\Account\Profile::class)->name('account.profile');
+    });
+});

@@ -6,7 +6,6 @@ namespace App\Http\Controllers;
 
 use App\Models\BlogCategory;
 use App\Models\BlogPost;
-use App\Models\BlogTag;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -33,19 +32,9 @@ class BlogController extends Controller
 
         $posts = $query->orderBy('published_at', 'desc')->paginate(12)->withQueryString();
 
-        // Featured post for hero section (only on first page without filters)
-        $featuredPost = null;
-        if (!$request->anyFilled(['search', 'category', 'tag']) && $posts->onFirstPage()) {
-            $featuredPost = BlogPost::published()
-                ->featured()
-                ->with(['author', 'category'])
-                ->first();
-        }
-
         $categories = BlogCategory::where('is_active', true)->orderBy('order_column')->get();
-        $tags = BlogTag::where('is_active', true)->withCount('posts')->orderByDesc('posts_count')->limit(12)->get();
 
-        return view('blog.index', compact('posts', 'categories', 'tags', 'featuredPost'));
+        return view('blog.index', compact('posts', 'categories'));
     }
 
     /**
@@ -58,16 +47,25 @@ class BlogController extends Controller
         // Find post by translated slug in current locale
         $post = BlogPost::published()
             ->whereTranslation('slug', $slug)
-            ->with(['author', 'tags', 'likes'])
+            ->with(['author', 'tags', 'likes', 'category'])
             ->first();
 
-        if (!$post) {
+        if (! $post) {
             abort(404);
         }
 
         // Increment view count
         $post->increment('views_count');
 
-        return view('blog.show', compact('post'));
+        $categories = BlogCategory::where('is_active', true)->orderBy('order_column')->get();
+
+        $latestPosts = BlogPost::published()
+            ->where('id', '!=', $post->id)
+            ->with(['category'])
+            ->orderByDesc('published_at')
+            ->limit(5)
+            ->get();
+
+        return view('blog.show', compact('post', 'categories', 'latestPosts'));
     }
 }
