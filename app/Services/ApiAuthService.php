@@ -120,7 +120,10 @@ class ApiAuthService
     {
         try {
             $response = $this->http()->post($this->url('register/simple-register'), $data);
-            return $response->json() ?? [];
+            $json = $response->json() ?? [];
+            $json['_http_ok'] = $response->successful();
+
+            return $json;
         } catch (\Exception $e) {
             Log::error('ApiAuthService::simpleRegister failed', ['error' => $e->getMessage()]);
             return ['success' => false, 'message' => __('auth.register_failed')];
@@ -148,11 +151,15 @@ class ApiAuthService
     /**
      * GET /addresses  (requires Sanctum token)
      */
-    public function getAddresses(string $token): array
+    public function getAddresses(string $token, bool $raw = false): array
     {
         try {
             $response = $this->httpWithToken($token)->get($this->url('addresses'));
             $body = $response->json();
+            if ($raw) {
+                return is_array($body) ? $body : [];
+            }
+
             return $body['data'] ?? $body ?? [];
         } catch (\Exception $e) {
             Log::error('ApiAuthService::getAddresses failed', ['error' => $e->getMessage()]);
