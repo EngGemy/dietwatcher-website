@@ -638,6 +638,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                 @include('partials.checkout-auth-modal')
             @endif
 
+            @if(!config('services.external_api.use_new_auth_flow', false))
             {{-- ── OTP Verification Modal (teleported to body) ──── --}}
             <template x-teleport="body">
                 <div x-show="otpModalOpen"
@@ -752,6 +753,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                     </div>
                 </div>
             </template>
+            @endif
 
         </form>
     </div>

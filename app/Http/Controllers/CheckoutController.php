@@ -28,6 +28,25 @@ class CheckoutController extends Controller
         '3months' => 3,
     ];
 
+    private static function normalizePhoneForMatch(?string $phone): string
+    {
+        $digits = preg_replace('/\D+/', '', (string) ($phone ?? '')) ?? '';
+        if ($digits === '') {
+            return '';
+        }
+
+        // Normalize SA formats: +9665xxxxxxxx, 9665xxxxxxxx, 05xxxxxxxx
+        if (str_starts_with($digits, '966')) {
+            $digits = substr($digits, 3);
+        }
+        if (str_starts_with($digits, '0')) {
+            $digits = substr($digits, 1);
+        }
+
+        // keep significant local part only
+        return substr($digits, -9);
+    }
+
     public function __construct(
         private ExternalDataService $externalDataService
     ) {}
@@ -769,8 +788,8 @@ class CheckoutController extends Controller
         $verified = session('phone_verified');
         $phone = (string) $request->input('phone', '');
         $previewOnly = filter_var($request->input('preview_only', false), FILTER_VALIDATE_BOOLEAN);
-        $phoneNorm = str_replace(' ', '', $phone);
-        $verifiedNorm = $verified ? str_replace(' ', '', (string) $verified) : '';
+        $phoneNorm = self::normalizePhoneForMatch($phone);
+        $verifiedNorm = self::normalizePhoneForMatch((string) $verified);
         $phonesMatch = $verifiedNorm !== '' && $verifiedNorm === $phoneNorm;
 
         if (! $phonesMatch) {
