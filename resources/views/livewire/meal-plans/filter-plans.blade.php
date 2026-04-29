@@ -164,7 +164,7 @@
                         @endif
                         <div class="plan-card__price-cta">
                             @if($minPlanPrice)
-                                <span class="plan-card__price">{{ $startsFromLabel }} {{ number_format($minPlanPrice, 0) }} {{ app()->getLocale() === 'ar' ? 'ر.س' : __('SAR') }}</span>
+                                <span class="plan-card__price">{{ $startsFromLabel }} {{ number_format($minPlanPrice, 0) }} <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span></span>
                             @else
                                 <span class="plan-card__price">{{ __('Price unavailable') }}</span>
                             @endif

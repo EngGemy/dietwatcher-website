@@ -1,4 +1,6 @@
 @php
+    $mealPlanCategories = app(\App\Services\ExternalDataService::class)->getCategories();
+
     // Build a deduplicated menu: dynamic items from DB + fallback hardcoded links
     $dynamicLabels = $headerMenu->pluck('label')->map(fn($l) => mb_strtolower(trim($l)))->toArray();
     $dynamicUrls = $headerMenu->map(fn($m) => rtrim($m->url ?? '', '/'))->filter()->toArray();
@@ -67,6 +69,29 @@
             return true;
         }
         return $isActiveUrl($link['url'] ?? '');
+    };
+
+    $toMealPlansLocalUrl = function (?string $url): string {
+        $url = trim((string) ($url ?? ''));
+        if ($url === '') {
+            return route('meal-plans.index');
+        }
+
+        $parsed = parse_url($url);
+        $path = (string) ($parsed['path'] ?? '');
+        $query = (string) ($parsed['query'] ?? '');
+
+        if ($path !== '' && str_contains($path, '/meal-plans')) {
+            if (preg_match('#/meal-plans/(\d+)#', $path, $m)) {
+                return route('meal-plans.show', ['id' => (int) $m[1]]);
+            }
+
+            return $query !== ''
+                ? route('meal-plans.index').'?'.$query
+                : route('meal-plans.index');
+        }
+
+        return $url;
     };
 
     $brandTaglines = [
@@ -204,7 +229,22 @@
                 @foreach($headerMenu as $menuItem)
                     @if($menuItem->type === 'dropdown')
                         @php
-                            $dropdownActive = collect($menuItem->children)
+                            $isMealPlansDropdown = mb_strtolower(trim((string) $menuItem->label)) === mb_strtolower(__('Meal Plans'));
+                            $dropdownChildren = $menuItem->children;
+                            if ($isMealPlansDropdown && !empty($mealPlanCategories)) {
+                                $dropdownChildren = collect($mealPlanCategories)->map(function ($cat) {
+                                    $name = $cat['name'] ?? '';
+                                    if (is_array($name)) {
+                                        $name = $name[app()->getLocale()] ?? $name['en'] ?? reset($name) ?? '';
+                                    }
+
+                                    return (object) [
+                                        'label' => (string) $name,
+                                        'url' => route('meal-plans.index', ['category' => (int) ($cat['id'] ?? 0)]),
+                                    ];
+                                })->filter(fn($c) => ($c->url ?? '') !== '' && ($c->label ?? '') !== '')->values();
+                            }
+                            $dropdownActive = collect($dropdownChildren)
                                 ->contains(fn($c) => $isActiveUrl($c->url ?? ''));
                         @endphp
                         <div class="hs-dropdown [--adaptive:none] [--strategy:static] [--trigger:hover] sm:[--adaptive:adaptive] sm:[--strategy:fixed]">
@@ -228,21 +268,32 @@
                                 aria-orientation="vertical"
                                 aria-labelledby="hs-navbar-{{ $menuItem->id }}-dropdown"
                             >
-                                @foreach($menuItem->children as $subItem)
-                                    @php $childActive = $isActiveUrl($subItem->url ?? ''); @endphp
+                                @foreach($dropdownChildren as $subItem)
+                                    @php
+                                        $childUrl = $isMealPlansDropdown
+                                            ? $toMealPlansLocalUrl($subItem->url ?? '')
+                                            : ($subItem->url ?? '');
+                                        $childActive = $isActiveUrl($childUrl);
+                                    @endphp
                                     <a
                                         class="header__dropdown-item {{ $childActive ? 'header__dropdown-item--active' : '' }}"
-                                        href="{{ $subItem->url }}"
+                                        href="{{ $childUrl }}"
                                         @if($childActive) aria-current="page" @endif
                                     >{{ $subItem->label }}</a>
                                 @endforeach
                             </div>
                         </div>
                     @elseif($menuItem->type === 'link')
-                        @php $active = $isActiveUrl($menuItem->url ?? ''); @endphp
+                        @php
+                            $linkIsMealPlans = mb_strtolower(trim((string) $menuItem->label)) === mb_strtolower(__('Meal Plans'));
+                            $linkUrl = $linkIsMealPlans
+                                ? $toMealPlansLocalUrl($menuItem->url ?? '')
+                                : ($menuItem->url ?? '');
+                            $active = $isActiveUrl($linkUrl);
+                        @endphp
                         <a
                             class="header__link {{ $active ? 'header__link--active' : '' }}"
-                            href="{{ $menuItem->url }}"
+                            href="{{ $linkUrl }}"
                             @if($active) aria-current="page" @endif
                         >{{ $menuItem->label }}</a>
                     @endif
@@ -279,6 +330,34 @@
 /* Spacer to prevent content from hiding behind the fixed header */
 .header-spacer {
     display: block;
+}
+
+/* Improve meal-plans dropdown contrast on light backgrounds */
+.header__dropdown-menu {
+    background: #ffffff !important;
+    border: 1px solid #dbe7f3;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.header__dropdown-item {
+    color: #1f2937 !important;
+    background: transparent;
+    border: 1px solid transparent;
+}
+
+.header__dropdown-item:hover,
+.header__dropdown-item:focus {
+    background: #eaf4ff;
+    color: #0b72d9 !important;
+    border-color: #bfdbfe;
+}
+
+.header__dropdown-item--active,
+.header__dropdown-item--active:hover,
+.header__dropdown-item--active:focus {
+    background: #dbeeff !important;
+    color: #0b72d9 !important;
+    border-color: #93c5fd;
 }
 
 /* Navbar smile/tagline animation refinement */

@@ -22,7 +22,7 @@
                 <p class="text-sm opacity-80">{{ __('account.available_balance') }}</p>
                 <p class="text-4xl md:text-5xl font-extrabold mt-1 tabular-nums">
                     @if($balance !== null){{ number_format($balance, 2) }}@else—@endif
-                    <span class="text-lg font-semibold opacity-80 ms-2">{{ __('SAR') }}</span>
+                    <span class="text-lg font-semibold opacity-80 ms-2"><x-sar /></span>
                 </p>
             </div>
             <div class="flex gap-2">
@@ -76,7 +76,7 @@
                                 </div>
                             </div>
                             <div class="font-bold {{ $isCharge ? 'text-emerald-600' : 'text-rose-600' }} tabular-nums">
-                                {{ $isCharge ? '+' : '-' }}{{ number_format(abs($amt), 2) }} <span class="text-xs font-normal text-gray-500">{{ __('SAR') }}</span>
+                                <span dir="ltr">{{ $isCharge ? '+' : '-' }}<x-sar :amount="abs($amt)" class="text-xs font-normal text-gray-500" /></span>
                             </div>
                         </li>
                     @endforeach

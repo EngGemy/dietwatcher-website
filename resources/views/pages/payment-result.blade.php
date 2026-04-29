@@ -139,13 +139,13 @@
                 <div class="invoice__totals">
                     <div class="invoice__total-row">
                         <span>{{ __('Subtotal') }} / {{ $isAr ? 'Subtotal' : 'المجموع الفرعي' }}</span>
-                        <span dir="ltr">SAR {{ number_format($payment->subtotal / 100, 2) }}</span>
+                        <span dir="ltr"><x-sar /> {{ number_format($payment->subtotal / 100, 2) }}</span>
                     </div>
 
                     @if($payment->delivery_fee > 0)
                     <div class="invoice__total-row">
                         <span>{{ __('Delivery fees') }} / {{ $isAr ? 'Delivery' : 'التوصيل' }}</span>
-                        <span dir="ltr">SAR {{ number_format($payment->delivery_fee / 100, 2) }}</span>
+                        <span dir="ltr"><x-sar /> {{ number_format($payment->delivery_fee / 100, 2) }}</span>
                     </div>
                     @else
                     <div class="invoice__total-row">
@@ -157,18 +157,18 @@
                     @if($payment->discount_amount > 0)
                     <div class="invoice__total-row text-green-600">
                         <span>{{ __('Discount') }} / {{ $isAr ? 'Discount' : 'الخصم' }} @if($payment->coupon)({{ $payment->coupon }})@endif</span>
-                        <span dir="ltr">- SAR {{ number_format($payment->discount_amount / 100, 2) }}</span>
+                        <span dir="ltr">- <x-sar /> {{ number_format($payment->discount_amount / 100, 2) }}</span>
                     </div>
                     @endif
 
                     <div class="invoice__total-row">
                         <span>{{ __('VAT') }} (15%) / {{ $isAr ? 'VAT' : 'ضريبة القيمة المضافة' }}</span>
-                        <span dir="ltr">SAR {{ number_format($payment->vat_amount / 100, 2) }}</span>
+                        <span dir="ltr"><x-sar /> {{ number_format($payment->vat_amount / 100, 2) }}</span>
                     </div>
 
                     <div class="invoice__total-row invoice__total-row--grand">
                         <span>{{ __('Total') }} / {{ $isAr ? 'Total' : 'الإجمالي' }}</span>
-                        <span dir="ltr">SAR {{ number_format($payment->amount_in_sar, 2) }}</span>
+                        <span dir="ltr"><x-sar /> {{ number_format($payment->amount_in_sar, 2) }}</span>
                     </div>
                 </div>
 

@@ -403,34 +403,49 @@ $totalPrice = $planPriceInclVat;
 
                 {{-- Nutritional Info (dynamic based on selected calorie) --}}
                 <div class="rounded-md border border-gray-200 bg-white p-5">
-                    <p class="mb-3 text-lg md:text-xl">{{ __('Nutritional info') }}</p>
+                    <div class="mb-4 flex items-center justify-between gap-3">
+                        <p class="text-lg font-bold md:text-xl">{{ __('Nutritional info') }}</p>
+                        <span class="nutrition-chip">{{ __('Min - Max') }}</span>
+                    </div>
 
-                    <div class="flex flex-col gap-6 md:flex-row">
-                        <div class="flex-1">
-                            <div class="mb-2 flex items-center justify-between">
-                                <p class="font-semibold">{{ __('Carbs') }}</p>
-                                <p x-text="currentNutrition.carbs"></p>
+                    <div class="nutrition-grid">
+                        <div class="nutrition-card">
+                            <div class="mb-3 flex items-center justify-between">
+                                <p class="font-bold">{{ __('Carbs') }}</p>
+                                <p class="nutrition-value" x-text="currentNutrition.carbs"></p>
                             </div>
-                            <div class="flex h-1 w-full overflow-hidden rounded-full bg-zinc-200" role="progressbar">
+                            <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-zinc-200" role="progressbar">
                                 <div class="bg-green flex flex-col justify-center overflow-hidden rounded-full text-center text-xs whitespace-nowrap transition duration-500" :style="'width:' + currentNutrition.carbsPercent + '%'"></div>
                             </div>
-                        </div>
-                        <div class="flex-1">
-                            <div class="mb-2 flex items-center justify-between">
-                                <p class="font-semibold">{{ __('Protein') }}</p>
-                                <p x-text="currentNutrition.protein"></p>
+                            <div class="nutrition-range-labels" x-show="hasRangeDisplay()" x-cloak>
+                                <span class="nutrition-range-max" x-text="nutritionRangeMax(currentNutrition.carbs)"></span>
+                                <span class="nutrition-range-min" x-text="nutritionRangeMin(currentNutrition.carbs)"></span>
                             </div>
-                            <div class="flex h-1 w-full overflow-hidden rounded-full bg-zinc-200" role="progressbar">
+                        </div>
+                        <div class="nutrition-card">
+                            <div class="mb-3 flex items-center justify-between">
+                                <p class="font-bold">{{ __('Protein') }}</p>
+                                <p class="nutrition-value" x-text="currentNutrition.protein"></p>
+                            </div>
+                            <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-zinc-200" role="progressbar">
                                 <div class="bg-yellow flex flex-col justify-center overflow-hidden rounded-full text-center text-xs whitespace-nowrap transition duration-500" :style="'width:' + currentNutrition.proteinPercent + '%'"></div>
                             </div>
-                        </div>
-                        <div class="flex-1">
-                            <div class="mb-2 flex items-center justify-between">
-                                <p class="font-semibold">{{ __('Fat') }}</p>
-                                <p x-text="currentNutrition.fat"></p>
+                            <div class="nutrition-range-labels" x-show="hasRangeDisplay()" x-cloak>
+                                <span class="nutrition-range-max" x-text="nutritionRangeMax(currentNutrition.protein)"></span>
+                                <span class="nutrition-range-min" x-text="nutritionRangeMin(currentNutrition.protein)"></span>
                             </div>
-                            <div class="flex h-1 w-full overflow-hidden rounded-full bg-zinc-200" role="progressbar">
+                        </div>
+                        <div class="nutrition-card">
+                            <div class="mb-3 flex items-center justify-between">
+                                <p class="font-bold">{{ __('Fat') }}</p>
+                                <p class="nutrition-value" x-text="currentNutrition.fat"></p>
+                            </div>
+                            <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-zinc-200" role="progressbar">
                                 <div class="bg-red flex flex-col justify-center overflow-hidden rounded-full text-center text-xs whitespace-nowrap transition duration-500" :style="'width:' + currentNutrition.fatPercent + '%'"></div>
+                            </div>
+                            <div class="nutrition-range-labels" x-show="hasRangeDisplay()" x-cloak>
+                                <span class="nutrition-range-max" x-text="nutritionRangeMax(currentNutrition.fat)"></span>
+                                <span class="nutrition-range-min" x-text="nutritionRangeMin(currentNutrition.fat)"></span>
                             </div>
                         </div>
                     </div>
@@ -453,8 +468,8 @@ $totalPrice = $planPriceInclVat;
                                 <label :for="'dur-' + index" class="duration-pills__face">
                                     <span class="duration-pills__offer-badge" x-show="durationRowHasOffer(dur)" x-cloak>{{ __('Offer') }}</span>
                                     <span class="duration-pills__title" x-text="dur.label || (dur.days + ' {{ __('Days') }}')"></span>
-                                    <span class="duration-pills__strike" x-show="durationRowHasOffer(dur)" x-text="'{{ __('SAR') }} ' + durationRowListStr(dur)"></span>
-                                    <span class="duration-pills__total-line" x-text="'{{ __('SAR') }} ' + durationRowEffectiveStr(dur)"></span>
+                                    <span class="duration-pills__strike" x-show="durationRowHasOffer(dur)" x-text="'\u20C1 ' + durationRowListStr(dur)"></span>
+                                    <span class="duration-pills__total-line" x-text="'\u20C1 ' + durationRowEffectiveStr(dur)"></span>
                                     <span class="duration-pills__avg" x-show="durationRowAvgLine(dur)" x-text="durationRowAvgLine(dur)"></span>
                                 </label>
                             </div>
@@ -469,7 +484,7 @@ $totalPrice = $planPriceInclVat;
                     <div class="space-y-2">
                         <div class="flex items-center justify-between">
                             <p class="text-gray-600">{{ __('Plan Price') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></p>
-                            <p>SAR <span x-text="displayPrice.toLocaleString()"></span></p>
+                            <p><x-sar /> <span x-text="displayPrice.toLocaleString()"></span></p>
                         </div>
                         <div class="flex items-center justify-between text-sm text-gray-600" x-show="selectedDurationDays > 0" x-cloak>
                             <p>{{ __('Avg. per day') }} <span class="text-xs text-gray-400">({{ __('Incl. VAT') }})</span></p>
@@ -478,19 +493,19 @@ $totalPrice = $planPriceInclVat;
                         <template x-if="originalPrice > 0 && originalPrice !== displayPrice">
                             <div class="flex items-center justify-between">
                                 <p class="text-gray-400 line-through text-sm">{{ __('Original Price') }}</p>
-                                <p class="text-gray-400 line-through text-sm">SAR <span x-text="originalPrice.toLocaleString()"></span></p>
+                                <p class="text-gray-400 line-through text-sm"><x-sar /> <span x-text="originalPrice.toLocaleString()"></span></p>
                             </div>
                         </template>
                         <div class="flex items-center justify-between text-sm text-gray-400">
                             <p>{{ __('VAT included') }} ({{ (int)(\App\Models\Settings\Setting::getValue('vat_rate', 15)) }}%)</p>
-                            <p>SAR <span x-text="vatAmount.toFixed(2)"></span></p>
+                            <p><x-sar /> <span x-text="vatAmount.toFixed(2)"></span></p>
                         </div>
 
                         <div class="my-3 h-px bg-gray-300"></div>
 
                         <div class="flex items-center justify-between">
                             <p class="text-xl font-semibold">{{ __('Total') }}</p>
-                            <p class="text-green text-xl">SAR <span x-text="displayPrice.toLocaleString()"></span></p>
+                            <p class="text-green text-xl"><x-sar /> <span x-text="displayPrice.toLocaleString()"></span></p>
                         </div>
 
                         <button type="button"
@@ -622,6 +637,25 @@ $totalPrice = $planPriceInclVat;
     .text-green {
         color: #22c55e;
     }
+    .nutrition-chip {
+        @apply inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700;
+    }
+    .nutrition-grid {
+        @apply grid gap-3 md:grid-cols-3;
+    }
+    .nutrition-card {
+        @apply rounded-xl border border-slate-200 bg-slate-50/70 p-3;
+    }
+    .nutrition-value {
+        @apply text-lg font-black text-slate-800;
+    }
+    .nutrition-range-labels {
+        @apply mt-2 flex items-center justify-between text-xs text-slate-500;
+    }
+    .nutrition-range-max,
+    .nutrition-range-min {
+        @apply font-semibold;
+    }
 </style>
 @endpush
 
@@ -733,7 +767,7 @@ function planDetail() {
             if (days <= 0 || eff <= 0) return '';
             const avg = Math.round((eff / days) * 100) / 100;
             const ns = Number.isInteger(avg) ? String(avg) : avg.toFixed(2);
-            return '{{ __('SAR') }} ' + ns + ' · {{ __('per day') }}';
+            return '\u20C1 ' + ns + ' · {{ __('per day') }}';
         },
 
         avgPerDayAmount() {
@@ -741,7 +775,7 @@ function planDetail() {
             if (days <= 0) return '—';
             const v = Number(this.displayPrice) / days;
             const avg = Math.round(v * 100) / 100;
-            return '{{ __('SAR') }} ' + (Number.isInteger(avg) ? String(avg) : avg.toFixed(2));
+            return '\u20C1 ' + (Number.isInteger(avg) ? String(avg) : avg.toFixed(2));
         },
 
         applySubscriptionPlan(plan) {
@@ -834,34 +868,141 @@ function planDetail() {
             if (!this.hasNumericNutrition()) {
                 this.applyEstimatedNutritionFromRange(this.selectedCalories);
             }
+            if (!this.hasRangeDisplay()) {
+                this.applyEstimatedNutritionFromRange(this.selectedCalories);
+            }
         },
 
         updateNutrition(cal) {
             if (cal && cal.macros) {
                 const m = cal.macros;
-                const n = (v) => {
+                const parseNum = (v) => {
                     if (v == null) return 0;
                     if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
                     if (typeof v === 'string') {
-                        const match = v.match(/[\d.]+/);
-                        return match ? parseFloat(match[0]) : 0;
+                        const nums = v.match(/[\d.]+/g) || [];
+                        if (nums.length >= 2) {
+                            const a = parseFloat(nums[0]) || 0;
+                            const b = parseFloat(nums[1]) || 0;
+                            return a > 0 && b > 0 ? (a + b) / 2 : Math.max(a, b);
+                        }
+                        return nums.length ? (parseFloat(nums[0]) || 0) : 0;
                     }
                     if (typeof v === 'object') {
-                        return n(v.amount ?? v.value ?? v.total ?? null);
+                        const min = parseNum(v.min ?? v.min_amount ?? v.low ?? v.from ?? null);
+                        const max = parseNum(v.max ?? v.max_amount ?? v.high ?? v.to ?? null);
+                        if (min > 0 && max > 0) {
+                            return (min + max) / 2;
+                        }
+                        return parseNum(v.amount ?? v.value ?? v.total ?? v.g ?? null);
                     }
                     return 0;
                 };
-                const protein = n(m.protein ?? m.proteins ?? m.protein_g ?? null);
-                const carbs = n(m.carbs ?? m.carb ?? m.carbohydrates ?? m.carbs_g ?? null);
-                const fat = n(m.fats ?? m.fat ?? m.fat_g ?? m.fats_g ?? null);
-                const total = protein + carbs + fat;
+
+                const readRange = (src, valueKeys, minKeys, maxKeys) => {
+                    const readFirst = (keys) => {
+                        for (const k of keys) {
+                            if (src && Object.prototype.hasOwnProperty.call(src, k)) {
+                                const val = parseNum(src[k]);
+                                if (val > 0) return val;
+                            }
+                        }
+                        return 0;
+                    };
+
+                    const direct = readFirst(valueKeys);
+                    const min = readFirst(minKeys);
+                    const max = readFirst(maxKeys);
+
+                    return { direct, min, max };
+                };
+
+                const nutrientRange = (valueKeys, minKeys, maxKeys) => {
+                    const root = readRange(m, valueKeys, minKeys, maxKeys);
+                    let min = root.min;
+                    let max = root.max;
+                    let direct = root.direct;
+
+                    // Some API payloads send macros per meal type:
+                    // macros.breakfast / macros.lunch / macros.dinner / macros.snack
+                    // In that case we aggregate min/max across meal types.
+                    if (min <= 0 && max <= 0 && direct <= 0) {
+                        const mealTypeKeys = ['breakfast', 'lunch', 'dinner', 'snack'];
+                        let aggMin = 0;
+                        let aggMax = 0;
+                        let aggDirect = 0;
+                        let foundAny = false;
+
+                        mealTypeKeys.forEach((mt) => {
+                            const node = m?.[mt];
+                            if (!node || typeof node !== 'object') return;
+                            const r = readRange(node, valueKeys, minKeys, maxKeys);
+                            if (r.min > 0 && r.max > 0) {
+                                aggMin += r.min;
+                                aggMax += r.max;
+                                foundAny = true;
+                                return;
+                            }
+                            if (r.direct > 0) {
+                                aggDirect += r.direct;
+                                foundAny = true;
+                            }
+                        });
+
+                        if (foundAny) {
+                            min = aggMin;
+                            max = aggMax;
+                            direct = aggDirect;
+                        }
+                    }
+
+                    if (min > 0 && max > 0) {
+                        const displayMin = Number.isInteger(min) ? String(min) : min.toFixed(1);
+                        const displayMax = Number.isInteger(max) ? String(max) : max.toFixed(1);
+                        return {
+                            amount: displayMin + '-' + displayMax + 'g',
+                            numeric: (min + max) / 2,
+                        };
+                    }
+
+                    const numeric = direct;
+                    if (numeric <= 0) {
+                        return {
+                            amount: '—',
+                            numeric: 0,
+                        };
+                    }
+                    const display = Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
+                    return {
+                        amount: display + 'g',
+                        numeric,
+                    };
+                };
+
+                const proteinRange = nutrientRange(
+                    ['protein', 'proteins', 'protein_g'],
+                    ['protein_min', 'proteins_min', 'protein_g_min'],
+                    ['protein_max', 'proteins_max', 'protein_g_max']
+                );
+                const carbsRange = nutrientRange(
+                    ['carbs', 'carb', 'carbohydrates', 'carbs_g'],
+                    ['carbs_min', 'carb_min', 'carbohydrates_min', 'carbs_g_min'],
+                    ['carbs_max', 'carb_max', 'carbohydrates_max', 'carbs_g_max']
+                );
+                const fatRange = nutrientRange(
+                    ['fats', 'fat', 'fat_g', 'fats_g'],
+                    ['fats_min', 'fat_min', 'fat_g_min', 'fats_g_min'],
+                    ['fats_max', 'fat_max', 'fat_g_max', 'fats_g_max']
+                );
+
+                const total = proteinRange.numeric + carbsRange.numeric + fatRange.numeric;
                 this.currentNutrition = {
-                    carbs: carbs + 'g',
-                    carbsPercent: total > 0 ? Math.round(carbs / total * 100) : 33,
-                    protein: protein + 'g',
-                    proteinPercent: total > 0 ? Math.round(protein / total * 100) : 33,
-                    fat: fat + 'g',
-                    fatPercent: total > 0 ? Math.round(fat / total * 100) : 33,
+                    carbs: carbsRange.amount,
+                    carbsPercent: total > 0 ? Math.round(carbsRange.numeric / total * 100) : 33,
+                    protein: proteinRange.amount,
+                    proteinPercent: total > 0 ? Math.round(proteinRange.numeric / total * 100) : 33,
+                    fat: fatRange.amount,
+                    fatPercent: total > 0 ? Math.round(fatRange.numeric / total * 100) : 33,
                 };
             }
         },
@@ -877,6 +1018,35 @@ function planDetail() {
             return (p + c + f) > 0;
         },
 
+        hasRangeDisplay() {
+            const check = (v) => String(v || '').includes('-');
+            return check(this.currentNutrition.carbs) || check(this.currentNutrition.protein) || check(this.currentNutrition.fat);
+        },
+
+        nutritionRangeParts(value) {
+            const text = String(value || '').trim();
+            if (text === '' || text === '—') {
+                return { min: '—', max: '—' };
+            }
+            const unit = text.includes('g') ? 'g' : '';
+            const nums = text.match(/[\d.]+/g) || [];
+            if (nums.length >= 2) {
+                return { min: nums[0] + unit, max: nums[1] + unit };
+            }
+            if (nums.length === 1) {
+                return { min: nums[0] + unit, max: nums[0] + unit };
+            }
+            return { min: text, max: text };
+        },
+
+        nutritionRangeMin(value) {
+            return this.nutritionRangeParts(value).min;
+        },
+
+        nutritionRangeMax(value) {
+            return this.nutritionRangeParts(value).max;
+        },
+
         parseCaloriesRange(range) {
             const str = String(range || '').trim();
             if (!str) return 0;
@@ -887,6 +1057,52 @@ function planDetail() {
             const max = parseFloat(nums[1]) || 0;
             if (min > 0 && max > 0) return (min + max) / 2;
             return Math.max(min, max);
+        },
+
+        parseCaloriesBounds(range) {
+            const str = String(range || '').trim();
+            if (!str) return { min: 0, max: 0 };
+            const nums = str.match(/[\d.]+/g) || [];
+            if (nums.length === 0) return { min: 0, max: 0 };
+            if (nums.length === 1) {
+                const v = parseFloat(nums[0]) || 0;
+                return { min: v, max: v };
+            }
+            const min = parseFloat(nums[0]) || 0;
+            const max = parseFloat(nums[1]) || 0;
+            if (min > 0 && max > 0) return { min, max };
+            const v = Math.max(min, max);
+            return { min: v, max: v };
+        },
+
+        setNutritionRanges(proteinMin, proteinMax, carbsMin, carbsMax, fatMin, fatMax) {
+            const fmt = (min, max) => {
+                const a = Number(min) || 0;
+                const b = Number(max) || 0;
+                if (a <= 0 && b <= 0) return '—';
+                if (a > 0 && b > 0 && Math.abs(a - b) > 0.01) {
+                    const sa = Number.isInteger(a) ? String(a) : a.toFixed(1);
+                    const sb = Number.isInteger(b) ? String(b) : b.toFixed(1);
+                    return sa + '-' + sb + 'g';
+                }
+                const v = Math.max(a, b);
+                const sv = Number.isInteger(v) ? String(v) : v.toFixed(1);
+                return sv + 'g';
+            };
+
+            const proteinMid = ((Number(proteinMin) || 0) + (Number(proteinMax) || 0)) / 2;
+            const carbsMid = ((Number(carbsMin) || 0) + (Number(carbsMax) || 0)) / 2;
+            const fatMid = ((Number(fatMin) || 0) + (Number(fatMax) || 0)) / 2;
+            const total = proteinMid + carbsMid + fatMid;
+
+            this.currentNutrition = {
+                carbs: fmt(carbsMin, carbsMax),
+                carbsPercent: total > 0 ? Math.round((carbsMid / total) * 100) : 33,
+                protein: fmt(proteinMin, proteinMax),
+                proteinPercent: total > 0 ? Math.round((proteinMid / total) * 100) : 33,
+                fat: fmt(fatMin, fatMax),
+                fatPercent: total > 0 ? Math.round((fatMid / total) * 100) : 33,
+            };
         },
 
         applyRawNutrition(protein, carbs, fat) {
@@ -905,21 +1121,20 @@ function planDetail() {
         },
 
         applyEstimatedNutritionFromRange(range) {
-            const kcal = this.parseCaloriesRange(range);
-            if (kcal <= 0) {
+            const bounds = this.parseCaloriesBounds(range);
+            if (bounds.min <= 0 && bounds.max <= 0) {
                 return;
             }
 
-            // Fallback when API doesn't provide macros.
-            const proteinKcal = kcal * 0.30;
-            const carbsKcal = kcal * 0.40;
-            const fatKcal = kcal * 0.30;
+            // Fallback when API doesn't provide explicit min/max macros.
+            const proteinMin = Math.round(((bounds.min * 0.30) / 4) * 10) / 10;
+            const proteinMax = Math.round(((bounds.max * 0.30) / 4) * 10) / 10;
+            const carbsMin = Math.round(((bounds.min * 0.40) / 4) * 10) / 10;
+            const carbsMax = Math.round(((bounds.max * 0.40) / 4) * 10) / 10;
+            const fatMin = Math.round(((bounds.min * 0.30) / 9) * 10) / 10;
+            const fatMax = Math.round(((bounds.max * 0.30) / 9) * 10) / 10;
 
-            const proteinG = Math.round((proteinKcal / 4) * 10) / 10;
-            const carbsG = Math.round((carbsKcal / 4) * 10) / 10;
-            const fatG = Math.round((fatKcal / 9) * 10) / 10;
-
-            this.applyRawNutrition(proteinG, carbsG, fatG);
+            this.setNutritionRanges(proteinMin, proteinMax, carbsMin, carbsMax, fatMin, fatMax);
         },
 
         async hydrateNutritionFromProgramMeals() {

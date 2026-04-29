@@ -582,10 +582,11 @@ class ExternalDataService
                 $response = $this->http()->get("{$this->baseUrl}/meals", $params);
                 if ($response->successful()) {
                     $json = $response->json();
+                    $meta = $this->normalizePaginationMeta($json['meta'] ?? [], $page);
 
                     return [
                         'data' => array_map([$this, 'transformMeal'], $json['data'] ?? []),
-                        'meta' => $json['meta'] ?? ['currentPage' => $page, 'lastPage' => 1],
+                        'meta' => $meta,
                     ];
                 }
             } catch (\Exception $e) {
@@ -621,7 +622,8 @@ class ExternalDataService
                         $json = $response->json();
                         $data = array_map([$this, 'transformMeal'], $json['data'] ?? []);
                         $allMeals = array_merge($allMeals, $data);
-                        $lastPage = (int) ($json['meta']['lastPage'] ?? 1);
+                        $meta = $this->normalizePaginationMeta($json['meta'] ?? [], $page);
+                        $lastPage = (int) ($meta['lastPage'] ?? 1);
                     } else {
                         break;
                     }
@@ -749,20 +751,65 @@ class ExternalDataService
             $groupId = null;
         }
 
+        $mealImage = (string) (
+            $meal['image']
+            ?? $meal['image_url']
+            ?? $meal['cover']
+            ?? $meal['thumbnail']
+            ?? ''
+        );
+
+        $rawCategories = is_array($meal['categories'] ?? null) ? $meal['categories'] : [];
+        $categories = array_values(array_filter(array_map(function ($cat) {
+            if (! is_array($cat)) {
+                return null;
+            }
+
+            $name = $cat['name'] ?? '';
+            if (is_array($name)) {
+                $name = $name[app()->getLocale()] ?? $name['en'] ?? reset($name) ?? '';
+            }
+
+            return [
+                'id' => (int) ($cat['id'] ?? 0),
+                'name' => (string) $name,
+                'icon' => (string) ($cat['icon'] ?? ''),
+            ];
+        }, $rawCategories)));
+
+        $groupName = $meal['group']['name'] ?? $meal['menu']['name'] ?? $meal['group_name'] ?? $meal['menu_name'] ?? '';
+        if (is_array($groupName)) {
+            $groupName = $groupName[app()->getLocale()] ?? $groupName['en'] ?? reset($groupName) ?? '';
+        }
+
+        $tags = is_array($meal['tags'] ?? null) ? $meal['tags'] : [];
+        $resolvedTagName = $meal['tag_name'] ?? $meal['tag']['name'] ?? ($tags[0]['name'] ?? '');
+        if (is_array($resolvedTagName)) {
+            $resolvedTagName = $resolvedTagName[app()->getLocale()] ?? $resolvedTagName['en'] ?? reset($resolvedTagName) ?? '';
+        }
+
+        $categoryName = $categories[0]['name'] ?? '';
+        if ($categoryName === '') {
+            $categoryName = (string) $groupName;
+        }
+
         return [
             'id' => $meal['id'],
+            'code' => $meal['code'] ?? $meal['sku'] ?? $meal['product_code'] ?? $meal['id'],
             'name' => $meal['name'] ?? '',
             'description' => $meal['description'] ?? '',
-            'image_url' => $this->absoluteMediaUrl((string) ($meal['image'] ?? '')),
+            'image_url' => $this->absoluteMediaUrl($mealImage),
             'price' => (float) $priceAmount,
             'offer_price' => (float) $offerPriceAmount,
             'rate' => $meal['rate'] ?? 0,
-            'categories' => $meal['categories'] ?? [],
-            'tags' => $meal['tags'] ?? [],
-            'tag_name' => $meal['tags'][0]['name'] ?? '',
+            'categories' => $categories,
+            'category_name' => $categoryName,
+            'tags' => $tags,
+            'tag_name' => (string) $resolvedTagName,
             'ingredients' => $meal['ingredients'] ?? [],
             'benefits' => $meal['benefits'] ?? $meal['health_benefits'] ?? '',
             'group_id' => $groupId,
+            'group_name' => (string) $groupName,
             'calories' => $this->nutritionFloatAliases($meal, ['calories', 'kcal', 'calorie'], $nutrition),
             'protein' => $this->nutritionFloatAliases($meal, ['protein', 'proteins', 'protein_g'], $nutrition),
             'carbs' => $this->nutritionFloatAliases($meal, ['carbs', 'carb', 'carbohydrates', 'carbohydrate', 'carbs_g'], $nutrition),
@@ -787,6 +834,27 @@ class ExternalDataService
         }
 
         return null;
+    }
+
+    /**
+     * Normalize API pagination keys across snake/camel variants.
+     *
+     * @param  array<string, mixed>  $meta
+     * @return array<string, int>
+     */
+    protected function normalizePaginationMeta(array $meta, int $fallbackPage = 1): array
+    {
+        $currentPage = (int) ($meta['currentPage'] ?? $meta['current_page'] ?? $fallbackPage);
+        $lastPage = (int) ($meta['lastPage'] ?? $meta['last_page'] ?? 1);
+        $perPage = (int) ($meta['perPage'] ?? $meta['per_page'] ?? 0);
+        $total = (int) ($meta['total'] ?? 0);
+
+        return [
+            'currentPage' => max(1, $currentPage),
+            'lastPage' => max(1, $lastPage),
+            'perPage' => max(0, $perPage),
+            'total' => max(0, $total),
+        ];
     }
 
     /**
@@ -895,10 +963,11 @@ class ExternalDataService
                 $response = $this->http()->get("{$this->baseUrl}/subscriptions", $params);
                 if ($response->successful()) {
                     $json = $response->json();
+                    $meta = $this->normalizePaginationMeta($json['meta'] ?? [], $page);
 
                     return [
                         'data' => array_map([$this, 'transformSubscription'], $json['data'] ?? []),
-                        'meta' => $json['meta'] ?? ['currentPage' => $page, 'lastPage' => 1],
+                        'meta' => $meta,
                     ];
                 }
             } catch (\Exception $e) {
@@ -1159,8 +1228,72 @@ class ExternalDataService
                 'value' => $group['value'] ?? $group['id'] ?? 0,
                 'name' => $group['name'] ?? '',
                 'icon' => $group['icon'] ?? '',
+                'count' => (int) ($group['count'] ?? $group['meals_count'] ?? 0),
             ];
         }, $home['shopMealGroups'] ?? []);
+    }
+
+    /**
+     * GET /meals/filters canonical filter source for store categories.
+     *
+     * @return array{groups: array, menus: array, tags: array}
+     */
+    public function getMealFilters(): array
+    {
+        return Cache::remember($this->cacheKey('meals_filters'), 600, function () {
+            try {
+                $response = $this->http()->get("{$this->baseUrl}/meals/filters");
+                if ($response->successful()) {
+                    $body = $response->json();
+                    $payload = $body['data'] ?? $body ?? [];
+
+                    return [
+                        'groups' => $this->normalizeFilterBucket(
+                            $payload['groups'] ?? $payload['categories'] ?? $payload['shopMealGroups'] ?? []
+                        ),
+                        'menus' => $this->normalizeFilterBucket($payload['menus'] ?? []),
+                        'tags' => $this->normalizeFilterBucket($payload['tags'] ?? []),
+                    ];
+                }
+            } catch (\Exception $e) {
+                Log::warning('External API /meals/filters failed: '.$e->getMessage());
+            }
+
+            return [
+                'groups' => $this->getShopMealGroups(),
+                'menus' => [],
+                'tags' => [],
+            ];
+        });
+    }
+
+    /**
+     * Normalize filter buckets and hide empty categories when count exists.
+     */
+    protected function normalizeFilterBucket(array $items): array
+    {
+        $normalized = array_map(function ($item) {
+            $count = (int) (
+                $item['meals_count']
+                ?? $item['count']
+                ?? $item['mealsCount']
+                ?? $item['programs_count']
+                ?? 0
+            );
+
+            return [
+                'value' => (int) ($item['id'] ?? $item['value'] ?? 0),
+                'name' => $item['name'] ?? '',
+                'icon' => $item['icon'] ?? $item['image'] ?? '',
+                'count' => $count,
+            ];
+        }, array_values($items));
+
+        $hasReportedCounts = collect($normalized)->contains(fn ($i) => ($i['count'] ?? 0) > 0);
+
+        return $hasReportedCounts
+            ? array_values(array_filter($normalized, fn ($i) => ($i['count'] ?? 0) > 0))
+            : $normalized;
     }
 
     // ─── Settings ────────────────────────────────────────────────
@@ -1407,6 +1540,7 @@ class ExternalDataService
             'home',
             'settings',
             'all_meals',
+            'meals_filters',
             'zones',
         ];
 

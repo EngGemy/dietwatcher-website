@@ -603,7 +603,9 @@
     "Your Information": "معلوماتك",
     "Payment": "الدفع",
     "Confirm & Pay": "تأكيد ودفع",
-    "SAR": "ر.س",
+    "SAR": "\u20C1",
+    "Saudi Riyal": "ريال سعودي",
+    "currency.symbol_label": "ريال سعودي",
     "Remove": "حذف",
     "Select Options": "اختر الخيارات",
     "Select day": "اختر اليوم",
@@ -1181,5 +1183,6 @@
     "checkout.auth.errors.serverError": "خطأ في الخادم. حاول لاحقًا.",
     "checkout.auth.success.welcome": "مرحبًا، :name",
     "checkout.auth.changeNumber": "تغيير الرقم",
-    "checkout.auth.close": "إغلاق"
+    "checkout.auth.close": "إغلاق",
+    "Drag": "اسحب"
 }

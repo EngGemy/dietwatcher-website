@@ -33,7 +33,7 @@
                 <div class="border-t border-gray-200 mt-3 pt-3">
                     <div class="flex items-center justify-between">
                         <span class="text-lg font-bold">{{ __('Total') }}</span>
-                        <span class="text-xl font-bold text-green-600">SAR {{ $amountDisplay }}</span>
+                        <span class="text-xl font-bold text-green-600"><x-sar /> {{ $amountDisplay }}</span>
                     </div>
                 </div>
             </div>

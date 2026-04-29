@@ -330,11 +330,11 @@
                                     <div class="meal-card__price-wrap">
                                         @if(($meal['offer_price'] ?? 0) > 0 && $meal['offer_price'] < $meal['price'])
                                             <span class="meal-card__price">
-                                                <span class="line-through text-gray-600 text-sm">{{ __('SAR') }} {{ number_format($meal['price'], 0) }}</span>
-                                                {{ __('SAR') }} {{ number_format($meal['offer_price'], 0) }}
+                                                <span class="line-through text-gray-600 text-sm"><x-sar :amount="$meal['price']" :decimals="0" /></span>
+                                                <x-sar :amount="$meal['offer_price']" :decimals="0" />
                                             </span>
                                         @else
-                                            <span class="meal-card__price">{{ __('SAR') }} {{ number_format($meal['price'], 0) }}</span>
+                                            <span class="meal-card__price"><x-sar :amount="$meal['price']" :decimals="0" /></span>
                                         @endif
                                     </div>
                                 </div>
@@ -1203,12 +1203,28 @@
     min-width: var(--t-card-w);
     flex: 0 0 var(--t-card-w);
     transform-origin: 50% 100%;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+.testimonials-rail.is-preparing .testimonials-rail__item {
+    opacity: 0;
+    transform: translateY(16px) scale(.985);
+}
+.testimonials-rail.is-ready .testimonials-rail__item {
+    animation: testimonialCardIn .55s cubic-bezier(.16,1,.3,1) forwards;
+    animation-delay: calc(var(--t-i, 0) * 80ms);
 }
 .testimonials-card {
     height: 100%;
     transition: transform .48s cubic-bezier(.16,1,.3,1), box-shadow .48s cubic-bezier(.16,1,.3,1), border-color .36s ease;
     border: 1px solid rgba(148,163,184,.18);
     box-shadow: 0 14px 30px rgba(15,23,42,.08);
+}
+.testimonials-rail__viewport.is-dragging .testimonials-card {
+    transition-duration: .12s;
+}
+.testimonials-rail__viewport.is-settling .testimonials-card {
+    animation: testimonialSettle .52s cubic-bezier(.22,1.25,.32,1);
 }
 .testimonials-card-wrap:hover .testimonials-card,
 .testimonials-card-wrap:focus-within .testimonials-card {
@@ -1231,6 +1247,15 @@
 .testimonials-card-wrap:focus-within .review-card__author-img {
     transform: scale(1.06);
     box-shadow: 0 8px 16px rgba(15,23,42,.2);
+}
+@keyframes testimonialCardIn {
+    from { opacity: 0; transform: translateY(16px) scale(.985); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes testimonialSettle {
+    0% { transform: translateY(-8px) scale(1.02); }
+    55% { transform: translateY(2px) scale(.996); }
+    100% { transform: translateY(0) scale(1); }
 }
 
 /* ─── Blog premium motion & interactions ───────────── */
@@ -1771,6 +1796,7 @@
             }
 
             function buildRail() {
+                section.classList.add('is-preparing');
                 Array.from(track.querySelectorAll('[data-testimonial-clone="1"]')).forEach(function(node) {
                     node.remove();
                 });
@@ -1794,6 +1820,15 @@
                 state.loopWidth = Math.max(1, total);
                 state.x = 0;
                 render();
+
+                section.classList.remove('is-ready');
+                baseItems.forEach(function(item, idx) {
+                    item.style.setProperty('--t-i', String(idx));
+                });
+                requestAnimationFrame(function() {
+                    section.classList.remove('is-preparing');
+                    section.classList.add('is-ready');
+                });
             }
 
             function tick(ts) {
@@ -1843,6 +1878,8 @@
                 if (!state.isDragging || e.pointerId !== state.pointerId) return;
                 state.isDragging = false;
                 viewport.classList.remove('is-dragging');
+                viewport.classList.add('is-settling');
+                setTimeout(function() { viewport.classList.remove('is-settling'); }, 560);
                 try { viewport.releasePointerCapture(e.pointerId); } catch (err) {}
                 resumeRail(700);
             }
@@ -1864,6 +1901,8 @@
                 viewport.addEventListener('lostpointercapture', function() {
                     state.isDragging = false;
                     viewport.classList.remove('is-dragging');
+                    viewport.classList.add('is-settling');
+                    setTimeout(function() { viewport.classList.remove('is-settling'); }, 560);
                     resumeRail(500);
                 });
             } else {

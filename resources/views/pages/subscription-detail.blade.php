@@ -186,21 +186,21 @@ $subImageUrl = str_starts_with($subImage, 'http') ? $subImage : asset('assets/im
                     <div class="space-y-3">
                         <div class="flex justify-between">
                             <span class="text-gray-600">{{ __('Subtotal') }}</span>
-                            <span class="font-semibold">SAR {{ number_format($subscription['total'] - ($subscription['tax'] ?? 0), 2) }}</span>
+                            <span class="font-semibold"><x-sar /> {{ number_format($subscription['total'] - ($subscription['tax'] ?? 0), 2) }}</span>
                         </div>
                         @if($subscription['discount'] > 0)
                             <div class="flex justify-between">
                                 <span class="text-green-600">{{ __('Discount') }}</span>
-                                <span class="font-semibold text-green-600">- SAR {{ number_format($subscription['discount'], 2) }}</span>
+                                <span class="font-semibold text-green-600">- <x-sar /> {{ number_format($subscription['discount'], 2) }}</span>
                             </div>
                         @endif
                         <div class="flex justify-between text-sm text-gray-400">
                             <span>{{ __('VAT included') }}</span>
-                            <span>SAR {{ number_format($subscription['tax'] ?? 0, 2) }}</span>
+                            <span><x-sar /> {{ number_format($subscription['tax'] ?? 0, 2) }}</span>
                         </div>
                         <div class="border-t border-gray-200 pt-3 flex justify-between">
                             <span class="text-lg font-bold">{{ __('Total') }}</span>
-                            <span class="text-lg font-bold text-green-600">SAR {{ number_format($subscription['total'], 2) }}</span>
+                            <span class="text-lg font-bold text-green-600"><x-sar /> {{ number_format($subscription['total'], 2) }}</span>
                         </div>
                     </div>
                 </div>

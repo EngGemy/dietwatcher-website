@@ -62,7 +62,7 @@
             <span class="acc-stat__label">{{ __('account.wallet_balance') }}</span>
             <span class="acc-stat__value">
                 @if($walletBalance !== null)
-                    {{ number_format($walletBalance, 2) }} <span class="text-sm font-normal text-gray-500">{{ __('SAR') }}</span>
+                    <x-sar :amount="$walletBalance" class="text-sm text-gray-900" />
                 @else
                     <span class="text-gray-400 text-lg">—</span>
                 @endif
@@ -153,7 +153,7 @@
                                 </div>
                                 <div class="text-right">
                                     @if($oTotal !== null)
-                                        <div class="font-semibold text-gray-900">{{ number_format((float)$oTotal, 2) }} <span class="text-xs text-gray-500">{{ __('SAR') }}</span></div>
+                                        <div class="font-semibold text-gray-900"><x-sar :amount="(float)$oTotal" class="text-xs text-gray-900" /></div>
                                     @endif
                                     @if($oStatus)
                                         <span class="acc-chip acc-chip--muted mt-1">{{ $oStatusLabel }}</span>

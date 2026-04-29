@@ -71,7 +71,7 @@
                                         <div class="text-xs text-gray-500 mt-1">{{ __('Qty') }}: {{ $qty }}</div>
                                     </div>
                                     @if($price !== null)
-                                        <div class="font-semibold text-gray-900">{{ number_format((float)$price * $qty, 2) }} <span class="text-xs text-gray-500">{{ __('SAR') }}</span></div>
+                                        <div class="font-semibold text-gray-900"><x-sar :amount="(float)$price * $qty" /></div>
                                     @endif
                                 </li>
                             @endforeach
@@ -94,19 +94,19 @@
                         @endif
                         <div class="border-t border-gray-100 pt-2 mt-2 space-y-1.5">
                             @if($oSubtotal !== null)
-                                <div class="flex justify-between"><span class="text-gray-500">{{ __('account.subtotal') }}</span><span>{{ number_format((float)$oSubtotal, 2) }} {{ __('SAR') }}</span></div>
+                                <div class="flex justify-between"><span class="text-gray-500">{{ __('account.subtotal') }}</span><span><x-sar :amount="(float)$oSubtotal" /></span></div>
                             @endif
                             @if($oDelivery !== null)
-                                <div class="flex justify-between"><span class="text-gray-500">{{ __('account.delivery_fee') }}</span><span>{{ number_format((float)$oDelivery, 2) }} {{ __('SAR') }}</span></div>
+                                <div class="flex justify-between"><span class="text-gray-500">{{ __('account.delivery_fee') }}</span><span><x-sar :amount="(float)$oDelivery" /></span></div>
                             @endif
                             @if($oDiscount !== null && (float)$oDiscount > 0)
-                                <div class="flex justify-between text-emerald-700"><span>{{ __('account.discount') }}</span><span>-{{ number_format((float)$oDiscount, 2) }} {{ __('SAR') }}</span></div>
+                                <div class="flex justify-between text-emerald-700"><span>{{ __('account.discount') }}</span><span dir="ltr">- <x-sar :amount="(float)$oDiscount" /></span></div>
                             @endif
                             @if($oVat !== null)
-                                <div class="flex justify-between text-gray-400 text-xs"><span>{{ __('account.vat') }}</span><span>{{ number_format((float)$oVat, 2) }} {{ __('SAR') }}</span></div>
+                                <div class="flex justify-between text-gray-400 text-xs"><span>{{ __('account.vat') }}</span><span><x-sar :amount="(float)$oVat" /></span></div>
                             @endif
                             @if($oTotal !== null)
-                                <div class="flex justify-between font-bold text-lg pt-2 border-t border-gray-100"><span>{{ __('account.total') }}</span><span>{{ number_format((float)$oTotal, 2) }} {{ __('SAR') }}</span></div>
+                                <div class="flex justify-between font-bold text-lg pt-2 border-t border-gray-100"><span>{{ __('account.total') }}</span><span><x-sar :amount="(float)$oTotal" /></span></div>
                             @endif
                         </div>
                     </div>

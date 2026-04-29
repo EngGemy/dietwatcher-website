@@ -64,7 +64,7 @@
                         </div>
                         <div class="flex items-center gap-2">
                             @if($total !== null)
-                                <span class="font-semibold text-gray-900">{{ number_format((float)$total, 2) }} {{ __('SAR') }}</span>
+                                <span class="font-semibold text-gray-900"><x-sar :amount="(float)$total" /></span>
                             @endif
                             <a href="{{ $id ? route('account.subscriptions.show', ['id' => $id]) : '#' }}"
                                class="acc-btn acc-btn--ghost acc-btn--sm">
