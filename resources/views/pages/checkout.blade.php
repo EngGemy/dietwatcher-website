@@ -634,6 +634,10 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                 </div>
             </div>
 
+            @if(config('services.external_api.use_new_auth_flow', false))
+                @include('partials.checkout-auth-modal')
+            @endif
+
             {{-- ── OTP Verification Modal (teleported to body) ──── --}}
             <template x-teleport="body">
                 <div x-show="otpModalOpen"
@@ -2056,6 +2060,12 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
             // Open OTP modal and send code
             async openOtpModal() {
                 if (!this.phone.trim()) return;
+                if (@json(config('services.external_api.use_new_auth_flow', false))) {
+                    window.dispatchEvent(new CustomEvent('open-checkout-auth', {
+                        detail: { phone: this.phone.trim() },
+                    }));
+                    return;
+                }
                 this.otpMessage = '';
                 this.otpDigits = ['', '', '', ''];
                 this.otpModalOpen = true;
@@ -2405,6 +2415,18 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
 
             // Watch for duration changes to re-validate coupon
             async init() {
+                window.addEventListener('checkout-auth-success', (event) => {
+                    const detail = event.detail || {};
+                    this.phoneVerified = true;
+                    this.savedAddresses = Array.isArray(detail.addresses) ? detail.addresses : [];
+                    this.isContinueUser = !!detail.isContinue;
+                    if (detail.profile && detail.profile.name) {
+                        this.customerName = String(detail.profile.name);
+                    }
+                    this.showNameField = this.isContinueUser || ! (this.customerName || '').trim();
+                    this.$nextTick(() => this.scheduleMoyasarRefresh());
+                });
+
                 if (this.isPlanCheckout) {
                     await this.hydratePlanDurations();
                 } else {

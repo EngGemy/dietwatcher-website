@@ -40,6 +40,7 @@ return [
         'token' => env('EXTERNAL_API_TOKEN'),
         /** When true (default), checkout OTP uses POST login/ordinary/reset + verify and stores API token in session. */
         'checkout_use_external_login' => filter_var(env('CHECKOUT_USE_EXTERNAL_LOGIN', true), FILTER_VALIDATE_BOOLEAN),
+        'use_new_auth_flow' => filter_var(env('CHECKOUT_USE_NEW_AUTH_FLOW', false), FILTER_VALIDATE_BOOLEAN),
     ],
 
     'moyasar' => [

@@ -7,7 +7,9 @@ namespace App\Http\Controllers;
 use App\Services\ApiAuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 class OtpController extends Controller
@@ -60,7 +62,7 @@ class OtpController extends Controller
             'token' => '',
             'profile' => [],
             'addresses' => [],
-            'is_continue' => false,
+            'is_continue' => null,
         ];
 
         if (! $this->hasExternalApi()) {
@@ -97,37 +99,9 @@ class OtpController extends Controller
                 }
             }
 
-            // Fallback: simple-register to create/find user and get token
-            $registerResult = $this->apiAuth->simpleRegister([
-                'name' => 'Customer',
-                'mobile' => $phone,
-                'email' => '',
-                'gender' => 'male',
-            ]);
-
-            $registerData = $registerResult['data'] ?? $registerResult;
-            $token = (string) ($registerData['token'] ?? $registerResult['token'] ?? '');
-
-            if ($token !== '') {
-                $profile = $registerData['profile'] ?? $registerResult['profile'] ?? [];
-                $customer = $registerData['customer'] ?? [];
-
-                // Build profile from customer data if profile is empty
-                if (empty($profile) && ! empty($customer)) {
-                    $profile = [
-                        'id' => $customer['id'] ?? null,
-                        'name' => $customer['name'] ?? '',
-                        'mobile' => $customer['mobile'] ?? $phone,
-                    ];
-                }
-
-                $result['token'] = $token;
-                $result['profile'] = is_array($profile) ? $profile : [];
-                $result['is_continue'] = false; // new registration
-
-                $addresses = $this->apiAuth->getAddresses($token);
-                $result['addresses'] = is_array($addresses) ? $addresses : [];
-            }
+            // IMPORTANT:
+            // Do NOT silently auto-register users here. Registration must be
+            // an explicit frontend step.
         } catch (\Exception $e) {
             Log::warning('OtpController: external API hydration failed', [
                 'phone' => $phone,
@@ -136,6 +110,14 @@ class OtpController extends Controller
         }
 
         return $result;
+    }
+
+    private function markPendingRegistrationMobile(string $mobile): void
+    {
+        session([
+            'pending_register_mobile' => $mobile,
+            'pending_register_expires_at' => now()->addMinutes(10),
+        ]);
     }
 
     /**
@@ -249,8 +231,11 @@ class OtpController extends Controller
 
         if (! $storedPhone || ! $expiresAt) {
             return response()->json([
+                'ok' => false,
                 'success' => false,
+                'error' => 'otp_not_found',
                 'message' => __('otp.not_found'),
+                'errors' => [],
             ]);
         }
 
@@ -258,15 +243,21 @@ class OtpController extends Controller
             session()->forget(['otp_code', 'otp_phone', 'otp_expires_at', 'checkout_otp_external']);
 
             return response()->json([
+                'ok' => false,
                 'success' => false,
+                'error' => 'otp_expired',
                 'message' => __('otp.expired'),
+                'errors' => [],
             ]);
         }
 
         if ($storedPhone !== $validated['phone']) {
             return response()->json([
+                'ok' => false,
                 'success' => false,
+                'error' => 'phone_mismatch',
                 'message' => __('otp.phone_mismatch'),
+                'errors' => [],
             ]);
         }
 
@@ -283,19 +274,40 @@ class OtpController extends Controller
 
             if (! ($remote['_http_ok'] ?? false)) {
                 return response()->json([
+                    'ok' => false,
                     'success' => false,
+                    'error' => 'invalid_otp',
                     'message' => $remote['message'] ?? __('otp.invalid_code'),
+                    'errors' => [],
                 ], 422);
             }
 
             $parsed = $this->parseExternalVerifyBody($remote);
 
+            // New user path: OTP is valid but account creation still required.
+            if ($parsed['is_continue'] === true) {
+                $this->markPendingRegistrationMobile($validated['phone']);
+                session()->forget(['otp_code', 'otp_phone', 'otp_expires_at', 'checkout_otp_external']);
+
+                return response()->json([
+                    'ok' => true,
+                    'success' => true,
+                    'is_continue' => true,
+                    'needs_registration' => true,
+                    'profile' => $parsed['profile'],
+                    'message' => __('otp.verified'),
+                ]);
+            }
+
             if ($parsed['token'] === '') {
                 Log::warning('External OTP verify returned empty token', ['body_keys' => array_keys($remote)]);
 
                 return response()->json([
+                    'ok' => false,
                     'success' => false,
-                    'message' => __('otp.invalid_code'),
+                    'error' => 'external_api_error',
+                    'message' => $remote['message'] ?? __('otp.invalid_code'),
+                    'errors' => [],
                 ], 422);
             }
 
@@ -305,7 +317,14 @@ class OtpController extends Controller
                 'external_api_profile' => $parsed['profile'],
                 'external_login_is_continue' => $parsed['is_continue'],
             ]);
-            session()->forget(['otp_code', 'otp_phone', 'otp_expires_at', 'checkout_otp_external']);
+            session()->forget([
+                'otp_code',
+                'otp_phone',
+                'otp_expires_at',
+                'checkout_otp_external',
+                'pending_register_mobile',
+                'pending_register_expires_at',
+            ]);
 
             $addresses = $this->apiAuth->getAddresses($parsed['token']);
             if (! is_array($addresses)) {
@@ -313,11 +332,13 @@ class OtpController extends Controller
             }
 
             return response()->json([
+                'ok' => true,
                 'success' => true,
                 'message' => __('otp.verified'),
                 'addresses' => $addresses,
                 'profile' => $parsed['profile'],
                 'is_continue' => $parsed['is_continue'],
+                'needs_registration' => false,
             ]);
         }
 
@@ -325,15 +346,21 @@ class OtpController extends Controller
         $storedOtp = session('otp_code');
         if (! $storedOtp) {
             return response()->json([
+                'ok' => false,
                 'success' => false,
+                'error' => 'otp_not_found',
                 'message' => __('otp.not_found'),
+                'errors' => [],
             ]);
         }
 
         if ($storedOtp !== $validated['otp']) {
             return response()->json([
+                'ok' => false,
                 'success' => false,
+                'error' => 'invalid_otp',
                 'message' => __('otp.invalid_code'),
+                'errors' => [],
             ]);
         }
 
@@ -344,26 +371,47 @@ class OtpController extends Controller
         }
 
         $externalData = $this->hydrateFromExternalApi($validated['phone'], $deviceId);
+        $isContinue = filter_var($externalData['is_continue'] ?? null, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
 
-        session([
-            'phone_verified' => $validated['phone'],
-        ]);
-
-        // Store external API data if we got a token
-        if ($externalData['token'] !== '') {
+        // Existing user with token => full authentication session.
+        if (($externalData['token'] ?? '') !== '' && $isContinue !== true) {
             session([
+                'phone_verified' => $validated['phone'],
                 'external_api_token' => $externalData['token'],
                 'external_api_profile' => $externalData['profile'],
-                'external_login_is_continue' => $externalData['is_continue'],
+                'external_login_is_continue' => false,
             ]);
-        } else {
             session()->forget([
-                'external_api_token',
-                'external_api_profile',
-                'external_login_is_continue',
+                'pending_register_mobile',
+                'pending_register_expires_at',
+            ]);
+
+            session()->forget([
+                'otp_code',
+                'otp_phone',
+                'otp_expires_at',
+                'checkout_otp_external',
+            ]);
+
+            return response()->json([
+                'ok' => true,
+                'success' => true,
+                'message' => __('otp.verified'),
+                'addresses' => $externalData['addresses'],
+                'profile' => $externalData['profile'],
+                'is_continue' => false,
+                'needs_registration' => false,
             ]);
         }
 
+        // New/unknown user path => require explicit register step.
+        $this->markPendingRegistrationMobile($validated['phone']);
+        session()->forget([
+            'external_api_token',
+            'external_api_profile',
+            'external_login_is_continue',
+            'phone_verified',
+        ]);
         session()->forget([
             'otp_code',
             'otp_phone',
@@ -372,11 +420,166 @@ class OtpController extends Controller
         ]);
 
         return response()->json([
+            'ok' => true,
             'success' => true,
-            'message' => __('otp.verified'),
-            'addresses' => $externalData['addresses'],
+            'is_continue' => true,
+            'needs_registration' => true,
             'profile' => $externalData['profile'],
-            'is_continue' => $externalData['is_continue'],
+            'message' => __('otp.verified'),
+        ]);
+    }
+
+    /**
+     * Register new checkout user after OTP verify indicated needs_registration=true.
+     */
+    public function register(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email:rfc|max:255',
+            'gender' => 'required|in:male,female',
+            'avatar' => 'nullable|image|max:5120',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'ok' => false,
+                'success' => false,
+                'error' => 'validation_error',
+                'message' => __('validation.required'),
+                'errors' => $validator->errors()->toArray(),
+            ], 422);
+        }
+
+        $pendingMobile = (string) session('pending_register_mobile', '');
+        $pendingExpiresAt = session('pending_register_expires_at');
+
+        if ($pendingMobile === '' || ! $pendingExpiresAt) {
+            return response()->json([
+                'ok' => false,
+                'success' => false,
+                'error' => 'validation_error',
+                'message' => __('otp.not_found'),
+                'errors' => ['mobile' => [__('otp.not_found')]],
+            ], 422);
+        }
+
+        try {
+            $expiresAt = $pendingExpiresAt instanceof Carbon ? $pendingExpiresAt : Carbon::parse((string) $pendingExpiresAt);
+        } catch (\Throwable $e) {
+            $expiresAt = now()->subSecond();
+        }
+
+        if (now()->isAfter($expiresAt)) {
+            session()->forget(['pending_register_mobile', 'pending_register_expires_at']);
+
+            return response()->json([
+                'ok' => false,
+                'success' => false,
+                'error' => 'validation_error',
+                'message' => __('otp.expired'),
+                'errors' => ['mobile' => [__('otp.expired')]],
+            ], 422);
+        }
+
+        $payload = [
+            'name' => (string) $validator->validated()['name'],
+            'email' => (string) $validator->validated()['email'],
+            'gender' => (string) $validator->validated()['gender'],
+            'mobile' => $pendingMobile,
+        ];
+
+        $register = $this->apiAuth->simpleRegister($payload);
+        $registerOk = (bool) ($register['success'] ?? $register['ok'] ?? false);
+
+        if (! $registerOk) {
+            $errors = is_array($register['errors'] ?? null) ? $register['errors'] : [];
+            $message = (string) ($register['message'] ?? __('auth.register_failed'));
+            // Check structured errors first (most reliable)
+            if (isset($errors['email'])) {
+                return response()->json([
+                    'ok' => false,
+                    'success' => false,
+                    'error' => 'email_taken',
+                    'message' => $message,
+                    'errors' => $errors,
+                ], 422);
+            }
+
+            if (isset($errors['mobile']) || isset($errors['phone'])) {
+                return response()->json([
+                    'ok' => false,
+                    'success' => false,
+                    'error' => 'mobile_taken',
+                    'message' => $message,
+                    'errors' => $errors,
+                ], 409);
+            }
+
+            // Fallback: check message text only as last resort
+            $msgLower = Str::lower($message);
+            if (str_contains($msgLower, 'email')) {
+                return response()->json([
+                    'ok' => false,
+                    'success' => false,
+                    'error' => 'email_taken',
+                    'message' => $message,
+                    'errors' => $errors,
+                ], 422);
+            }
+
+            if (str_contains($msgLower, 'mobile') || str_contains($msgLower, 'phone')) {
+                return response()->json([
+                    'ok' => false,
+                    'success' => false,
+                    'error' => 'mobile_taken',
+                    'message' => $message,
+                    'errors' => $errors,
+                ], 409);
+            }
+
+            if (! empty($errors)) {
+                return response()->json([
+                    'ok' => false,
+                    'success' => false,
+                    'error' => 'validation_error',
+                    'message' => $message,
+                    'errors' => $errors,
+                ], 422);
+            }
+
+            return response()->json([
+                'ok' => false,
+                'success' => false,
+                'error' => 'server_error',
+                'message' => $message,
+                'errors' => [],
+            ], 500);
+        }
+
+        // After successful registration, trigger a fresh OTP send for step 3.
+        $remote = $this->apiAuth->sendOtp($pendingMobile);
+        if (! ($remote['_http_ok'] ?? false)) {
+            return response()->json([
+                'ok' => false,
+                'success' => false,
+                'error' => 'server_error',
+                'message' => $remote['message'] ?? __('otp.send_failed'),
+                'errors' => [],
+            ], 500);
+        }
+
+        session([
+            'checkout_otp_external' => true,
+            'otp_phone' => $pendingMobile,
+            'otp_expires_at' => now()->addMinutes(5),
+            'otp_sent_at_'.md5($pendingMobile) => time(),
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'success' => true,
+            'message' => $remote['message'] ?? __('otp.code_sent'),
         ]);
     }
 }
