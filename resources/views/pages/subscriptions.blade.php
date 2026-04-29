@@ -94,7 +94,7 @@
                                 </div>
 
                                 <div class="text-end flex-shrink-0">
-                                    <p class="text-lg font-bold text-gray-900">SAR {{ number_format($sub['total'], 2) }}</p>
+                                    <p class="text-lg font-bold text-gray-900"><x-sar /> {{ number_format($sub['total'], 2) }}</p>
                                     <p class="text-xs text-gray-500">{{ __('Incl. VAT') }}</p>
                                 </div>
 

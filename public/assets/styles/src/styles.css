@@ -1,6 +1,32 @@
 @import "tailwindcss";
 @import "./fonts.css";
 
+/* New Saudi Riyal Symbol — SAMA official, Feb 2025 */
+@font-face {
+  font-family: "SaudiRiyal";
+  src:
+    url("https://cdn.jsdelivr.net/npm/@emran-alhaddad/saudi-riyal-font/fonts/regular/saudi_riyal.woff2") format("woff2"),
+    url("https://cdn.jsdelivr.net/npm/@emran-alhaddad/saudi-riyal-font/fonts/regular/saudi_riyal.woff") format("woff");
+  font-display: swap;
+  unicode-range: U+20C1, U+E900;
+}
+
+@font-face {
+  font-family: "SaudiRiyal";
+  src:
+    url("https://cdn.jsdelivr.net/npm/@emran-alhaddad/saudi-riyal-font/fonts/bold/saudi_riyal.woff2") format("woff2"),
+    url("https://cdn.jsdelivr.net/npm/@emran-alhaddad/saudi-riyal-font/fonts/bold/saudi_riyal.woff") format("woff");
+  font-weight: bold;
+  font-display: swap;
+  unicode-range: U+20C1, U+E900;
+}
+
+.sar-symbol {
+  font-family: "SaudiRiyal", "Almarai", sans-serif;
+  display: inline-block;
+  vertical-align: -0.05em;
+}
+
 /* Preline UI */
 @source "../../../../node_modules/preline/dist/*.js";
 @import "../../../../node_modules/preline/variants.css";

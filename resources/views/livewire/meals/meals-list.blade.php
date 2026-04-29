@@ -171,11 +171,12 @@
     @forelse($meals as $meal)
         @php
             $mealImg    = $meal['image_url'] ?? '';
-            $mealImgUrl = str_starts_with($mealImg, 'http') ? $mealImg : ($mealImg ? asset($mealImg) : asset('assets/images/meal-' . ($loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3) . '.png'));
+            $mealImgUrl = $mealImg !== '' ? $mealImg : asset('assets/images/meal-' . ($loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3) . '.png');
             $fallback   = asset('assets/images/meal-' . ($loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3) . '.png');
             $effectivePrice = ($meal['offer_price'] ?? 0) > 0 && $meal['offer_price'] < $meal['price'] ? $meal['offer_price'] : $meal['price'];
             $hasOffer   = ($meal['offer_price'] ?? 0) > 0 && $meal['offer_price'] < $meal['price'];
             $category   = $meal['categories'][0] ?? null;
+            $categoryName = $category['name'] ?? ($meal['category_name'] ?? '');
             $cartQty    = $cartItems['meal_' . $meal['id']]['quantity'] ?? 0;
             $discount   = $hasOffer ? round((1 - $meal['offer_price'] / $meal['price']) * 100) : 0;
             $detailUrl = route('store.show', $meal['id']);
@@ -186,12 +187,12 @@
                 <img src="{{ $mealImgUrl }}" alt="{{ $meal['name'] }}" class="mcard__img"
                     loading="lazy" onerror="this.src='{{ $fallback }}'"/>
 
-                @if($category)
+                @if($categoryName !== '')
                     <span class="mcard__badge">
                         @if(!empty($category['icon']))
                             <img src="{{ $category['icon'] }}" alt="" class="mcard__badge-icon"/>
                         @endif
-                        {{ $category['name'] }}
+                        {{ $categoryName }}
                     </span>
                 @endif
 

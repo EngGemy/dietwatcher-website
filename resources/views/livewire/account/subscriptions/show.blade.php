@@ -77,7 +77,7 @@
         <div class="acc-stat">
             <span class="acc-stat__label">{{ __('account.total') }}</span>
             <span class="acc-stat__value" style="font-size:1.1rem;">
-                @if($total !== null) {{ number_format((float)$total, 2) }} <span class="text-xs text-gray-500">{{ __('SAR') }}</span> @else — @endif
+                @if($total !== null) <x-sar :amount="(float)$total" class="text-xs text-gray-900" /> @else — @endif
             </span>
         </div>
     </section>

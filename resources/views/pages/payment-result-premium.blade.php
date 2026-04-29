@@ -42,7 +42,7 @@
                         <h3 class="text-xl font-bold text-gray-900 md:text-2xl">{{ $planTitle }}</h3>
                         <p class="text-lg md:text-xl">
                             {{ __('payment.total_paid') }}:
-                            <span class="text-green font-semibold">SAR {{ number_format($payment->amount_in_sar, 2) }}</span>
+                            <span class="text-green font-semibold"><x-sar /> {{ number_format($payment->amount_in_sar, 2) }}</span>
                         </p>
                     </div>
 

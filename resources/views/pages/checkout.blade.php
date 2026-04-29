@@ -71,36 +71,38 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
 
                         <div class="space-y-4 md:space-y-6">
                             {{-- Start Date --}}
-                            <div>
-                                <p class="mb-3 text-lg md:text-xl">{{ __('Start Date') }}</p>
-                                <div class="date-picker-wrap" id="date_picker_wrap">
-                                    <input
-                                        type="text"
-                                        name="start_date"
-                                        id="start_date_input"
-                                        readonly
-                                        placeholder="{{ __('Select day') }}"
-                                        class="date-picker-input @error('start_date') date-picker-input--error @enderror"
-                                        value="{{ old('start_date', now()->addHours(48)->format('Y-m-d')) }}"
-                                    />
-                                    <div class="date-picker-icon">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v9.75" />
-                                        </svg>
+                            @if($hasPlanItems)
+                                <div>
+                                    <p class="mb-3 text-lg md:text-xl">{{ __('Start Date') }}</p>
+                                    <div class="date-picker-wrap" id="date_picker_wrap">
+                                        <input
+                                            type="text"
+                                            name="start_date"
+                                            id="start_date_input"
+                                            readonly
+                                            placeholder="{{ __('Select day') }}"
+                                            class="date-picker-input @error('start_date') date-picker-input--error @enderror"
+                                            value="{{ old('start_date', now()->addHours(48)->format('Y-m-d')) }}"
+                                        />
+                                        <div class="date-picker-icon">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v9.75" />
+                                            </svg>
+                                        </div>
+                                        <div class="date-picker-label" id="date_display">
+                                            @php
+                                                $defaultDate = old('start_date', now()->addHours(48)->format('Y-m-d'));
+                                                $dateObj = \Carbon\Carbon::parse($defaultDate);
+                                            @endphp
+                                            <span class="date-picker-label__day">{{ $dateObj->format('d') }}</span>
+                                            <span class="date-picker-label__month">{{ $dateObj->translatedFormat('M Y') }}</span>
+                                        </div>
                                     </div>
-                                    <div class="date-picker-label" id="date_display">
-                                        @php
-                                            $defaultDate = old('start_date', now()->addHours(48)->format('Y-m-d'));
-                                            $dateObj = \Carbon\Carbon::parse($defaultDate);
-                                        @endphp
-                                        <span class="date-picker-label__day">{{ $dateObj->format('d') }}</span>
-                                        <span class="date-picker-label__month">{{ $dateObj->translatedFormat('M Y') }}</span>
-                                    </div>
+                                    @error('start_date')
+                                        <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                                    @enderror
                                 </div>
-                                @error('start_date')
-                                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                @enderror
-                            </div>
+                            @endif
 
                             {{-- Duration: subscription = selectable cards (server + client fetch + cart fallback); meals = weekly/monthly radios --}}
                             @if($hasPlanItems)
@@ -146,47 +148,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                                     @enderror
                                 </div>
                             @else
-                                <div>
-                                    <p class="mb-3 text-lg md:text-xl">{{ __('Duration') }}</p>
-                                    <div class="choice-group">
-                                        <div class="choice-group__item">
-                                            <input type="radio" name="duration" id="weekly" class="choice-group__input"
-                                                   value="weekly" {{ old('duration') === 'weekly' ? 'checked' : '' }}
-                                                   x-model="duration">
-                                            <label for="weekly" class="choice-group__label">
-                                                <div class="choice-group__content">
-                                                    <span class="choice-group__title">{{ __('Weekly') }}</span>
-                                                </div>
-                                                <span class="choice-group__icon"></span>
-                                            </label>
-                                        </div>
-                                        <div class="choice-group__item">
-                                            <input type="radio" name="duration" id="monthly" class="choice-group__input"
-                                                   value="monthly" {{ old('duration', 'monthly') === 'monthly' ? 'checked' : '' }}
-                                                   x-model="duration">
-                                            <label for="monthly" class="choice-group__label">
-                                                <div class="choice-group__content">
-                                                    <span class="choice-group__title">{{ __('Monthly') }}</span>
-                                                </div>
-                                                <span class="choice-group__icon"></span>
-                                            </label>
-                                        </div>
-                                        <div class="choice-group__item">
-                                            <input type="radio" name="duration" id="3months" class="choice-group__input"
-                                                   value="3months" {{ old('duration') === '3months' ? 'checked' : '' }}
-                                                   x-model="duration">
-                                            <label for="3months" class="choice-group__label">
-                                                <div class="choice-group__content">
-                                                    <span class="choice-group__title">{{ __('3 Months') }}</span>
-                                                </div>
-                                                <span class="choice-group__icon"></span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                    @error('duration')
-                                        <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                    @enderror
-                                </div>
+                                <input type="hidden" name="duration" value="once" />
                             @endif
 
                             {{-- Coupon Code --}}
@@ -394,21 +356,37 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                         </div>
 
                         {{-- Home: city + inline map + address — no x-transition (can leave map invisible); x-show keeps block in DOM --}}
-                        <div x-show="deliveryType === 'home' && (savedAddresses.length === 0 || addingNewAddress)" class="space-y-4">
+                        @php
+                            $riyadhZone = collect($zones)->first(function ($zone) {
+                                $name = $zone['name'] ?? '';
+                                if (is_array($name)) {
+                                    $name = ($name[app()->getLocale()] ?? $name['ar'] ?? $name['en'] ?? '');
+                                }
+                                $n = mb_strtolower((string) $name);
+                                return str_contains($n, 'riyadh') || str_contains($n, 'الرياض');
+                            });
+                        @endphp
+                        <div x-show="deliveryType === 'home' && (savedAddresses.length === 0 || addingNewAddress)" class="space-y-4" x-init="if (!selectedZoneId) selectedZoneId = '{{ (string) (($riyadhZone['id'] ?? '') ?: '') }}'">
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('City') }}</label>
                                     <select name="zone_id" class="form-control @error('zone_id') border-red-500 @enderror"
                                             x-model="selectedZoneId" @change="onZoneChange()"
-                                            :disabled="deliveryType === 'pickup'"
+                                            :disabled="deliveryType === 'pickup' || @js((bool) $riyadhZone)"
                                             :required="deliveryType === 'home'">
-                                        <option value="">{{ __('Select city') }}</option>
-                                        @foreach($zones as $zone)
-                                            @if($zone['is_active'] ?? true)
-                                            <option value="{{ $zone['id'] }}" {{ old('zone_id') == $zone['id'] ? 'selected' : '' }}>
-                                                {{ is_array($zone['name']) ? ($zone['name'][app()->getLocale()] ?? $zone['name']['en'] ?? '') : $zone['name'] }}
+                                        @if($riyadhZone)
+                                            <option value="{{ $riyadhZone['id'] }}">
+                                                {{ is_array($riyadhZone['name']) ? ($riyadhZone['name'][app()->getLocale()] ?? $riyadhZone['name']['en'] ?? '') : $riyadhZone['name'] }}
                                             </option>
-                                            @endif
-                                        @endforeach
+                                        @else
+                                            <option value="">{{ __('Select city') }}</option>
+                                            @foreach($zones as $zone)
+                                                @if($zone['is_active'] ?? true)
+                                                <option value="{{ $zone['id'] }}" {{ old('zone_id') == $zone['id'] ? 'selected' : '' }}>
+                                                    {{ is_array($zone['name']) ? ($zone['name'][app()->getLocale()] ?? $zone['name']['en'] ?? '') : $zone['name'] }}
+                                                </option>
+                                                @endif
+                                            @endforeach
+                                        @endif
                                     </select>
                                     @error('zone_id')
                                         <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
@@ -481,6 +459,16 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                                     </div>
 
                                     <input type="hidden" name="building" :value="buildingNotes" :disabled="deliveryType === 'pickup'" />
+
+                                    <div x-show="deliveryType === 'home'" x-cloak class="pt-1">
+                                        <button
+                                            type="button"
+                                            class="btn btn--primary btn--md w-full"
+                                            @click="window.dispatchEvent(new CustomEvent('checkout-confirm-inline-address'))"
+                                        >
+                                            {{ __('Confirm Address') }}
+                                        </button>
+                                    </div>
 
                                     <div x-show="addingNewAddress" x-cloak class="flex items-center gap-3 pt-2">
                                         <button type="button"
@@ -579,9 +567,12 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                                         @endif
                                     </div>
                                     @if($hasPlanItems)
-                                        <span class="font-bold text-gray-900 whitespace-nowrap" x-text="'SAR ' + subtotalInclVat().toFixed(2)"></span>
+                                        <span class="font-bold text-gray-900 whitespace-nowrap inline-flex items-baseline gap-1" dir="ltr">
+                                            <span x-text="subtotalInclVat().toFixed(2)"></span>
+                                            <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                        </span>
                                     @else
-                                        <span class="font-bold text-gray-900 whitespace-nowrap">SAR {{ number_format($item['price'] * $item['quantity'], 2) }}</span>
+                                        <span class="font-bold text-gray-900 whitespace-nowrap"><x-sar :amount="$item['price'] * $item['quantity']" /></span>
                                     @endif
                                 </div>
                             @endforeach
@@ -594,7 +585,10 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                                     <div class="space-y-2">
                                         <div class="flex items-center justify-between">
                                             <span class="text-gray-600">{{ $hasPlanItems ? __('Plan Price') : __('Items Total') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></span>
-                                            <span class="font-bold text-gray-900">SAR <span x-text="subtotalInclVat().toFixed(2)"></span></span>
+                                            <span class="font-bold text-gray-900 inline-flex items-baseline gap-1" dir="ltr">
+                                                <span x-text="subtotalInclVat().toFixed(2)"></span>
+                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                            </span>
                                         </div>
                                         <div class="flex items-center justify-between text-sm" x-show="isPlanCheckout && planSelectedAvgPerDayAmount()" x-cloak>
                                             <span class="text-gray-600">{{ __('Avg. per day') }} <span class="text-xs text-gray-400">({{ __('Incl. VAT') }})</span></span>
@@ -602,15 +596,24 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                                         </div>
                                         <div class="flex items-center justify-between">
                                             <span class="text-gray-600">{{ __('Delivery fees') }}</span>
-                                            <span class="font-bold text-gray-900">SAR <span x-text="deliveryFee().toFixed(2)"></span></span>
+                                            <span class="font-bold text-gray-900 inline-flex items-baseline gap-1" dir="ltr">
+                                                <span x-text="deliveryFee().toFixed(2)"></span>
+                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                            </span>
                                         </div>
                                         <div class="flex items-center justify-between" x-show="discount > 0" x-cloak>
                                             <span class="text-green-600">{{ __('Discount') }}</span>
-                                            <span class="font-bold text-green-600">- SAR <span x-text="discount.toFixed(2)"></span></span>
+                                            <span class="font-bold text-green-600 inline-flex items-baseline gap-1" dir="ltr">
+                                                <span>-<span x-text="discount.toFixed(2)"></span></span>
+                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                            </span>
                                         </div>
                                         <div class="flex items-center justify-between text-sm text-gray-400">
                                             <span>{{ __('VAT included') }} ({{ (int)(\App\Models\Settings\Setting::getValue('vat_rate', 15)) }}%)</span>
-                                            <span>SAR <span x-text="vatAmount().toFixed(2)"></span></span>
+                                            <span class="inline-flex items-baseline gap-1" dir="ltr">
+                                                <span x-text="vatAmount().toFixed(2)"></span>
+                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -619,14 +622,21 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                             {{-- Total --}}
                             <div class="flex items-center justify-between">
                                 <span class="text-lg font-semibold md:text-xl">{{ __('Total') }} <span class="text-xs font-normal text-gray-500">({{ __('Incl. VAT') }})</span></span>
-                                <span class="text-lg font-semibold text-green-600 md:text-xl">SAR <span x-text="total().toFixed(2)"></span></span>
+                                <span class="text-lg font-semibold text-green-600 md:text-xl inline-flex items-baseline gap-1" dir="ltr">
+                                    <span x-text="total().toFixed(2)"></span>
+                                    <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                </span>
                             </div>
 
                             {{-- Proceed to Payment Button --}}
                             <div class="pt-2">
                                 <button type="submit" class="btn btn--primary btn--md w-full"
                                         :disabled="!phoneVerified || !canProceedToPayment()">
-                                    {{ __('payment.proceed') }} — SAR <span x-text="total().toFixed(2)"></span>
+                                    {{ __('payment.proceed') }} —
+                                    <span class="inline-flex items-baseline gap-1" dir="ltr">
+                                        <span x-text="total().toFixed(2)"></span>
+                                        <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                    </span>
                                 </button>
                             </div>
                         </div>
@@ -1394,11 +1404,11 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                 if (total > 0) {
                     const n = Math.round(total * 100) / 100;
 
-                    return 'SAR ' + (Number.isInteger(n) ? String(n) : n.toFixed(2));
+                    return '\u20C1 ' + (Number.isInteger(n) ? String(n) : n.toFixed(2));
                 }
                 const ppd = parseFloat(d.price_per_day) || 0;
                 if (ppd > 0) {
-                    return 'SAR ' + ppd.toFixed(2) + ' / {{ __('day') }}';
+                    return '\u20C1 ' + ppd.toFixed(2) + ' / {{ __('day') }}';
                 }
 
                 return '';
@@ -2527,22 +2537,24 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
             }
         }
 
-        flatpickr('#start_date_input', {
-            dateFormat: 'Y-m-d',
-            minDate: minDateStr,
-            defaultDate: (startDateInput && startDateInput.value) ? startDateInput.value : minDateStr,
-            disableMobile: true,
-            @if($locale === 'ar')
-            locale: 'ar',
-            @endif
-            onChange: function(selectedDates, dateStr) {
-                updateDisplay(dateStr);
-                const input = document.getElementById('start_date_input');
-                if (input) {
-                    input.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            },
-        });
+        if (startDateInput) {
+            flatpickr('#start_date_input', {
+                dateFormat: 'Y-m-d',
+                minDate: minDateStr,
+                defaultDate: startDateInput.value || minDateStr,
+                disableMobile: true,
+                @if($locale === 'ar')
+                locale: 'ar',
+                @endif
+                onChange: function(selectedDates, dateStr) {
+                    updateDisplay(dateStr);
+                    const input = document.getElementById('start_date_input');
+                    if (input) {
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                },
+            });
+        }
 
         // Click anywhere on the wrapper to open the picker
         document.getElementById('date_picker_wrap')?.addEventListener('click', function() {

@@ -356,8 +356,8 @@ class CheckoutController extends Controller
         $hasPlanItems = collect($cart)->contains(fn ($item) => ! empty($item['options']['duration_days']));
 
         $validated = Validator::make($request->all(), [
-            'start_date' => 'required|string|max:50',
-            'duration' => 'required|in:once,weekly,monthly,3months',
+            'start_date' => $hasPlanItems ? 'required|string|max:50' : 'nullable|string|max:50',
+            'duration' => $hasPlanItems ? 'required|in:once,weekly,monthly,3months' : 'nullable|in:once,weekly,monthly,3months',
             'delivery_type' => 'required|in:home,pickup',
             'coupon' => 'nullable|string|max:50',
             'promocode_name' => 'nullable|string|max:50',
@@ -411,9 +411,7 @@ class CheckoutController extends Controller
                 ->withInput();
         }
 
-        if ($hasPlanItems) {
-            $validated['duration'] = 'once';
-        }
+        $validated['duration'] = 'once';
 
         // Sync subscription plan line from selected API duration (price + options)
         if ($hasPlanItems) {
@@ -553,7 +551,7 @@ class CheckoutController extends Controller
             'customer_email' => null,
             'customer_phone' => $validated['phone'],
             'cart_items' => $cart,
-            'start_date' => $validated['start_date'],
+            'start_date' => $validated['start_date'] ?? now()->format('Y-m-d'),
             'duration' => $validated['duration'],
             'delivery_type' => $validated['delivery_type'],
             'city' => $zoneName ?? ($validated['zone_id'] ?? null),
@@ -811,8 +809,8 @@ class CheckoutController extends Controller
 
         $rules = [
             'phone' => 'required|string|max:20',
-            'start_date' => 'required|string|max:50',
-            'duration' => 'required|in:once,weekly,monthly,3months',
+            'start_date' => $hasPlanItems ? 'required|string|max:50' : 'nullable|string|max:50',
+            'duration' => $hasPlanItems ? 'required|in:once,weekly,monthly,3months' : 'nullable|in:once,weekly,monthly,3months',
             'delivery_type' => 'required|in:home,pickup',
             'coupon' => 'nullable|string|max:50',
             'promocode_name' => 'nullable|string|max:50',
@@ -906,9 +904,7 @@ class CheckoutController extends Controller
             }
         }
 
-        if ($hasPlanItems) {
-            $validated['duration'] = 'once';
-        }
+        $validated['duration'] = 'once';
 
         if ($hasPlanItems) {
             $firstKey = null;
@@ -1039,7 +1035,7 @@ class CheckoutController extends Controller
             'customer_email' => null,
             'customer_phone' => $phone,
             'cart_items' => $cart,
-            'start_date' => $validated['start_date'],
+            'start_date' => $validated['start_date'] ?? now()->format('Y-m-d'),
             'duration' => $validated['duration'],
             'delivery_type' => $validated['delivery_type'],
             'city' => $zoneName ?? ($validated['zone_id'] ?? null),

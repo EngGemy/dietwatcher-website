@@ -138,7 +138,7 @@
         </div>
 
         <div class="gmp-sheet @if($isInline) gmp-sheet--static-inline @endif" x-show="variant !== 'inline' || !inlineConfirmed">
-            <div class="gmp-sheet__field">
+            <div class="gmp-sheet__field" x-show="variant !== 'inline'">
                 <label class="gmp-sheet__label">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:15px;height:15px"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/></svg>
                     {{ __('Address Details') }}
@@ -152,13 +152,13 @@
                 ></textarea>
             </div>
 
-            <div class="gmp-sheet__row3">
+            <div class="gmp-sheet__row3" x-show="variant !== 'inline'">
                 <input type="text" x-model="form.building_num" class="gmp-sheet__input gmp-sheet__input--sm" placeholder="{{ __('Building') }}" inputmode="numeric" />
                 <input type="text" x-model="form.floor" class="gmp-sheet__input gmp-sheet__input--sm" placeholder="{{ __('Floor') }}" inputmode="numeric" />
                 <input type="text" x-model="form.door" class="gmp-sheet__input gmp-sheet__input--sm" placeholder="{{ __('Door') }}" inputmode="numeric" />
             </div>
 
-            <div class="gmp-sheet__types">
+            <div class="gmp-sheet__types" x-show="variant !== 'inline'">
                 <button type="button" class="gmp-type-chip" :class="{ 'gmp-type-chip--active': form.type === 'home' }" @click="form.type = 'home'">
                     🏠 {{ __('Home') }}
                 </button>
@@ -170,7 +170,7 @@
                 </button>
             </div>
 
-            <div class="gmp-sheet__field">
+            <div class="gmp-sheet__field" x-show="variant !== 'inline'">
                 <label class="gmp-sheet__label">{{ __('Delivery instructions') }}</label>
                 <div class="gmp-sheet__types gmp-sheet__types--split">
                     <button type="button" class="gmp-type-chip gmp-type-chip--wide" :class="{ 'gmp-type-chip--active': form.pickup_type === 'hand_it_to_me' }" @click="form.pickup_type = 'hand_it_to_me'">
@@ -182,7 +182,7 @@
                 </div>
             </div>
 
-            <div class="gmp-sheet__field" x-show="form.type === 'other'" x-transition>
+            <div class="gmp-sheet__field" x-show="variant !== 'inline' && form.type === 'other'" x-transition>
                 <input type="text" x-model="form.title" class="gmp-sheet__input"
                     placeholder="{{ __('e.g. Gym, Clinic, Parents…') }}" />
             </div>
@@ -205,6 +205,7 @@
                 type="button"
                 @click="confirmLocation()"
                 class="btn btn--primary btn--full gmp-sheet__confirm"
+                x-show="variant !== 'inline'"
                 :disabled="!form.latitude || !form.description || !form.district_id"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px">
@@ -526,6 +527,12 @@ function googleMapPicker(opts) {
                     this.applyExternalAddressDetail(ev.detail || {});
                 };
                 window.addEventListener('gmp-external-address-apply', this._boundApplyExternalAddress);
+                this._boundInlineConfirmRequest = () => {
+                    if (this.variant === 'inline') {
+                        this.confirmLocation();
+                    }
+                };
+                window.addEventListener('checkout-confirm-inline-address', this._boundInlineConfirmRequest);
                 if (this.mapsKeyPresent) {
                     this.$nextTick(() => this.initMap());
                 }
@@ -552,6 +559,9 @@ function googleMapPicker(opts) {
         destroy() {
             if (this._boundApplyExternalAddress) {
                 window.removeEventListener('gmp-external-address-apply', this._boundApplyExternalAddress);
+            }
+            if (this._boundInlineConfirmRequest) {
+                window.removeEventListener('checkout-confirm-inline-address', this._boundInlineConfirmRequest);
             }
             if (this._onGmpAuthFail) {
                 window.removeEventListener('gmp-maps-auth-failed', this._onGmpAuthFail);

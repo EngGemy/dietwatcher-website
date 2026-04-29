@@ -29,11 +29,11 @@
     </div>
 
     <div class="box">
-        <div class="row"><span>Subtotal</span><strong>SAR {{ number_format($payment->subtotal / 100, 2) }}</strong></div>
-        <div class="row"><span>Delivery fees</span><strong>SAR {{ number_format($payment->delivery_fee / 100, 2) }}</strong></div>
-        <div class="row"><span>Discount</span><strong>- SAR {{ number_format($payment->discount_amount / 100, 2) }}</strong></div>
-        <div class="row"><span>VAT</span><strong>SAR {{ number_format($payment->vat_amount / 100, 2) }}</strong></div>
-        <div class="row grand"><span>Total Paid</span><span>SAR {{ number_format($payment->amount_in_sar, 2) }}</span></div>
+        <div class="row"><span>Subtotal</span><strong>&#x20C1; {{ number_format($payment->subtotal / 100, 2) }}</strong></div>
+        <div class="row"><span>Delivery fees</span><strong>&#x20C1; {{ number_format($payment->delivery_fee / 100, 2) }}</strong></div>
+        <div class="row"><span>Discount</span><strong>- &#x20C1; {{ number_format($payment->discount_amount / 100, 2) }}</strong></div>
+        <div class="row"><span>VAT</span><strong>&#x20C1; {{ number_format($payment->vat_amount / 100, 2) }}</strong></div>
+        <div class="row grand"><span>Total Paid</span><span>&#x20C1; {{ number_format($payment->amount_in_sar, 2) }}</span></div>
     </div>
 </body>
 </html>

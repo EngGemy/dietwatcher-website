@@ -67,7 +67,7 @@
                                     @else — @endif
                                 </td>
                                 <td class="text-end font-semibold">
-                                    @if($oTotal !== null) {{ number_format((float) $oTotal, 2) }} <span class="text-xs text-gray-500">{{ __('SAR') }}</span> @else — @endif
+                                    @if($oTotal !== null) <x-sar :amount="(float) $oTotal" class="text-xs text-gray-900" /> @else — @endif
                                 </td>
                                 <td class="text-end">
                                     <a href="{{ $oid ? route('account.orders.show', ['id' => $oid]) : '#' }}" class="acc-btn acc-btn--ghost acc-btn--sm">

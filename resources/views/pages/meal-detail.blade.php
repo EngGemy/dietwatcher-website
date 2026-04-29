@@ -21,7 +21,7 @@
         ? round((1 - $meal['offer_price'] / $meal['price']) * 100)
         : 0;
     $category = $meal['categories'][0] ?? null;
-    $categoryName = $category['name'] ?? '—';
+    $categoryName = $category['name'] ?? ($meal['category_name'] ?? $meal['group_name'] ?? '—');
     $tagLabel = $meal['tag_name'] ?? ($meal['tags'][0]['name'] ?? '—');
     $p = $meal['protein'] ?? null;
     $c = $meal['carbs'] ?? null;
@@ -100,10 +100,10 @@
 
                     <div class="flex flex-wrap items-baseline gap-3">
                         <p class="text-green text-2xl font-semibold md:text-3xl">
-                            {{ __('SAR') }} {{ number_format($effectivePrice, 2) }}
+                            <x-sar :amount="$effectivePrice" />
                         </p>
                         @if($hasOffer)
-                            <span class="text-lg text-black/40 line-through">{{ __('SAR') }} {{ number_format($meal['price'], 2) }}</span>
+                            <span class="text-lg text-black/40 line-through"><x-sar :amount="$meal['price']" /></span>
                             <span class="rounded bg-[#ff707a] px-2 py-0.5 text-xs font-bold text-white">-{{ $discount }}%</span>
                         @endif
                     </div>
@@ -200,7 +200,7 @@
                     <div class="grid gap-3.5 md:grid-cols-2">
                         <div class="flex items-center justify-between bg-white px-5 py-3.5">
                             <p class="text-lg">{{ __('market.product_code') }}</p>
-                            <p class="text-lg font-bold">{{ $meal['id'] }}</p>
+                            <p class="text-lg font-bold">{{ $meal['code'] ?? $meal['id'] }}</p>
                         </div>
                         <div class="flex items-center justify-between bg-white px-5 py-3.5">
                             <p class="text-lg">{{ __('market.category_label') }}</p>
@@ -213,9 +213,15 @@
                         <div class="flex items-center justify-between bg-white px-5 py-3.5 md:col-span-2">
                             <p class="text-lg">{{ __('market.sharing') }}</p>
                             <div class="flex items-center gap-2">
-                                <a href="https://www.facebook.com/sharer/sharer.php?u={{ $shareUrl }}" target="_blank" rel="noopener noreferrer" class="social-link text-[#1877f2]" aria-label="Facebook">FB</a>
-                                <a href="https://twitter.com/intent/tweet?url={{ $shareUrl }}" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="X">X</a>
-                                <a href="https://www.linkedin.com/sharing/share-offsite/?url={{ $shareUrl }}" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="LinkedIn">in</a>
+                                <a href="https://www.facebook.com/sharer/sharer.php?u={{ $shareUrl }}" target="_blank" rel="noopener noreferrer" class="social-link social-link--fb" aria-label="Facebook">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 9H16V6h-2.5C10.9 6 9 7.9 9 10.5V12H7v3h2v6h3v-6h2.2l.8-3H12v-1.5c0-.8.7-1.5 1.5-1.5Z"/></svg>
+                                </a>
+                                <a href="https://twitter.com/intent/tweet?url={{ $shareUrl }}" target="_blank" rel="noopener noreferrer" class="social-link social-link--x" aria-label="X">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h4.4l4.2 6 5-6H21l-7.5 8.8L21.8 21h-4.4l-4.8-6.8L7.1 21H3l7.9-9.2L3 3Z"/></svg>
+                                </a>
+                                <a href="https://www.linkedin.com/sharing/share-offsite/?url={{ $shareUrl }}" target="_blank" rel="noopener noreferrer" class="social-link social-link--in" aria-label="LinkedIn">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 8.8A1.8 1.8 0 1 0 6.5 5a1.8 1.8 0 0 0 0 3.8ZM5 10h3v9H5v-9Zm5 0h2.9v1.3h.1c.4-.8 1.4-1.6 3-1.6 3.2 0 3.8 2.1 3.8 4.8V19h-3v-3.9c0-.9 0-2.2-1.3-2.2s-1.5 1-1.5 2.1V19h-3v-9Z"/></svg>
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -308,7 +314,7 @@
                                         <span class="meal-card__category">{{ $rel['tag_name'] }}</span>
                                     @endif
                                     <div class="meal-card__price-wrap">
-                                        <span class="meal-card__price">{{ __('SAR') }} {{ number_format((float) $rPrice, 0) }}</span>
+                                        <span class="meal-card__price"><x-sar :amount="(float) $rPrice" :decimals="0" /></span>
                                     </div>
                                 </div>
                                 <button type="button" class="meal-card__btn"
@@ -331,6 +337,22 @@
     .bg-green { background-color: #3fb536; }
     .bg-yellow { background-color: #eab308; }
     .bg-red { background-color: #ef4444; }
-    .social-link { font-size: 0.75rem; font-weight: 700; text-decoration: underline; }
+    .social-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        border: 1px solid #d1d5db;
+        color: #374151;
+        background: #fff;
+        transition: all .2s ease;
+    }
+    .social-link svg { width: 14px; height: 14px; fill: currentColor; }
+    .social-link:hover { border-color: #93c5fd; color: #0b72d9; background: #eff6ff; }
+    .social-link--fb { color: #1877f2; }
+    .social-link--x { color: #111827; }
+    .social-link--in { color: #0a66c2; }
 </style>
 @endpush

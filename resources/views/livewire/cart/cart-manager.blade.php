@@ -279,7 +279,7 @@
                                     </div>
                                 @endif
                                 <div class="cart-dd__bottom">
-                                    <span class="cart-dd__price">{{ __('SAR') }} {{ number_format($item['price'], 0) }}</span>
+                                    <span class="cart-dd__price"><x-sar :amount="$item['price']" :decimals="0" /></span>
                                     <div class="cart-dd__qty">
                                         <button wire:click="updateQuantity('{{ $key }}', {{ $item['quantity'] - 1 }})" class="cart-dd__qty-btn">-</button>
                                         <span class="cart-dd__qty-val">{{ $item['quantity'] }}</span>
@@ -294,7 +294,7 @@
                 <div class="cart-dd__footer">
                     <div class="cart-dd__total">
                         <span>{{ __('Total') }}:</span>
-                        <span class="cart-dd__total-val">{{ __('SAR') }} {{ number_format($this->total, 0) }}</span>
+                        <span class="cart-dd__total-val"><x-sar :amount="$this->total" :decimals="0" /></span>
                     </div>
                     <a href="{{ route('checkout.index') }}" class="cart-dd__checkout">
                         {{ __('Checkout') }}

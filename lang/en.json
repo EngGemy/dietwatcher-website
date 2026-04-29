@@ -548,7 +548,9 @@
     "Your Information": "Your Information",
     "Payment": "Payment",
     "Confirm & Pay": "Confirm & Pay",
-    "SAR": "SAR",
+    "SAR": "\u20C1",
+    "Saudi Riyal": "Saudi Riyal",
+    "currency.symbol_label": "Saudi Riyal",
     "Remove": "Remove",
     "Select Options": "Select Options",
     "Select day": "Select day",
@@ -974,5 +976,6 @@
     "checkout.auth.errors.serverError": "Server error. Please try later.",
     "checkout.auth.success.welcome": "Welcome, :name",
     "checkout.auth.changeNumber": "Change number",
-    "checkout.auth.close": "Close"
+    "checkout.auth.close": "Close",
+    "Drag": "Drag"
 }
