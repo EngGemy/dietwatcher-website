@@ -187,17 +187,172 @@
             {{-- Cart Component --}}
             <livewire:cart.cart-manager />
 
-            {{-- My Account quick link (visible once logged in via OTP) --}}
-            @if(session('external_api_token') && session('phone_verified'))
-                <a href="{{ route('account.dashboard') }}"
-                   class="header__icon-btn ms-2 inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition hover:border-blue-400 hover:text-blue-600"
-                   title="{{ __('account.my_account') }}"
-                   aria-label="{{ __('account.my_account') }}">
-                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
+            {{-- Profile Dropdown --}}
+            @php
+                $isLoggedIn = session('external_api_token') && session('phone_verified');
+                $customerName = trim((string) session('customer_name', ''));
+                // Fallback: try to get name from profile session
+                if (! $customerName) {
+                    $profile = session('customer_profile', []);
+                    $customerName = trim((string) ($profile['name'] ?? ''));
+                }
+                $customerInitial = $customerName ? mb_strtoupper(mb_substr($customerName, 0, 1)) : '';
+            @endphp
+
+            <div
+                class="hs-dropdown relative inline-flex"
+                x-data="{ open: false }"
+                @keydown.escape.window="open = false"
+            >
+                {{-- Trigger button --}}
+                <button
+                    type="button"
+                    @click="open = !open"
+                    @click.outside="open = false"
+                    aria-haspopup="true"
+                    :aria-expanded="open"
+                    aria-label="{{ __('account.my_account') }}"
+                    class="header__profile-btn"
+                    :class="{ 'header__profile-btn--active': open }"
+                >
+                    @if($isLoggedIn && $customerInitial)
+                        {{-- Avatar with initial --}}
+                        <span class="header__profile-avatar" aria-hidden="true">
+                            {{ $customerInitial }}
+                        </span>
+                    @else
+                        {{-- Generic icon --}}
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
+                        </svg>
+                    @endif
+                    {{-- Subtle caret --}}
+                    <svg class="header__profile-caret" :class="{ 'rotate-180': open }" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
                     </svg>
-                </a>
-            @endif
+                </button>
+
+                {{-- Dropdown panel --}}
+                <div
+                    x-show="open"
+                    x-transition:enter="transition ease-out duration-200"
+                    x-transition:enter-start="opacity-0 translate-y-1 scale-95"
+                    x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                    x-transition:leave="transition ease-in duration-150"
+                    x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+                    x-transition:leave-end="opacity-0 translate-y-1 scale-95"
+                    x-cloak
+                    class="header__profile-dropdown"
+                    role="menu"
+                    aria-orientation="vertical"
+                >
+                    @if($isLoggedIn)
+                        {{-- Welcome header --}}
+                        <div class="header__profile-welcome">
+                            <div class="header__profile-welcome-avatar" aria-hidden="true">
+                                {{ $customerInitial ?: '👤' }}
+                            </div>
+                            <div class="header__profile-welcome-text">
+                                <p class="header__profile-greeting">
+                                    {{ app()->getLocale() === 'ar' ? 'أهلاً' : 'Welcome' }}
+                                </p>
+                                @if($customerName)
+                                    <p class="header__profile-name">{{ $customerName }}</p>
+                                @endif
+                            </div>
+                        </div>
+
+                        <div class="header__profile-divider" role="separator"></div>
+
+                        {{-- Navigation links --}}
+                        <nav class="header__profile-nav" aria-label="{{ __('Account navigation') }}">
+                            <a href="{{ route('account.dashboard') }}" class="header__profile-item" role="menuitem">
+                                <span class="header__profile-item-icon" aria-hidden="true">
+                                    <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/>
+                                    </svg>
+                                </span>
+                                <span>{{ __('account.dashboard') }}</span>
+                            </a>
+
+                            <a href="{{ route('account.subscriptions.index') }}" class="header__profile-item" role="menuitem">
+                                <span class="header__profile-item-icon" aria-hidden="true">
+                                    <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a3 3 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z"/>
+                                    </svg>
+                                </span>
+                                <span>{{ __('account.subscriptions') }}</span>
+                            </a>
+
+                            <a href="{{ route('account.orders.index') }}" class="header__profile-item" role="menuitem">
+                                <span class="header__profile-item-icon" aria-hidden="true">
+                                    <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z"/>
+                                    </svg>
+                                </span>
+                                <span>{{ __('account.orders') }}</span>
+                            </a>
+
+                            <a href="{{ route('account.wallet') }}" class="header__profile-item" role="menuitem">
+                                <span class="header__profile-item-icon" aria-hidden="true">
+                                    <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3"/>
+                                    </svg>
+                                </span>
+                                <span>{{ __('account.wallet') }}</span>
+                            </a>
+
+                            <a href="{{ route('account.profile') }}" class="header__profile-item" role="menuitem">
+                                <span class="header__profile-item-icon" aria-hidden="true">
+                                    <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    </svg>
+                                </span>
+                                <span>{{ __('account.profile') }}</span>
+                            </a>
+                        </nav>
+
+                        <div class="header__profile-divider" role="separator"></div>
+
+                        {{-- Logout --}}
+                        <form method="POST" action="{{ route('account.logout') }}" class="header__profile-logout-form">
+                            @csrf
+                            <button type="submit" class="header__profile-item header__profile-item--danger" role="menuitem">
+                                <span class="header__profile-item-icon" aria-hidden="true">
+                                    <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/>
+                                    </svg>
+                                </span>
+                                <span>{{ __('account.logout') }}</span>
+                            </button>
+                        </form>
+
+                    @else
+                        {{-- Guest: login link --}}
+                        <div class="header__profile-welcome">
+                            <div class="header__profile-welcome-avatar" aria-hidden="true">👤</div>
+                            <div class="header__profile-welcome-text">
+                                <p class="header__profile-greeting">
+                                    {{ app()->getLocale() === 'ar' ? 'مرحباً بك' : 'Hello!' }}
+                                </p>
+                                <p class="header__profile-name" style="font-size:.8rem; font-weight:400; opacity:.7">
+                                    {{ app()->getLocale() === 'ar' ? 'سجّل دخولك للوصول لحسابك' : 'Sign in to access your account' }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="header__profile-divider" role="separator"></div>
+                        <a href="{{ route('account.login') }}" class="header__profile-item" role="menuitem">
+                            <span class="header__profile-item-icon" aria-hidden="true">
+                                <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/>
+                                </svg>
+                            </span>
+                            <span>{{ __('account.login') }}</span>
+                        </a>
+                    @endif
+                </div>
+            </div>
 
             @foreach($headerActions as $action)
                 @if($action->type === 'button')
@@ -474,6 +629,185 @@
         opacity: 1 !important;
         transform: scale(1) !important;
     }
+}
+
+/* ─── Profile Dropdown ─────────────────────────────── */
+.header__profile-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 40px;
+    min-width: 40px;
+    padding: 0 8px;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 999px;
+    background: #fff;
+    color: #374151;
+    cursor: pointer;
+    transition: border-color .2s, box-shadow .2s, background .2s;
+    font-size: .88rem;
+}
+.header__profile-btn:hover,
+.header__profile-btn--active {
+    border-color: #279ff9;
+    box-shadow: 0 0 0 3px rgba(39,159,249,.12);
+    color: #279ff9;
+}
+.header__profile-caret {
+    width: 13px;
+    height: 13px;
+    transition: transform .2s ease;
+    opacity: .5;
+}
+
+/* Avatar circle with initial */
+.header__profile-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #279ff9 0%, #1e8de0 100%);
+    color: #fff;
+    font-size: .78rem;
+    font-weight: 700;
+    line-height: 1;
+    flex-shrink: 0;
+    letter-spacing: 0;
+}
+
+/* Dropdown panel */
+.header__profile-dropdown {
+    position: absolute;
+    top: calc(100% + 10px);
+    inset-inline-end: 0;
+    z-index: 9990;
+    min-width: 240px;
+    max-width: 290px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, .14), 0 2px 8px rgba(15, 23, 42, .06);
+    overflow: hidden;
+    transform-origin: top right;
+}
+[dir="rtl"] .header__profile-dropdown {
+    transform-origin: top left;
+}
+
+/* Welcome section */
+.header__profile-welcome {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: 1rem 1.1rem .85rem;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+}
+.header__profile-welcome-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #279ff9 0%, #1e8de0 100%);
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(39,159,249,.35);
+}
+.header__profile-welcome-text {
+    min-width: 0;
+    flex: 1;
+}
+.header__profile-greeting {
+    font-size: .75rem;
+    color: #6b7280;
+    margin: 0 0 1px;
+    font-weight: 500;
+}
+.header__profile-name {
+    font-size: .95rem;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Divider */
+.header__profile-divider {
+    height: 1px;
+    background: #f3f4f6;
+    margin: 0;
+}
+
+/* Nav items */
+.header__profile-nav {
+    padding: .4rem .5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.header__profile-item {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .55rem .7rem;
+    border-radius: 10px;
+    font-size: .88rem;
+    font-weight: 500;
+    color: #374151;
+    text-decoration: none;
+    transition: background .15s, color .15s;
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: start;
+}
+.header__profile-item:hover {
+    background: #f0f9ff;
+    color: #279ff9;
+}
+.header__profile-item:hover .header__profile-item-icon {
+    color: #279ff9;
+}
+.header__profile-item--danger {
+    color: #dc2626;
+}
+.header__profile-item--danger:hover {
+    background: #fff1f1;
+    color: #dc2626;
+}
+.header__profile-item--danger .header__profile-item-icon {
+    color: #dc2626;
+}
+.header__profile-item--danger:hover .header__profile-item-icon {
+    color: #dc2626;
+}
+.header__profile-item-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: #9ca3af;
+    transition: color .15s;
+}
+.header__profile-item-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Logout form */
+.header__profile-logout-form {
+    padding: .4rem .5rem;
 }
 </style>
 

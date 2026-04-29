@@ -846,6 +846,8 @@
     "account.orders": "Orders",
     "account.wallet": "Wallet",
     "account.profile": "Profile",
+    "account.login": "Sign In",
+    "Account navigation": "Account navigation",
     "account.my_subscriptions": "My subscriptions",
     "account.subscriptions_hint": "All the plans you have ever subscribed to.",
     "account.refresh": "Refresh",
