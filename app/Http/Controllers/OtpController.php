@@ -114,6 +114,7 @@ class OtpController extends Controller
 
     private function markPendingRegistrationMobile(string $mobile): void
     {
+        $mobile = preg_replace('/\s+/', '', (string) $mobile) ?? $mobile;
         session([
             'pending_register_mobile' => $mobile,
             'pending_register_expires_at' => now()->addMinutes(10),
@@ -129,7 +130,7 @@ class OtpController extends Controller
             'phone' => 'required|string|max:20',
         ]);
 
-        $phone = $validated['phone'];
+        $phone = preg_replace('/\s+/', '', (string) $validated['phone']) ?? (string) $validated['phone'];
 
         $sessionKey = 'otp_sent_at_'.md5($phone);
         $lastSentAt = session($sessionKey);
@@ -226,6 +227,8 @@ class OtpController extends Controller
             'device_id' => 'nullable|string|max:255',
         ]);
 
+        $validated['phone'] = preg_replace('/\s+/', '', (string) $validated['phone']) ?? (string) $validated['phone'];
+
         $storedPhone = session('otp_phone');
         $expiresAt = session('otp_expires_at');
 
@@ -251,7 +254,8 @@ class OtpController extends Controller
             ]);
         }
 
-        if ($storedPhone !== $validated['phone']) {
+        $storedPhoneNormalized = preg_replace('/\s+/', '', (string) $storedPhone) ?? (string) $storedPhone;
+        if ($storedPhoneNormalized !== $validated['phone']) {
             return response()->json([
                 'ok' => false,
                 'success' => false,
@@ -452,6 +456,7 @@ class OtpController extends Controller
         }
 
         $pendingMobile = (string) session('pending_register_mobile', '');
+        $pendingMobile = preg_replace('/\s+/', '', $pendingMobile) ?? $pendingMobile;
         $pendingExpiresAt = session('pending_register_expires_at');
 
         if ($pendingMobile === '' || ! $pendingExpiresAt) {
@@ -487,10 +492,17 @@ class OtpController extends Controller
             'email' => (string) $validator->validated()['email'],
             'gender' => (string) $validator->validated()['gender'],
             'mobile' => $pendingMobile,
+            // Some API deployments accept "phone" instead of "mobile".
+            'phone' => $pendingMobile,
         ];
 
         $register = $this->apiAuth->simpleRegister($payload);
-        $registerOk = (bool) ($register['success'] ?? $register['ok'] ?? false);
+        $registerOk = (bool) (
+            $register['success']
+            ?? $register['ok']
+            ?? $register['status']
+            ?? false
+        );
 
         if (! $registerOk) {
             $errors = is_array($register['errors'] ?? null) ? $register['errors'] : [];

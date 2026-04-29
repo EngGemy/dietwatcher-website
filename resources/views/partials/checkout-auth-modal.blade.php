@@ -450,19 +450,55 @@ if (typeof window.checkoutAuthModalMock === 'undefined') {
                         body: fd,
                     });
                     const data = await res.json();
+                    const inferRegisterError = (payload) => {
+                        const out = { type: '', message: '', fieldErrors: {} };
+                        const p = payload && typeof payload === 'object' ? payload : {};
+                        const errors = p.errors && typeof p.errors === 'object' ? p.errors : {};
+                        const errCode = String(p.error || '').toLowerCase();
+                        const message = String(p.message || '');
+                        const msgLower = message.toLowerCase();
+
+                        // 1) Explicit backend error code
+                        if (errCode === 'mobile_taken') out.type = 'mobile_taken';
+                        if (errCode === 'email_taken') out.type = 'email_taken';
+                        if (errCode === 'validation_error') out.type = 'validation_error';
+
+                        // 2) Structured field errors
+                        if (!out.type) {
+                            if (errors.mobile || errors.phone) out.type = 'mobile_taken';
+                            else if (errors.email) out.type = 'email_taken';
+                            else if (Object.keys(errors).length > 0) out.type = 'validation_error';
+                        }
+
+                        // 3) Message text fallback (EN/AR)
+                        if (!out.type) {
+                            const hasMobileWord = msgLower.includes('mobile') || msgLower.includes('phone') || message.includes('الجوال') || message.includes('رقم');
+                            const hasEmailWord = msgLower.includes('email') || message.includes('البريد');
+                            if (hasMobileWord) out.type = 'mobile_taken';
+                            else if (hasEmailWord) out.type = 'email_taken';
+                        }
+
+                        out.message = message;
+                        out.fieldErrors = errors;
+                        return out;
+                    };
                     if (data.ok) {
                         this.startResend(60);
                         this.otp2 = ['', '', '', ''];
                         this.step = 'otp_2';
                     } else {
-                        if (data.error === 'mobile_taken') {
+                        const inferred = inferRegisterError(data);
+                        if (inferred.type === 'mobile_taken') {
                             this.errors.general = this.t('errors.mobileTaken');
-                        } else if (data.error === 'email_taken') {
+                        } else if (inferred.type === 'email_taken') {
                             this.errors.email = [this.t('errors.emailTaken')];
-                        } else if (data.error === 'validation_error') {
-                            this.errors = data.errors || {};
+                        } else if (inferred.type === 'validation_error') {
+                            this.errors = inferred.fieldErrors || {};
+                            if (Object.keys(this.errors).length === 0) {
+                                this.errors.general = inferred.message || this.t('errors.required');
+                            }
                         } else {
-                            this.errors.general = data.message || this.t('errors.serverError');
+                            this.errors.general = inferred.message || this.t('errors.serverError');
                         }
                         this.step = 'register';
                     }
