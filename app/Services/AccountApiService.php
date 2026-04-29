@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\PaymentStatus;
+use App\Models\Payment;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -321,13 +323,57 @@ class AccountApiService
                 'device_id' => $this->deviceId(),
             ], fn ($v) => $v !== null && $v !== '');
 
-            return $this->decode(
+            $decoded = $this->decode(
                 $this->authed()->get($this->url('orders'), $params)
             );
+
+            $apiRows = $this->extractRowsFromDecoded($decoded['data'] ?? null);
+            $localRows = $this->localOrdersFallback($status);
+
+            if ($apiRows === []) {
+                if ($decoded['ok'] ?? false) {
+                    $decoded['data'] = ['orders' => $localRows];
+
+                    return $decoded;
+                }
+
+                return [
+                    'ok' => true,
+                    'status' => 200,
+                    'data' => ['orders' => $localRows],
+                    'message' => '',
+                    'raw' => [],
+                ];
+            }
+
+            if ($localRows !== []) {
+                $apiOrderNumbers = collect($apiRows)
+                    ->map(fn (array $r) => (string) ($r['order_number'] ?? $r['number'] ?? ''))
+                    ->filter()
+                    ->all();
+
+                $mergedLocal = array_values(array_filter($localRows, function (array $row) use ($apiOrderNumbers): bool {
+                    $num = (string) ($row['order_number'] ?? '');
+
+                    return $num === '' || ! in_array($num, $apiOrderNumbers, true);
+                }));
+
+                if ($mergedLocal !== []) {
+                    $decoded['data'] = ['orders' => array_values(array_merge($apiRows, $mergedLocal))];
+                }
+            }
+
+            return $decoded;
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::listOrders failed', ['error' => $e->getMessage()]);
 
-            return $this->empty();
+            return [
+                'ok' => true,
+                'status' => 200,
+                'data' => ['orders' => $this->localOrdersFallback($status)],
+                'message' => '',
+                'raw' => [],
+            ];
         }
     }
 
@@ -342,6 +388,104 @@ class AccountApiService
 
             return $this->empty();
         }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function extractRowsFromDecoded(mixed $data): array
+    {
+        if (! is_array($data)) {
+            return [];
+        }
+
+        if (array_is_list($data)) {
+            return array_values(array_filter($data, 'is_array'));
+        }
+
+        foreach (['orders', 'items', 'rows', 'data', 'response'] as $key) {
+            $candidate = $data[$key] ?? null;
+            if (! is_array($candidate)) {
+                continue;
+            }
+            if (array_is_list($candidate)) {
+                return array_values(array_filter($candidate, 'is_array'));
+            }
+            if (isset($candidate['data']) && is_array($candidate['data']) && array_is_list($candidate['data'])) {
+                return array_values(array_filter($candidate['data'], 'is_array'));
+            }
+        }
+
+        return [];
+    }
+
+    protected function normalizePhone(string $phone): string
+    {
+        $digits = preg_replace('/\D+/', '', $phone) ?? '';
+        if ($digits === '') {
+            return '';
+        }
+        if (str_starts_with($digits, '966')) {
+            $digits = substr($digits, 3);
+        }
+        if (str_starts_with($digits, '0')) {
+            $digits = substr($digits, 1);
+        }
+
+        return substr($digits, -9);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function localOrdersFallback(string $status): array
+    {
+        $verifiedPhone = (string) session('phone_verified', '');
+        $phoneNorm = $this->normalizePhone($verifiedPhone);
+        if ($phoneNorm === '') {
+            return [];
+        }
+
+        $rows = Payment::query()
+            ->orderByDesc('created_at')
+            ->limit(30)
+            ->get()
+            ->filter(function (Payment $payment) use ($phoneNorm): bool {
+                return $this->normalizePhone((string) $payment->customer_phone) === $phoneNorm;
+            })
+            ->values();
+
+        $rows = $rows->filter(function (Payment $payment) use ($status): bool {
+            $state = $payment->status->value;
+            $normalized = strtolower(trim($status));
+
+            if ($normalized === 'completed') {
+                return in_array($state, [PaymentStatus::PAID->value, PaymentStatus::REFUNDED->value], true);
+            }
+            if ($normalized === 'cancelled') {
+                return in_array($state, [PaymentStatus::FAILED->value, PaymentStatus::EXPIRED->value], true);
+            }
+
+            // active/default tab should still show purchased orders for the user.
+            return in_array($state, [PaymentStatus::PAID->value, PaymentStatus::AUTHORIZED->value, PaymentStatus::PENDING->value], true);
+        });
+
+        return $rows->map(function (Payment $payment): array {
+            $items = is_array($payment->cart_items) ? $payment->cart_items : [];
+
+            return [
+                'id' => null,
+                'order_number' => $payment->order_number,
+                'date' => optional($payment->created_at)->toDateString(),
+                'created_at' => optional($payment->created_at)?->toIso8601String(),
+                'delivery_date' => $payment->start_date,
+                'status' => $payment->status->value,
+                'amount' => $payment->amount_in_sar,
+                'total' => $payment->amount_in_sar,
+                'items' => array_values($items),
+                'source' => 'web_payment',
+            ];
+        })->values()->all();
     }
 
     public function orderTrackings(int $orderId): array

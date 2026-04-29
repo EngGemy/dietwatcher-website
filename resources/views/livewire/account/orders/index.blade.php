@@ -48,6 +48,8 @@
                         @foreach($orders as $order)
                             @php
                                 $oid   = $order['id'] ?? $order['order_id'] ?? null;
+                                $orderNumber = (string) ($order['order_number'] ?? '');
+                                $isLocalWebOrder = (string) ($order['source'] ?? '') === 'web_payment';
                                 $oDate = $order['delivery_date'] ?? $order['date'] ?? $order['created_at'] ?? '';
                                 $items = $order['items'] ?? $order['meals'] ?? [];
                                 $count = is_array($items) ? count($items) : 0;
@@ -56,9 +58,12 @@
                                 $oStatusLabel = __($oStatusKey);
                                 if ($oStatusLabel === $oStatusKey) $oStatusLabel = ucfirst($oStatus);
                                 $oTotal = $order['total'] ?? $order['amount'] ?? $order['grand_total'] ?? null;
+                                $detailsUrl = $isLocalWebOrder && $orderNumber !== ''
+                                    ? route('payment.result', ['order' => $orderNumber])
+                                    : ($oid ? route('account.orders.show', ['id' => $oid]) : '#');
                             @endphp
                             <tr>
-                                <td class="font-semibold">#{{ $oid ?: '—' }}</td>
+                                <td class="font-semibold">#{{ $oid ?: ($orderNumber !== '' ? $orderNumber : '—') }}</td>
                                 <td>{{ $oDate ?: '—' }}</td>
                                 <td>{{ $count }}</td>
                                 <td>
@@ -70,7 +75,7 @@
                                     @if($oTotal !== null) <x-sar :amount="(float) $oTotal" class="text-xs text-gray-900" /> @else — @endif
                                 </td>
                                 <td class="text-end">
-                                    <a href="{{ $oid ? route('account.orders.show', ['id' => $oid]) : '#' }}" class="acc-btn acc-btn--ghost acc-btn--sm">
+                                    <a href="{{ $detailsUrl }}" class="acc-btn acc-btn--ghost acc-btn--sm">
                                         {{ __('account.details') }}
                                     </a>
                                 </td>
