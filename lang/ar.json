@@ -1053,6 +1053,8 @@
     "account.orders": "الطلبات",
     "account.wallet": "المحفظة",
     "account.profile": "الملف الشخصي",
+    "account.login": "تسجيل الدخول",
+    "Account navigation": "قائمة الحساب",
     "account.my_subscriptions": "اشتراكاتي",
     "account.subscriptions_hint": "كل الاشتراكات التي قمت بها سابقاً.",
     "account.refresh": "تحديث",
