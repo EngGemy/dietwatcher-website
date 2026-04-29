@@ -139,16 +139,22 @@
                         @foreach($recentOrders as $order)
                             @php
                                 $oid = $order['id'] ?? $order['order_id'] ?? null;
+                                $orderNumber = (string) ($order['order_number'] ?? '');
+                                $isLocalWebOrder = (string) ($order['source'] ?? '') === 'web_payment';
                                 $oStatus = strtolower((string) ($order['status'] ?? ''));
                                 $oStatusKey = 'account.status_'.$oStatus;
                                 $oStatusLabel = __($oStatusKey);
                                 if ($oStatusLabel === $oStatusKey) $oStatusLabel = ucfirst($oStatus);
                                 $oDate = $order['delivery_date'] ?? $order['created_at'] ?? $order['date'] ?? '';
                                 $oTotal = $order['total'] ?? $order['amount'] ?? $order['grand_total'] ?? null;
+                                $detailsUrl = $isLocalWebOrder && $orderNumber !== ''
+                                    ? route('payment.result', ['order' => $orderNumber])
+                                    : ($oid ? route('account.orders.show', ['id' => $oid]) : '#');
+                                $displayOrderRef = $oid ?: ($orderNumber !== '' ? $orderNumber : '—');
                             @endphp
                             <li class="px-5 py-3 flex items-center justify-between gap-3 hover:bg-gray-50 transition">
                                 <div class="min-w-0">
-                                    <a href="{{ $oid ? route('account.orders.show', ['id' => $oid]) : '#' }}" class="font-semibold text-gray-900 truncate block">#{{ $oid ?: '—' }}</a>
+                                    <a href="{{ $detailsUrl }}" class="font-semibold text-gray-900 truncate block">#{{ $displayOrderRef }}</a>
                                     <span class="text-xs text-gray-500">{{ $oDate }}</span>
                                 </div>
                                 <div class="text-right">
