@@ -126,6 +126,10 @@ Route::post('/otp/verify', [\App\Http\Controllers\OtpController::class, 'verify'
     ->middleware('throttle:20,1')
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])
     ->name('otp.verify');
+Route::post('/otp/register', [\App\Http\Controllers\OtpController::class, 'register'])
+    ->middleware('throttle:5,1')
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])
+    ->name('otp.register');
 
 Route::post('/checkout/moyasar-session', [\App\Http\Controllers\CheckoutController::class, 'moyasarSession'])
     ->name('checkout.moyasar-session');
