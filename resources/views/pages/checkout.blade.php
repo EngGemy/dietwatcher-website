@@ -523,6 +523,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         </div>
 
                         <div x-show="moyasarError" x-cloak class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" x-text="moyasarError"></div>
+                        <div x-show="syncAddressError" x-cloak class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="syncAddressError"></div>
 
                         <div class="relative min-h-[160px] rounded-xl border border-gray-200 bg-gray-50 p-4">
                             <div
@@ -1400,6 +1401,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             couponMessage: '',
 
             moyasarError: '',
+            /** Set when POST /checkout/sync-address fails (silent sync or user-visible). */
+            syncAddressError: '',
             _moyasarTimer: null,
 
             getCsrfToken() {
@@ -1663,9 +1666,15 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (! form) {
                     return;
                 }
+                if (! this.fullPhone966()) {
+                    this.syncAddressError = @json(__('checkout.address_sync_needs_phone'));
+                    this.scheduleMoyasarRefresh();
+
+                    return;
+                }
                 const fd = new FormData(form);
                 try {
-                    await fetch('{{ route('checkout.sync-address') }}', {
+                    const res = await fetch('{{ route('checkout.sync-address') }}', {
                         method: 'POST',
                         body: fd,
                         headers: {
@@ -1673,11 +1682,25 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
                         },
                     });
-                } catch (e) {}
+                    const data = await res.json().catch(() => ({}));
+                    const ok = res.ok && (data.success === true || data.skipped === true);
+                    if (ok) {
+                        this.syncAddressError = '';
+                    } else {
+                        const errs = data && data.errors && typeof data.errors === 'object'
+                            ? Object.values(data.errors).flat().filter(Boolean)
+                            : [];
+                        this.syncAddressError = errs[0] || data.message || @json(__('checkout.address_sync_failed'));
+                    }
+                } catch (e) {
+                    this.syncAddressError = @json(__('checkout.address_sync_failed'));
+                }
+                this.scheduleMoyasarRefresh();
             },
 
             handleAddressFromMap(event) {
                 const d = event.detail || {};
+                this.syncAddressError = '';
                 if (d.description) {
                     this.addressStreet = d.description;
                 }
@@ -1783,8 +1806,10 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             ? Object.values(data.errors).flat().filter(Boolean)
                             : [];
                         this.newAddressError = errs[0] || data.message || '{{ __('address.save_failed') }}';
+                        this.syncAddressError = this.newAddressError;
                         return;
                     }
+                    this.syncAddressError = '';
                     await this.refreshCustomerFromServer();
                     if (data.data && data.data.id) {
                         let fresh = this.savedAddresses.find(a => String(a.id) === String(data.data.id));
@@ -1814,6 +1839,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (! addr || this.deliveryType !== 'home') {
                     return;
                 }
+                this.syncAddressError = '';
                 this.selectedAddressId = addr.id ?? null;
                 this.addingNewAddress = false;
                 this.newAddressError = '';
@@ -2002,6 +2028,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             hasStartDate() {
+                if (! this.isPlanCheckout) {
+                    return true;
+                }
                 const localValue = String(this.startDate || '').trim();
                 if (localValue.length > 0) {
                     return true;
@@ -2014,11 +2043,35 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 return false;
             },
 
+            /** Home delivery: map pin confirmed + city + district (no saved-address id required). */
+            inlineHomeAddressReady() {
+                if (this.deliveryType !== 'home') {
+                    return false;
+                }
+                if (! this.addressConfirmedForSync) {
+                    return false;
+                }
+                const form = this.$refs.checkoutForm;
+                if (! form) {
+                    return false;
+                }
+                const lat = String(form.querySelector('input[name="delivery_lat"]')?.value ?? '').trim();
+                const lng = String(form.querySelector('input[name="delivery_lng"]')?.value ?? '').trim();
+                const district = String(form.querySelector('input[name="delivery_district_id"]')?.value ?? '').trim();
+                const zone = String(this.selectedZoneId || form.querySelector('select[name="zone_id"]')?.value || '').trim();
+
+                return lat !== '' && lng !== '' && district !== '' && zone !== '';
+            },
+
             deliveryReady() {
                 if (this.deliveryType === 'pickup') {
                     return !!this.selectedBranchId;
                 }
-                return !!this.selectedAddressId;
+                if (this.selectedAddressId) {
+                    return true;
+                }
+
+                return this.inlineHomeAddressReady();
             },
 
             canProceedToPayment() {
@@ -2027,15 +2080,24 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     ? (this.selectedDurationValue() !== '' || Number(this.cartDurationDaysHint || 0) > 0)
                     : this.selectedDurationValue() !== '';
 
+                const homeBlockedBySync = this.deliveryType === 'home'
+                    && this.syncAddressError
+                    && ! this.selectedAddressId
+                    && ! this.inlineHomeAddressReady();
+
                 return this.deliveryReady()
                     && hasSelectedPlan
                     && hasSelectedDuration
-                    && this.hasStartDate();
+                    && this.hasStartDate()
+                    && ! homeBlockedBySync;
             },
 
             paymentBlockerMessage() {
                 if (this.deliveryType === 'pickup') {
                     return 'اختر المدة وتاريخ البداية والفرع حتى يتطابق المبلغ قبل الدفع';
+                }
+                if (this.syncAddressError && ! this.selectedAddressId && ! this.inlineHomeAddressReady()) {
+                    return @json(__('checkout.address_sync_block_payment'));
                 }
                 return 'اختر المدة، المدينة، والعنوان على الخريطة حتى يتطابق المبلغ قبل الدفع';
             },
@@ -2225,6 +2287,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
                     if (data.success) {
                         this.phoneVerified = true;
+                        this.syncAddressError = '';
                         this.otpMessageType = 'success';
                         this.otpMessage = data.message;
                         this.savedAddresses = Array.isArray(data.addresses) ? data.addresses : [];
@@ -2503,6 +2566,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 window.addEventListener('checkout-auth-success', (event) => {
                     const detail = event.detail || {};
                     this.phoneVerified = true;
+                    this.syncAddressError = '';
                     if (detail.phone && typeof window.dwSaudiPhoneDigits === 'function') {
                         this.phoneLocal = window.dwSaudiPhoneDigits(String(detail.phone));
                     }
