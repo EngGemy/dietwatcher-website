@@ -412,40 +412,82 @@ $totalPrice = $planPriceInclVat;
                         <div class="nutrition-card">
                             <div class="mb-3 flex items-center justify-between">
                                 <p class="font-bold">{{ __('Carbs') }}</p>
-                                <p class="nutrition-value" x-text="currentNutrition.carbs"></p>
+                                <p class="nutrition-value" x-show="!hasRangeValue(currentNutrition.carbs)" x-text="currentNutrition.carbs" x-cloak></p>
                             </div>
                             <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-zinc-200" role="progressbar">
                                 <div class="bg-green flex flex-col justify-center overflow-hidden rounded-full text-center text-xs whitespace-nowrap transition duration-500" :style="'width:' + currentNutrition.carbsPercent + '%'"></div>
                             </div>
-                            <div class="nutrition-range-labels" x-show="hasRangeDisplay()" x-cloak>
-                                <span class="nutrition-range-max" x-text="nutritionRangeMax(currentNutrition.carbs)"></span>
-                                <span class="nutrition-range-min" x-text="nutritionRangeMin(currentNutrition.carbs)"></span>
+                            <div class="nutrition-range-pair"
+                                 x-show="hasRangeValue(currentNutrition.carbs)"
+                                 x-transition:enter="transition ease-out duration-300"
+                                 x-transition:enter-start="opacity-0 translate-y-1 scale-95"
+                                 x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                                 x-transition:leave="transition ease-in duration-150"
+                                 x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+                                 x-transition:leave-end="opacity-0 -translate-y-1 scale-95"
+                                 x-cloak>
+                                <span class="nutrition-range-pill">
+                                    <strong>{{ __('Min') }}:</strong>
+                                    <span x-text="nutritionRangeMin(currentNutrition.carbs)"></span>
+                                </span>
+                                <span class="nutrition-range-pill">
+                                    <strong>{{ __('Max') }}:</strong>
+                                    <span x-text="nutritionRangeMax(currentNutrition.carbs)"></span>
+                                </span>
                             </div>
                         </div>
                         <div class="nutrition-card">
                             <div class="mb-3 flex items-center justify-between">
                                 <p class="font-bold">{{ __('Protein') }}</p>
-                                <p class="nutrition-value" x-text="currentNutrition.protein"></p>
+                                <p class="nutrition-value" x-show="!hasRangeValue(currentNutrition.protein)" x-text="currentNutrition.protein" x-cloak></p>
                             </div>
                             <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-zinc-200" role="progressbar">
                                 <div class="bg-yellow flex flex-col justify-center overflow-hidden rounded-full text-center text-xs whitespace-nowrap transition duration-500" :style="'width:' + currentNutrition.proteinPercent + '%'"></div>
                             </div>
-                            <div class="nutrition-range-labels" x-show="hasRangeDisplay()" x-cloak>
-                                <span class="nutrition-range-max" x-text="nutritionRangeMax(currentNutrition.protein)"></span>
-                                <span class="nutrition-range-min" x-text="nutritionRangeMin(currentNutrition.protein)"></span>
+                            <div class="nutrition-range-pair"
+                                 x-show="hasRangeValue(currentNutrition.protein)"
+                                 x-transition:enter="transition ease-out duration-300"
+                                 x-transition:enter-start="opacity-0 translate-y-1 scale-95"
+                                 x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                                 x-transition:leave="transition ease-in duration-150"
+                                 x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+                                 x-transition:leave-end="opacity-0 -translate-y-1 scale-95"
+                                 x-cloak>
+                                <span class="nutrition-range-pill">
+                                    <strong>{{ __('Min') }}:</strong>
+                                    <span x-text="nutritionRangeMin(currentNutrition.protein)"></span>
+                                </span>
+                                <span class="nutrition-range-pill">
+                                    <strong>{{ __('Max') }}:</strong>
+                                    <span x-text="nutritionRangeMax(currentNutrition.protein)"></span>
+                                </span>
                             </div>
                         </div>
                         <div class="nutrition-card">
                             <div class="mb-3 flex items-center justify-between">
                                 <p class="font-bold">{{ __('Fat') }}</p>
-                                <p class="nutrition-value" x-text="currentNutrition.fat"></p>
+                                <p class="nutrition-value" x-show="!hasRangeValue(currentNutrition.fat)" x-text="currentNutrition.fat" x-cloak></p>
                             </div>
                             <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-zinc-200" role="progressbar">
                                 <div class="bg-red flex flex-col justify-center overflow-hidden rounded-full text-center text-xs whitespace-nowrap transition duration-500" :style="'width:' + currentNutrition.fatPercent + '%'"></div>
                             </div>
-                            <div class="nutrition-range-labels" x-show="hasRangeDisplay()" x-cloak>
-                                <span class="nutrition-range-max" x-text="nutritionRangeMax(currentNutrition.fat)"></span>
-                                <span class="nutrition-range-min" x-text="nutritionRangeMin(currentNutrition.fat)"></span>
+                            <div class="nutrition-range-pair"
+                                 x-show="hasRangeValue(currentNutrition.fat)"
+                                 x-transition:enter="transition ease-out duration-300"
+                                 x-transition:enter-start="opacity-0 translate-y-1 scale-95"
+                                 x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                                 x-transition:leave="transition ease-in duration-150"
+                                 x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+                                 x-transition:leave-end="opacity-0 -translate-y-1 scale-95"
+                                 x-cloak>
+                                <span class="nutrition-range-pill">
+                                    <strong>{{ __('Min') }}:</strong>
+                                    <span x-text="nutritionRangeMin(currentNutrition.fat)"></span>
+                                </span>
+                                <span class="nutrition-range-pill">
+                                    <strong>{{ __('Max') }}:</strong>
+                                    <span x-text="nutritionRangeMax(currentNutrition.fat)"></span>
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -645,16 +687,64 @@ $totalPrice = $planPriceInclVat;
     }
     .nutrition-card {
         @apply rounded-xl border border-slate-200 bg-slate-50/70 p-3;
+        transition: transform .3s cubic-bezier(.16, 1, .3, 1), box-shadow .3s ease, border-color .25s ease;
+    }
+    .nutrition-card:hover {
+        transform: translateY(-2px);
+        border-color: #bfdbfe;
+        box-shadow: 0 12px 24px rgba(15, 23, 42, .08);
     }
     .nutrition-value {
         @apply text-lg font-black text-slate-800;
     }
-    .nutrition-range-labels {
-        @apply mt-2 flex items-center justify-between text-xs text-slate-500;
+    .nutrition-range-pair {
+        @apply mt-3 flex items-center gap-2;
     }
-    .nutrition-range-max,
-    .nutrition-range-min {
-        @apply font-semibold;
+    .nutrition-range-pill {
+        @apply inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600;
+        animation: nutritionPillIn .35s cubic-bezier(.16, 1, .3, 1);
+    }
+    .nutrition-range-pill strong {
+        @apply font-semibold text-slate-700;
+    }
+    .nutrition-grid [role="progressbar"] > div {
+        position: relative;
+        overflow: hidden;
+    }
+    .nutrition-grid [role="progressbar"] > div::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(110deg, transparent 0%, rgba(255,255,255,.25) 40%, transparent 80%);
+        transform: translateX(-120%);
+        animation: nutritionBarSheen 2.8s ease-in-out infinite;
+    }
+    @keyframes nutritionPillIn {
+        0% {
+            opacity: 0;
+            transform: translateY(4px) scale(.95);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+    @keyframes nutritionBarSheen {
+        0%, 55% {
+            transform: translateX(-120%);
+        }
+        100% {
+            transform: translateX(120%);
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .nutrition-card,
+        .nutrition-range-pill,
+        .nutrition-grid [role="progressbar"] > div::after {
+            animation: none !important;
+            transition: none !important;
+            transform: none !important;
+        }
     }
 </style>
 @endpush
@@ -1021,6 +1111,10 @@ function planDetail() {
         hasRangeDisplay() {
             const check = (v) => String(v || '').includes('-');
             return check(this.currentNutrition.carbs) || check(this.currentNutrition.protein) || check(this.currentNutrition.fat);
+        },
+
+        hasRangeValue(value) {
+            return String(value || '').includes('-');
         },
 
         nutritionRangeParts(value) {

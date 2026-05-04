@@ -103,15 +103,33 @@
                 </p>
             </header>
 
+            @php
+                // Full-card artwork (text baked into PNG). English: meal-plan-{1..3}.png.
+                // Arabic: meal-plan-{1..3}-ar.png (same layout as English cards).
+                $__homepageMealPlanCardImage = static function (int $imgIdx): string {
+                    $locale = strtok((string) app()->getLocale(), '_') ?: app()->getLocale();
+                    $localizedRel = 'assets/images/meal-plan-' . $imgIdx . '-' . $locale . '.png';
+                    if (is_file(public_path($localizedRel))) {
+                        return asset($localizedRel);
+                    }
+
+                    return asset('assets/images/meal-plan-' . $imgIdx . '.png');
+                };
+            @endphp
+
             <div class="mb-10 grid grid-cols-1 gap-6 md:mb-14 md:grid-cols-2 lg:grid-cols-3" data-anim-stagger>
                 @forelse($mealPlanCategories as $category)
                     @php
-                        $catDesc = $category['description'] ?? '';
-                        $imgIdx  = $loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3;
-                        $cardImg = asset('assets/images/meal-plan-' . $imgIdx . '.png');
+                        $descRaw = $category['description'] ?? '';
+                        $catDesc = is_array($descRaw)
+                            ? (string) ($descRaw[app()->getLocale()] ?? $descRaw['en'] ?? $descRaw['ar'] ?? reset($descRaw) ?: '')
+                            : (string) $descRaw;
+                        $imgIdx = $loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3;
+                        $cardImg = $__homepageMealPlanCardImage($imgIdx);
                     @endphp
                     <a href="{{ route('meal-plans.index', ['category' => $category['id']]) }}"
-                       class="rounded-xl border border-gray-300 p-3 block transition hover:shadow-md hover:border-blue/40" data-anim="fade-up">
+                       class="block rounded-xl border border-gray-300 p-3 transition hover:border-blue/40 hover:shadow-md"
+                       data-anim="fade-up">
                         <img src="{{ $cardImg }}" class="mb-4 w-full rounded-lg" alt="" />
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
                             {{ $catDesc ?: '' }}
@@ -120,22 +138,22 @@
                 @empty
                     {{-- Fallback static content when no categories from external DB --}}
                     <a href="{{ route('meal-plans.index') }}"
-                       class="rounded-xl border border-gray-300 p-3 block transition hover:shadow-md hover:border-blue/40">
-                        <img src="{{ asset('assets/images/meal-plan-1.png') }}" class="mb-4 w-full rounded-lg" alt="" />
+                       class="block rounded-xl border border-gray-300 p-3 transition hover:border-blue/40 hover:shadow-md">
+                        <img src="{{ $__homepageMealPlanCardImage(1) }}" class="mb-4 w-full rounded-lg" alt="" />
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
                             {{ __('Provides balanced, portion-controlled meals to support healthy weight goals.') }}
                         </p>
                     </a>
                     <a href="{{ route('meal-plans.index') }}"
-                       class="rounded-xl border border-gray-300 p-3 block transition hover:shadow-md hover:border-blue/40">
-                        <img src="{{ asset('assets/images/meal-plan-2.png') }}" class="mb-4 w-full rounded-lg" alt="" />
+                       class="block rounded-xl border border-gray-300 p-3 transition hover:border-blue/40 hover:shadow-md">
+                        <img src="{{ $__homepageMealPlanCardImage(2) }}" class="mb-4 w-full rounded-lg" alt="" />
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
                             {{ __('Supports everyday health and manage medical conditions through nutrition.') }}
                         </p>
                     </a>
                     <a href="{{ route('meal-plans.index') }}"
-                       class="rounded-xl border border-gray-300 p-3 block transition hover:shadow-md hover:border-blue/40">
-                        <img src="{{ asset('assets/images/meal-plan-3.png') }}" class="mb-4 w-full rounded-lg" alt="" />
+                       class="block rounded-xl border border-gray-300 p-3 transition hover:border-blue/40 hover:shadow-md">
+                        <img src="{{ $__homepageMealPlanCardImage(3) }}" class="mb-4 w-full rounded-lg" alt="" />
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
                             {{ __('Focuses on balanced, nutritious eating for everyday wellness.') }}
                         </p>

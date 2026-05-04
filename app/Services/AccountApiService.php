@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Enums\PaymentStatus;
 use App\Models\Payment;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -44,6 +45,11 @@ class AccountApiService
     {
         $token = (string) session('external_api_token', '');
 
+        return $this->http()->withToken($token);
+    }
+
+    protected function authedWithToken(string $token): PendingRequest
+    {
         return $this->http()->withToken($token);
     }
 
@@ -323,9 +329,12 @@ class AccountApiService
                 'device_id' => $this->deviceId(),
             ], fn ($v) => $v !== null && $v !== '');
 
-            $decoded = $this->decode(
-                $this->authed()->get($this->url('orders'), $params)
-            );
+            $cacheKey = 'account_orders_'.md5((string) session('external_api_token', '').'|'.$status.'|'.app()->getLocale());
+            $decoded = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($params) {
+                return $this->decode(
+                    $this->authed()->get($this->url('orders'), $params)
+                );
+            });
 
             $apiRows = $this->extractRowsFromDecoded($decoded['data'] ?? null);
             $localRows = $this->localOrdersFallback($status);
@@ -374,6 +383,18 @@ class AccountApiService
                 'message' => '',
                 'raw' => [],
             ];
+        }
+    }
+
+    public function clearOrdersCache(?string $token = null): void
+    {
+        $token = (string) ($token ?: session('external_api_token', ''));
+        if ($token === '') {
+            return;
+        }
+        foreach (['active', 'completed', 'cancelled', ''] as $status) {
+            $cacheKey = 'account_orders_'.md5($token.'|'.$status.'|'.app()->getLocale());
+            Cache::forget($cacheKey);
         }
     }
 
@@ -447,10 +468,17 @@ class AccountApiService
         }
 
         $rows = Payment::query()
+            ->when($phoneNorm !== '', function ($q) use ($phoneNorm) {
+                $q->where('customer_phone_normalized', $phoneNorm);
+            })
             ->orderByDesc('created_at')
             ->limit(30)
             ->get()
             ->filter(function (Payment $payment) use ($phoneNorm): bool {
+                if (($payment->customer_phone_normalized ?? '') !== '') {
+                    return (string) $payment->customer_phone_normalized === $phoneNorm;
+                }
+
                 return $this->normalizePhone((string) $payment->customer_phone) === $phoneNorm;
             })
             ->values();
@@ -474,8 +502,9 @@ class AccountApiService
             $items = is_array($payment->cart_items) ? $payment->cart_items : [];
 
             return [
-                'id' => null,
+                'id' => $payment->external_order_id ? (int) $payment->external_order_id : null,
                 'order_number' => $payment->order_number,
+                'external_order_number' => $payment->external_order_number,
                 'date' => optional($payment->created_at)->toDateString(),
                 'created_at' => optional($payment->created_at)?->toIso8601String(),
                 'delivery_date' => $payment->start_date,
@@ -504,6 +533,114 @@ class AccountApiService
     public function orderInvoicePdfUrl(int $orderId): string
     {
         return $this->url('orders/' . $orderId . '/pdf');
+    }
+
+    /**
+     * Create external order on API to keep web/app parity.
+     */
+    public function createOrder(array $payload, ?string $token = null): array
+    {
+        $token = (string) ($token ?: session('external_api_token', ''));
+        if ($token === '') {
+            return $this->empty(__('account.login_required'));
+        }
+
+        try {
+            $response = $this->authedWithToken($token)->asForm()->post(
+                $this->url('orders'),
+                $payload
+            );
+
+            return $this->decode($response);
+        } catch (\Throwable $e) {
+            Log::warning('AccountApiService::createOrder failed', ['error' => $e->getMessage()]);
+
+            return $this->empty(__('account.request_failed'));
+        }
+    }
+
+    /**
+     * Sync a paid local payment to external /orders endpoint.
+         *
+     * @return array{ok: bool, message: string, external_order_id: int|null, external_order_number: string|null}
+     */
+    public function syncPaidPaymentToExternalOrder(Payment $payment, ?string $token = null): array
+    {
+        if ($payment->status !== PaymentStatus::PAID) {
+            return ['ok' => false, 'message' => 'payment_not_paid', 'external_order_id' => null, 'external_order_number' => null];
+        }
+
+        if (! empty($payment->external_order_id) || ! empty($payment->external_order_number)) {
+            return [
+                'ok' => true,
+                'message' => 'already_synced',
+                'external_order_id' => $payment->external_order_id ? (int) $payment->external_order_id : null,
+                'external_order_number' => $payment->external_order_number ?: null,
+            ];
+        }
+
+        $checkoutPayload = is_array($payment->checkout_payload) ? $payment->checkout_payload : [];
+        $deliveryDate = (string) ($payment->start_date ?: now()->toDateString());
+        $branchId = (string) ($checkoutPayload['branch_id'] ?? config('services.external_api.default_order_branch_id', ''));
+        $addressId = (string) ($checkoutPayload['selected_address_id'] ?? '');
+        $note = (string) ($checkoutPayload['note'] ?? '');
+        $useWallet = (string) ($checkoutPayload['use_wallet'] ?? '0');
+
+        // External API expects branch_id; fallback to configured default when missing.
+        if ($branchId === '') {
+            return ['ok' => false, 'message' => 'missing_branch_id', 'external_order_id' => null, 'external_order_number' => null];
+        }
+
+        $payload = array_filter([
+            'branch_id' => $branchId,
+            'address_id' => $addressId !== '' ? $addressId : null,
+            'note' => $note,
+            'payment_option' => 'credit_card',
+            'delivery_date' => $deliveryDate,
+            'useWallet' => $useWallet,
+        ], fn ($v) => $v !== null);
+
+        $result = $this->createOrder($payload, $token);
+        if (! ($result['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'message' => (string) ($result['message'] ?? 'external_order_create_failed'),
+                'external_order_id' => null,
+                'external_order_number' => null,
+            ];
+        }
+
+        [$externalOrderId, $externalOrderNumber] = $this->extractExternalOrderIdentifiers($result['data'] ?? []);
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'external_order_id' => $externalOrderId,
+            'external_order_number' => $externalOrderNumber,
+        ];
+    }
+
+    /**
+     * @return array{0: int|null, 1: string|null}
+     */
+    protected function extractExternalOrderIdentifiers(mixed $data): array
+    {
+        if (! is_array($data)) {
+            return [null, null];
+        }
+
+        $order = $data['order'] ?? $data['data'] ?? $data['response'] ?? $data;
+        if (! is_array($order)) {
+            return [null, null];
+        }
+
+        $id = $order['id'] ?? $order['order_id'] ?? null;
+        $number = $order['order_number'] ?? $order['number'] ?? null;
+
+        return [
+            is_numeric($id) ? (int) $id : null,
+            is_string($number) && $number !== '' ? $number : null,
+        ];
     }
 
     // ─── Wallet ───────────────────────────────────────────────────────

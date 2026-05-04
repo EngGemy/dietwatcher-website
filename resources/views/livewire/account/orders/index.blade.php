@@ -58,9 +58,9 @@
                                 $oStatusLabel = __($oStatusKey);
                                 if ($oStatusLabel === $oStatusKey) $oStatusLabel = ucfirst($oStatus);
                                 $oTotal = $order['total'] ?? $order['amount'] ?? $order['grand_total'] ?? null;
-                                $detailsUrl = $isLocalWebOrder && $orderNumber !== ''
-                                    ? route('payment.result', ['order' => $orderNumber])
-                                    : ($oid ? route('account.orders.show', ['id' => $oid]) : '#');
+                                $detailsUrl = $oid
+                                    ? route('account.orders.show', ['id' => $oid])
+                                    : ($isLocalWebOrder && $orderNumber !== '' ? route('payment.result', ['order' => $orderNumber]) : '#');
                             @endphp
                             <tr>
                                 <td class="font-semibold">#{{ $oid ?: ($orderNumber !== '' ? $orderNumber : '—') }}</td>

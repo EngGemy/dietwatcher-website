@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Enums\PaymentStatus;
 use App\Livewire\Cart\CartManager;
 use App\Models\Payment;
+use App\Services\AccountApiService;
 use App\Services\Payment\MoyasarPaymentService;
 use App\Services\SmsService;
 use Illuminate\Http\RedirectResponse;
@@ -18,7 +19,8 @@ use Illuminate\View\View;
 class PaymentController extends Controller
 {
     public function __construct(
-        private MoyasarPaymentService $paymentService
+        private MoyasarPaymentService $paymentService,
+        private AccountApiService $accountApiService
     ) {}
 
     /**
@@ -132,6 +134,24 @@ class PaymentController extends Controller
 
         // Clear cart and send confirmation SMS on successful payment
         if ($payment->status === PaymentStatus::PAID) {
+            $externalToken = (string) session('external_api_token', '');
+            if ($externalToken !== '') {
+                $syncResult = $this->accountApiService->syncPaidPaymentToExternalOrder($payment, $externalToken);
+                $payment->update([
+                    'external_sync_status' => $syncResult['ok'] ? 'synced' : 'failed',
+                    'external_sync_message' => $syncResult['ok'] ? null : (string) ($syncResult['message'] ?? 'sync_failed'),
+                    'external_order_id' => $syncResult['external_order_id'] ?? null,
+                    'external_order_number' => $syncResult['external_order_number'] ?? null,
+                    'external_synced_at' => $syncResult['ok'] ? now() : null,
+                ]);
+                $this->accountApiService->clearOrdersCache($externalToken);
+            } else {
+                $payment->update([
+                    'external_sync_status' => 'skipped',
+                    'external_sync_message' => 'missing_external_token',
+                ]);
+            }
+
             session()->forget('checkout_moyasar_order');
             session()->forget(CartManager::SESSION_MARKET);
             session()->forget(CartManager::SESSION_SUBSCRIPTION);
