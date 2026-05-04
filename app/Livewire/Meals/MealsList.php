@@ -19,7 +19,10 @@ class MealsList extends Component
 
     public string $search = '';
 
-    /** Meal groups from /home API for the filter bar */
+    /** @var list<int> */
+    public array $selectedTagIds = [];
+
+    /** Meal groups from /meals/filters for the filter bar */
     public array $groups = [];
 
     public function mount(): void
@@ -28,10 +31,67 @@ class MealsList extends Component
         $filters = $service->getMealFilters();
         $groups = $filters['groups'] ?? [];
 
-        // Keep categories visible, but hide only proven-empty ones.
-        // Priority:
-        // 1) If API reports count > 0, keep it.
-        // 2) Otherwise, verify by scanning meals group_id.
+        $this->hydrateTagIdsFromRequest();
+
+        $hasEmptyReportedCount = collect($groups)->contains(
+            static fn (array $g): bool => (int) ($g['count'] ?? 0) === 0
+        );
+
+        if ($groups !== [] && ! $hasEmptyReportedCount) {
+            $this->groups = array_values(array_filter(
+                $groups,
+                static fn (array $group): bool => (int) ($group['value'] ?? 0) > 0
+            ));
+        } else {
+            $this->groups = $this->resolveGroupsWithMealPresence($service, $groups);
+        }
+
+        $groupIdsInTabs = array_map(static fn (array $group): int => (int) ($group['value'] ?? 0), $this->groups);
+        if ($this->selectedGroup !== null && ! in_array($this->selectedGroup, $groupIdsInTabs, true)) {
+            $this->selectedGroup = null;
+        }
+    }
+
+    /** Tag filter is driven only from meal detail links (?tag= or ?tags[]=). */
+    private function hydrateTagIdsFromRequest(): void
+    {
+        $ids = [];
+        $single = request()->query('tag');
+        if ($single !== null && $single !== '') {
+            $id = (int) $single;
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+        $multi = request()->query('tags');
+        if (is_array($multi)) {
+            foreach ($multi as $v) {
+                $id = (int) $v;
+                if ($id > 0) {
+                    $ids[] = $id;
+                }
+            }
+        }
+        $this->selectedTagIds = array_values(array_unique($ids));
+        sort($this->selectedTagIds);
+    }
+
+    public function clearTagFilterFromQuery(): void
+    {
+        $this->selectedTagIds = [];
+        $this->currentPage = 1;
+        $target = request()->routeIs('meals.index') ? route('meals.index') : route('store.index');
+        $this->redirect($target);
+    }
+
+    /**
+     * When the API omits reliable per-group counts, scan meals (cached) or probe per group.
+     *
+     * @param  array<int, array<string, mixed>>  $groups
+     * @return array<int, array<string, mixed>>
+     */
+    private function resolveGroupsWithMealPresence(ExternalDataService $service, array $groups): array
+    {
         $allMeals = $service->getAllMeals();
         $groupIdsWithMeals = [];
         foreach ($allMeals as $meal) {
@@ -58,7 +118,7 @@ class MealsList extends Component
             }
         }
 
-        $this->groups = array_values(array_filter($groups, static function (array $group) use ($groupIdsWithMeals, $groupPresenceByApi): bool {
+        return array_values(array_filter($groups, static function (array $group) use ($groupIdsWithMeals, $groupPresenceByApi): bool {
             $groupId = (int) ($group['value'] ?? 0);
             $reportedCount = (int) ($group['count'] ?? 0);
 
@@ -70,23 +130,16 @@ class MealsList extends Component
                 return true;
             }
 
-            // Only hide when we can prove empty from meals payload.
             if ($groupIdsWithMeals !== []) {
                 return isset($groupIdsWithMeals[$groupId]);
             }
 
-            // If group mapping is unavailable, verify with per-group API probe.
             if (array_key_exists($groupId, $groupPresenceByApi)) {
                 return (bool) $groupPresenceByApi[$groupId];
             }
 
             return true;
         }));
-
-        $groupIdsInTabs = array_map(static fn (array $group): int => (int) ($group['value'] ?? 0), $this->groups);
-        if ($this->selectedGroup !== null && !in_array($this->selectedGroup, $groupIdsInTabs, true)) {
-            $this->selectedGroup = null;
-        }
     }
 
     /** Re-render when cart changes so card qty controls stay in sync */
@@ -126,16 +179,51 @@ class MealsList extends Component
         $this->currentPage = max(1, min($page, $this->lastPage));
     }
 
-    public function render()
+    /**
+     * @return array{meals: array<int, array<string, mixed>>, lastPage: int, clientSearchFallback: bool}
+     */
+    private function fetchMealsPage(ExternalDataService $service): array
     {
-        $service = app(ExternalDataService::class);
+        $searchTrim = trim($this->search);
+        $tagIds = $this->selectedTagIds;
 
-        if ($this->search !== '') {
+        $filters = [
+            'page' => $this->currentPage,
+        ];
+        if ($this->selectedGroup) {
+            $filters['group_id'] = $this->selectedGroup;
+        }
+        if ($tagIds !== []) {
+            $filters['tags'] = $tagIds;
+        }
+        if ($searchTrim !== '') {
+            $filters['search'] = $searchTrim;
+        }
+
+        $result = $service->getMeals($filters);
+        if ($this->selectedGroup && empty($result['data'] ?? [])) {
+            $menuFilters = array_merge($filters, ['menu_id' => $this->selectedGroup]);
+            unset($menuFilters['group_id']);
+            $menuResult = $service->getMeals($menuFilters);
+            if (! empty($menuResult['data'] ?? [])) {
+                $result = $menuResult;
+            }
+        }
+
+        $meals = $result['data'] ?? [];
+        $lastPage = (int) ($result['meta']['lastPage'] ?? 1);
+        $total = (int) ($result['meta']['total'] ?? count($meals));
+
+        if (
+            $searchTrim !== ''
+            && $this->currentPage === 1
+            && $meals === []
+            && $total === 0
+        ) {
             $allMeals = $this->selectedGroup
                 ? $service->getAllMeals($this->selectedGroup)
                 : $service->getAllMeals();
 
-            // Fallback: some API setups expect menu_id instead of group_id.
             if ($this->selectedGroup && $allMeals === []) {
                 $allMeals = array_values(array_filter(
                     $service->getAllMeals(),
@@ -143,32 +231,47 @@ class MealsList extends Component
                 ));
             }
 
-            $query = mb_strtolower($this->search);
-            $meals = array_values(array_filter($allMeals, function ($meal) use ($query) {
-                return str_contains(mb_strtolower($meal['name']), $query)
-                    || str_contains(mb_strtolower($meal['description'] ?? ''), $query)
-                    || str_contains(mb_strtolower($meal['tag_name'] ?? ''), $query);
+            if ($tagIds !== []) {
+                $tagSet = array_flip($tagIds);
+                $allMeals = array_values(array_filter($allMeals, function ($meal) use ($tagSet): bool {
+                    foreach ($meal['tags'] ?? [] as $t) {
+                        $tid = is_array($t) ? (int) ($t['id'] ?? 0) : 0;
+                        if ($tid > 0 && isset($tagSet[$tid])) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }));
+            }
+
+            $query = mb_strtolower($searchTrim);
+            $filtered = array_values(array_filter($allMeals, function ($meal) use ($query) {
+                return str_contains(mb_strtolower((string) ($meal['name'] ?? '')), $query)
+                    || str_contains(mb_strtolower((string) ($meal['description'] ?? '')), $query)
+                    || str_contains(mb_strtolower((string) ($meal['tag_name'] ?? '')), $query);
             }));
 
-            $this->lastPage = 1;
-        } else {
-            $filters = ['page' => $this->currentPage];
-
-            if ($this->selectedGroup) {
-                $filters['group_id'] = $this->selectedGroup;
-            }
-
-            $result = $service->getMeals($filters);
-            if ($this->selectedGroup && empty($result['data'] ?? [])) {
-                $menuFilters = ['page' => $this->currentPage, 'menu_id' => $this->selectedGroup];
-                $menuResult = $service->getMeals($menuFilters);
-                if (! empty($menuResult['data'] ?? [])) {
-                    $result = $menuResult;
-                }
-            }
-            $meals = $result['data'];
-            $this->lastPage = (int) ($result['meta']['lastPage'] ?? 1);
+            return [
+                'meals' => $filtered,
+                'lastPage' => 1,
+                'clientSearchFallback' => true,
+            ];
         }
+
+        return [
+            'meals' => $meals,
+            'lastPage' => max(1, $lastPage),
+            'clientSearchFallback' => false,
+        ];
+    }
+
+    public function render()
+    {
+        $service = app(ExternalDataService::class);
+
+        $payload = $this->fetchMealsPage($service);
+        $this->lastPage = $payload['lastPage'];
 
         $rawCart = session()->get(CartManager::SESSION_MARKET, []);
         $cartItems = array_filter(
@@ -178,8 +281,9 @@ class MealsList extends Component
         );
 
         return view('livewire.meals.meals-list', [
-            'meals' => $meals,
+            'meals' => $payload['meals'],
             'cartItems' => $cartItems,
+            'clientSearchFallback' => $payload['clientSearchFallback'],
         ]);
     }
 }

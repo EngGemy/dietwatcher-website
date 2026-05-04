@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -52,7 +53,7 @@ class ExternalDataService
         return $url;
     }
 
-    protected function http(): \Illuminate\Http\Client\PendingRequest
+    protected function http(): PendingRequest
     {
         $locale = app()->getLocale();
 
@@ -69,6 +70,14 @@ class ExternalDataService
         }
 
         return $request;
+    }
+
+    /**
+     * Expose the configured HTTP client (e.g. for one-off form posts outside cached helpers).
+     */
+    public function httpClient(): PendingRequest
+    {
+        return $this->http();
     }
 
     /**
@@ -554,7 +563,7 @@ class ExternalDataService
     /**
      * Get meals from /meals API with full filter support.
      *
-     * @param  array  $filters  Supported: page, group_id, menu_id, tags (array of tag IDs)
+     * @param  array  $filters  Supported: page, group_id, menu_id, tags (array of tag IDs), search (string)
      * @return array{data: array, meta: array}
      */
     public function getMeals(array $filters = []): array
@@ -563,10 +572,11 @@ class ExternalDataService
         $groupId = $filters['group_id'] ?? null;
         $menuId = $filters['menu_id'] ?? null;
         $tags = $filters['tags'] ?? [];
+        $search = trim((string) ($filters['search'] ?? ''));
 
         $cacheKey = $this->cacheKey('meals_'.md5(json_encode($filters)));
 
-        return Cache::remember($cacheKey, 300, function () use ($page, $groupId, $menuId, $tags) {
+        return Cache::remember($cacheKey, 300, function () use ($page, $groupId, $menuId, $tags, $search) {
             try {
                 $params = ['page' => $page];
                 if ($groupId) {
@@ -576,7 +586,10 @@ class ExternalDataService
                     $params['menu_id'] = $menuId;
                 }
                 if (! empty($tags)) {
-                    $params['tags'] = $tags;
+                    $params['tags'] = array_values(array_map('intval', $tags));
+                }
+                if ($search !== '') {
+                    $params['search'] = $search;
                 }
 
                 $response = $this->http()->get("{$this->baseUrl}/meals", $params);
@@ -605,7 +618,7 @@ class ExternalDataService
     {
         $cacheKey = $this->cacheKey('all_meals'.($groupId ? "_group_{$groupId}" : ''));
 
-        return Cache::remember($cacheKey, 300, function () use ($groupId) {
+        return Cache::remember($cacheKey, 600, function () use ($groupId) {
             $allMeals = [];
             $page = 1;
             $maxPages = 50;
@@ -686,50 +699,58 @@ class ExternalDataService
      */
     public function getRelatedMeals(int $excludeId, ?int $groupId, int $limit = 8): array
     {
-        $seen = [$excludeId => true];
-        $out = [];
+        $gKey = $groupId !== null && $groupId > 0 ? (string) $groupId : 'none';
 
-        $push = function (array $rows) use (&$out, &$seen, $limit): bool {
-            foreach ($rows as $m) {
-                $mid = (int) ($m['id'] ?? 0);
-                if ($mid === 0 || isset($seen[$mid])) {
-                    continue;
+        return Cache::remember(
+            $this->cacheKey("related_meals_{$excludeId}_{$gKey}_{$limit}"),
+            300,
+            function () use ($excludeId, $groupId, $limit): array {
+                $seen = [$excludeId => true];
+                $out = [];
+
+                $push = function (array $rows) use (&$out, &$seen, $limit): bool {
+                    foreach ($rows as $m) {
+                        $mid = (int) ($m['id'] ?? 0);
+                        if ($mid === 0 || isset($seen[$mid])) {
+                            continue;
+                        }
+                        $seen[$mid] = true;
+                        $out[] = $m;
+                        if (count($out) >= $limit) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                };
+
+                if ($groupId) {
+                    $r = $this->getMeals(['page' => 1, 'group_id' => $groupId]);
+                    if ($push($r['data'] ?? [])) {
+                        return array_slice($out, 0, $limit);
+                    }
+                    $last = (int) ($r['meta']['lastPage'] ?? 1);
+                    if ($last > 1) {
+                        $r2 = $this->getMeals(['page' => 2, 'group_id' => $groupId]);
+                        if ($push($r2['data'] ?? [])) {
+                            return array_slice($out, 0, $limit);
+                        }
+                    }
                 }
-                $seen[$mid] = true;
-                $out[] = $m;
-                if (count($out) >= $limit) {
-                    return true;
+
+                $r = $this->getMeals(['page' => 1]);
+                if ($push($r['data'] ?? [])) {
+                    return array_slice($out, 0, $limit);
                 }
-            }
-
-            return false;
-        };
-
-        if ($groupId) {
-            $r = $this->getMeals(['page' => 1, 'group_id' => $groupId]);
-            if ($push($r['data'] ?? [])) {
-                return $out;
-            }
-            $last = (int) ($r['meta']['lastPage'] ?? 1);
-            if ($last > 1) {
-                $r2 = $this->getMeals(['page' => 2, 'group_id' => $groupId]);
-                if ($push($r2['data'] ?? [])) {
-                    return $out;
+                $last = (int) ($r['meta']['lastPage'] ?? 1);
+                if ($last > 1) {
+                    $r2 = $this->getMeals(['page' => 2]);
+                    $push($r2['data'] ?? []);
                 }
+
+                return array_slice($out, 0, $limit);
             }
-        }
-
-        $r = $this->getMeals(['page' => 1]);
-        if ($push($r['data'] ?? [])) {
-            return $out;
-        }
-        $last = (int) ($r['meta']['lastPage'] ?? 1);
-        if ($last > 1) {
-            $r2 = $this->getMeals(['page' => 2]);
-            $push($r2['data'] ?? []);
-        }
-
-        return array_slice($out, 0, $limit);
+        );
     }
 
     /**
@@ -885,9 +906,6 @@ class ExternalDataService
         return null;
     }
 
-    /**
-     * @param  mixed  $value
-     */
     protected function parseNutritionValue(mixed $value): ?float
     {
         if ($value === null || $value === '') {

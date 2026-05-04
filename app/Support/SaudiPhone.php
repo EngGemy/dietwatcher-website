@@ -42,6 +42,20 @@ final class SaudiPhone
     }
 
     /**
+     * E.164 format with plus, for external API calls only.
+     * Returns '+966XXXXXXXXX' or empty string if invalid.
+     */
+    public static function toE164(?string $phone): string
+    {
+        $nine = self::matchKey($phone);
+        if (strlen($nine) !== 9 || $nine[0] !== '5') {
+            return '';
+        }
+
+        return '+966'.$nine;
+    }
+
+    /**
      * Nine digits for the checkout input (after +966 prefix).
      */
     public static function localDigitsForInput(?string $phone): string

@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use Illuminate\Http\Client\RequestException;
+use App\Support\SaudiPhone;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -26,21 +27,21 @@ class ApiAuthService
 
     // ─── HTTP helpers ─────────────────────────────────────────────────
 
-    protected function http(): \Illuminate\Http\Client\PendingRequest
+    protected function http(): PendingRequest
     {
         return Http::withOptions(['timeout' => 15, 'connect_timeout' => 8])
             ->acceptJson()
             ->withHeaders(['Accept-Language' => app()->getLocale()]);
     }
 
-    protected function httpWithToken(string $token): \Illuminate\Http\Client\PendingRequest
+    protected function httpWithToken(string $token): PendingRequest
     {
         return $this->http()->withToken($token);
     }
 
     protected function url(string $path): string
     {
-        return $this->baseUrl . '/' . ltrim($path, '/');
+        return $this->baseUrl.'/'.ltrim($path, '/');
     }
 
     // ─── OTP / Login ──────────────────────────────────────────────────
@@ -53,7 +54,7 @@ class ApiAuthService
     {
         try {
             $response = $this->http()->asForm()->post($this->url('login/ordinary/reset'), [
-                'mobile' => $phone,
+                'mobile' => SaudiPhone::toE164($phone),
             ]);
             $json = $response->json() ?? [];
             $json['_http_ok'] = $response->successful();
@@ -76,10 +77,10 @@ class ApiAuthService
     public function verifyOtp(string $phone, string $code, ?string $deviceId = null): array
     {
         try {
-            $deviceId ??= 'web-checkout-' . substr(hash('sha256', session()->getId()), 0, 40);
+            $deviceId ??= 'web-checkout-'.substr(hash('sha256', session()->getId()), 0, 40);
 
             $response = $this->http()->asForm()->post($this->url('login/ordinary/verify'), [
-                'mobile' => $phone,
+                'mobile' => SaudiPhone::toE164($phone),
                 'code' => $code,
                 'device_id' => $deviceId,
             ]);
@@ -105,9 +106,11 @@ class ApiAuthService
     {
         try {
             $response = $this->http()->post($this->url('register/mobile'), $data);
+
             return $response->json() ?? [];
         } catch (\Exception $e) {
             Log::error('ApiAuthService::registerMobile failed', ['error' => $e->getMessage()]);
+
             return ['success' => false, 'message' => __('auth.register_failed')];
         }
     }
@@ -119,6 +122,13 @@ class ApiAuthService
     public function simpleRegister(array $data): array
     {
         try {
+            $rawMobile = (string) ($data['mobile'] ?? '');
+            $rawPhone = (string) ($data['phone'] ?? '');
+            $e164 = SaudiPhone::toE164($rawMobile !== '' ? $rawMobile : $rawPhone);
+            if ($e164 !== '') {
+                $data['mobile'] = $e164;
+                $data['phone'] = $e164;
+            }
             $response = $this->http()->post($this->url('register/simple-register'), $data);
             $json = $response->json() ?? [];
             $json['_http_ok'] = $response->successful();
@@ -126,6 +136,7 @@ class ApiAuthService
             return $json;
         } catch (\Exception $e) {
             Log::error('ApiAuthService::simpleRegister failed', ['error' => $e->getMessage()]);
+
             return ['success' => false, 'message' => __('auth.register_failed')];
         }
     }
@@ -139,9 +150,11 @@ class ApiAuthService
     {
         try {
             $response = $this->httpWithToken($token)->get($this->url('profile'));
+
             return $response->json() ?? [];
         } catch (\Exception $e) {
             Log::error('ApiAuthService::getProfile failed', ['error' => $e->getMessage()]);
+
             return [];
         }
     }
@@ -163,6 +176,7 @@ class ApiAuthService
             return $body['data'] ?? $body ?? [];
         } catch (\Exception $e) {
             Log::error('ApiAuthService::getAddresses failed', ['error' => $e->getMessage()]);
+
             return [];
         }
     }
@@ -193,9 +207,11 @@ class ApiAuthService
     {
         try {
             $response = $this->httpWithToken($token)->delete($this->url("addresses/{$id}"));
+
             return $response->json() ?? [];
         } catch (\Exception $e) {
             Log::error('ApiAuthService::deleteAddress failed', ['id' => $id, 'error' => $e->getMessage()]);
+
             return ['success' => false, 'message' => __('address.delete_failed')];
         }
     }
@@ -211,9 +227,11 @@ class ApiAuthService
         try {
             $response = $this->http()->get($this->url('districts'));
             $body = $response->json();
+
             return $body['data'] ?? $body ?? [];
         } catch (\Exception $e) {
             Log::error('ApiAuthService::getDistricts failed', ['error' => $e->getMessage()]);
+
             return [];
         }
     }

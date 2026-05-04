@@ -35,6 +35,18 @@
     $shareUrl = urlencode(url()->current());
     $ingredientRows = $meal['ingredients'] ?? [];
     $benefitsText = is_string($meal['benefits'] ?? null) ? trim($meal['benefits']) : '';
+    $mealListRoute = request()->routeIs('meals.show') ? 'meals.index' : 'store.index';
+    $mealTagsForLinks = [];
+    foreach ($meal['tags'] ?? [] as $t) {
+        if (! is_array($t)) {
+            continue;
+        }
+        $tid = (int) ($t['id'] ?? $t['value'] ?? 0);
+        $tname = trim((string) ($t['name'] ?? ''));
+        if ($tid > 0 && $tname !== '') {
+            $mealTagsForLinks[] = ['id' => $tid, 'name' => $tname, 'icon' => $t['icon'] ?? ''];
+        }
+    }
 @endphp
 
 @section('title', ($meal['name'] ?? __('Meals')) . ' | ' . config('app.name'))
@@ -206,10 +218,12 @@
                             <p class="text-lg">{{ __('market.category_label') }}</p>
                             <p class="text-lg font-bold">{{ $categoryName }}</p>
                         </div>
-                        <div class="flex items-center justify-between bg-white px-5 py-3.5">
-                            <p class="text-lg">{{ __('market.tag_label') }}</p>
-                            <p class="text-lg font-bold">{{ $tagLabel }}</p>
-                        </div>
+                        @if($mealTagsForLinks === [])
+                            <div class="flex items-center justify-between bg-white px-5 py-3.5">
+                                <p class="text-lg">{{ __('market.tag_label') }}</p>
+                                <p class="text-lg font-bold">{{ $tagLabel }}</p>
+                            </div>
+                        @endif
                         <div class="flex items-center justify-between bg-white px-5 py-3.5 md:col-span-2">
                             <p class="text-lg">{{ __('market.sharing') }}</p>
                             <div class="flex items-center gap-2">
@@ -226,6 +240,25 @@
                         </div>
                     </div>
                 </div>
+
+                @if($mealTagsForLinks !== [])
+                    <div class="mt-6">
+                        <p class="mb-3 text-lg font-semibold text-gray-800">{{ __('Tags') }}</p>
+                        <div class="flex flex-wrap gap-2">
+                            @foreach($mealTagsForLinks as $t)
+                                <a
+                                    href="{{ route($mealListRoute, ['tag' => $t['id']]) }}"
+                                    class="meal-detail-tag-pill inline-flex items-center gap-2 rounded-full border border-[#e0e0e8] bg-white px-4 py-2 text-sm font-semibold text-[#555] transition hover:border-[#279ff9] hover:text-[#279ff9]"
+                                >
+                                    @if(! empty($t['icon']))
+                                        <img src="{{ $t['icon'] }}" alt="" class="size-4 shrink-0 rounded-full object-cover" width="16" height="16" />
+                                    @endif
+                                    {{ $t['name'] }}
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
             </div>
         </div>
 
@@ -258,7 +291,12 @@
                         @if(!empty($ingredientRows))
                             <ul class="list-disc space-y-2 ps-5 text-black/80">
                                 @foreach($ingredientRows as $ing)
-                                    <li>{{ is_array($ing) ? ($ing['name'] ?? '') : (string) $ing }}</li>
+                                    <li>
+                                        {{ is_array($ing) ? ($ing['name'] ?? '') : (string) $ing }}
+                                        @if(is_array($ing) && ! empty($ing['quantity']))
+                                            <span class="text-sm text-gray-400">({{ $ing['quantity'] }})</span>
+                                        @endif
+                                    </li>
                                 @endforeach
                             </ul>
                         @else
