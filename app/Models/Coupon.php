@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Support\SaudiPhone;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
@@ -43,7 +44,7 @@ class Coupon extends Model
      */
     public function isValid(): bool
     {
-        if (!$this->is_active) {
+        if (! $this->is_active) {
             return false;
         }
 
@@ -67,7 +68,7 @@ class Coupon extends Model
      */
     public function isValidForUser(string $identifier): bool
     {
-        if (!$this->isValid()) {
+        if (! $this->isValid()) {
             return false;
         }
 
@@ -75,9 +76,15 @@ class Coupon extends Model
             return true;
         }
 
+        $needle = SaudiPhone::matchKey($identifier);
+        if ($needle === '') {
+            return false;
+        }
+
         $userUses = DB::table('coupon_uses')
             ->where('coupon_id', $this->id)
-            ->where('identifier', $identifier)
+            ->get(['identifier'])
+            ->filter(fn ($row) => SaudiPhone::matchKey((string) ($row->identifier ?? '')) === $needle)
             ->count();
 
         return $userUses < $this->max_uses_per_user;

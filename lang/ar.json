@@ -737,6 +737,7 @@
     "address.save_failed": "تعذّر حفظ العنوان على الخادم. يمكنك متابعة الطلب.",
     "checkout.saved_addresses_title": "عناوينك المحفوظة",
     "checkout.saved_addresses_hint": "اضغط على عنوان لملء التوصيل لهذا الطلب، أو حدد موقعاً جديداً على الخريطة أدناه.",
+    "checkout.phone_saudi_invalid": "أدخل رقم جوال سعودي صحيح: 9 أرقام تبدأ بـ 5 (بعد +966).",
     "admin.payments.navigation_label": "المدفوعات",
     "admin.payments.title": "المدفوعات",
     "admin.payments.empty": "لا توجد مدفوعات",

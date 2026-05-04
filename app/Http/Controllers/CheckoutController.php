@@ -12,11 +12,13 @@ use App\Models\Settings\Setting;
 use App\Services\ApiAuthService;
 use App\Services\ExternalDataService;
 use App\Services\Payment\MoyasarPaymentService;
+use App\Support\SaudiPhone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class CheckoutController extends Controller
@@ -30,21 +32,7 @@ class CheckoutController extends Controller
 
     private static function normalizePhoneForMatch(?string $phone): string
     {
-        $digits = preg_replace('/\D+/', '', (string) ($phone ?? '')) ?? '';
-        if ($digits === '') {
-            return '';
-        }
-
-        // Normalize SA formats: +9665xxxxxxxx, 9665xxxxxxxx, 05xxxxxxxx
-        if (str_starts_with($digits, '966')) {
-            $digits = substr($digits, 3);
-        }
-        if (str_starts_with($digits, '0')) {
-            $digits = substr($digits, 1);
-        }
-
-        // keep significant local part only
-        return substr($digits, -9);
+        return SaudiPhone::matchKey($phone);
     }
 
     public function __construct(
@@ -362,7 +350,7 @@ class CheckoutController extends Controller
             'coupon' => 'nullable|string|max:50',
             'promocode_name' => 'nullable|string|max:50',
             'name' => 'required|string|max:255',
-            'phone' => 'required|string|max:20',
+            'phone' => 'required|string|max:25',
             'branch_id' => 'required_if:delivery_type,pickup|nullable|integer',
             // Saved-address flow may provide selected_address_id only.
             'zone_id' => 'nullable|integer',
@@ -371,6 +359,14 @@ class CheckoutController extends Controller
             'building' => 'nullable|string|max:500',
             'delivery_pickup_type' => 'nullable|string|max:50',
         ])->validate();
+
+        $normalizedPhone = SaudiPhone::to966((string) ($validated['phone'] ?? ''));
+        if ($normalizedPhone === '') {
+            return redirect()->back()
+                ->withErrors(['phone' => __('checkout.phone_saudi_invalid')])
+                ->withInput();
+        }
+        $validated['phone'] = $normalizedPhone;
 
         if (
             ($validated['delivery_type'] ?? '') === 'home'
@@ -602,6 +598,16 @@ class CheckoutController extends Controller
             'identifier' => 'required|string|max:255',
         ]);
 
+        $identifier = SaudiPhone::to966((string) $validated['identifier']);
+        if ($identifier === '') {
+            return response()->json([
+                'valid' => false,
+                'discount' => 0,
+                'message' => __('checkout.phone_saudi_invalid'),
+            ], 422);
+        }
+        $validated['identifier'] = $identifier;
+
         $coupon = Coupon::where('code', strtoupper($validated['code']))->first();
 
         if (! $coupon) {
@@ -665,7 +671,7 @@ class CheckoutController extends Controller
     {
         try {
             $data = Validator::make($request->all(), [
-                'phone' => 'required|string|max:20',
+                'phone' => 'required|string|max:25',
                 'delivery_lat' => 'required|numeric',
                 'delivery_lng' => 'required|numeric',
                 'street' => 'nullable|string|max:1000',
@@ -676,13 +682,23 @@ class CheckoutController extends Controller
                 'delivery_title' => 'nullable|string|max:120',
                 'building' => 'nullable|string|max:500',
             ])->validate();
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => __('payment.fill_delivery_first'),
                 'errors' => $e->errors(),
             ], 422);
         }
+
+        $normalizedSyncPhone = SaudiPhone::to966((string) ($data['phone'] ?? ''));
+        if ($normalizedSyncPhone === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.phone_saudi_invalid'),
+                'errors' => ['phone' => [__('checkout.phone_saudi_invalid')]],
+            ], 422);
+        }
+        $data['phone'] = $normalizedSyncPhone;
 
         $baseDesc = trim((string) ($data['street'] ?? ''));
         if ($baseDesc === '' && ! empty($data['delivery_description'])) {
@@ -818,7 +834,7 @@ class CheckoutController extends Controller
         $hasPlanItems = collect($cart)->contains(fn ($item) => ! empty($item['options']['duration_days']));
 
         $rules = [
-            'phone' => 'required|string|max:20',
+            'phone' => 'required|string|max:25',
             'start_date' => $hasPlanItems ? 'required|string|max:50' : 'nullable|string|max:50',
             'duration' => $hasPlanItems ? 'required|in:once,weekly,monthly,3months' : 'nullable|in:once,weekly,monthly,3months',
             'delivery_type' => 'required|in:home,pickup',
@@ -839,13 +855,23 @@ class CheckoutController extends Controller
 
         try {
             $validated = Validator::make($request->all(), $rules)->validate();
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => __('payment.fill_delivery_first'),
                 'errors' => $e->errors(),
             ], 422);
         }
+
+        $normalizedMoyasarPhone = SaudiPhone::to966((string) ($validated['phone'] ?? ''));
+        if ($normalizedMoyasarPhone === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.phone_saudi_invalid'),
+                'errors' => ['phone' => [__('checkout.phone_saudi_invalid')]],
+            ], 422);
+        }
+        $validated['phone'] = $normalizedMoyasarPhone;
 
         if (
             ($validated['delivery_type'] ?? '') === 'home'
