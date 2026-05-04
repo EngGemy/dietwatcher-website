@@ -147,9 +147,9 @@
                                 if ($oStatusLabel === $oStatusKey) $oStatusLabel = ucfirst($oStatus);
                                 $oDate = $order['delivery_date'] ?? $order['created_at'] ?? $order['date'] ?? '';
                                 $oTotal = $order['total'] ?? $order['amount'] ?? $order['grand_total'] ?? null;
-                                $detailsUrl = $isLocalWebOrder && $orderNumber !== ''
-                                    ? route('payment.result', ['order' => $orderNumber])
-                                    : ($oid ? route('account.orders.show', ['id' => $oid]) : '#');
+                                $detailsUrl = $oid
+                                    ? route('account.orders.show', ['id' => $oid])
+                                    : ($isLocalWebOrder && $orderNumber !== '' ? route('payment.result', ['order' => $orderNumber]) : '#');
                                 $displayOrderRef = $oid ?: ($orderNumber !== '' ? $orderNumber : '—');
                             @endphp
                             <li class="px-5 py-3 flex items-center justify-between gap-3 hover:bg-gray-50 transition">

@@ -24,7 +24,9 @@ class Payment extends Model
         'customer_name',
         'customer_email',
         'customer_phone',
+        'customer_phone_normalized',
         'cart_items',
+        'checkout_payload',
         'start_date',
         'duration',
         'delivery_type',
@@ -38,6 +40,11 @@ class Payment extends Model
         'masked_pan',
         'message',
         'raw_response',
+        'external_order_id',
+        'external_order_number',
+        'external_sync_status',
+        'external_sync_message',
+        'external_synced_at',
         'expires_at',
     ];
 
@@ -47,12 +54,15 @@ class Payment extends Model
             'status' => PaymentStatus::class,
             'payment_method' => PaymentMethod::class,
             'cart_items' => 'array',
+            'checkout_payload' => 'array',
             'raw_response' => 'array',
             'amount' => 'integer',
             'subtotal' => 'integer',
             'delivery_fee' => 'integer',
             'vat_amount' => 'integer',
             'discount_amount' => 'integer',
+            'external_order_id' => 'integer',
+            'external_synced_at' => 'datetime',
             'expires_at' => 'datetime',
         ];
     }

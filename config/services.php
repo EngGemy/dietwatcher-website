@@ -38,6 +38,7 @@ return [
     'external_api' => [
         'url' => env('EXTERNAL_API_URL', 'https://dietdev-ledsvd8q.on-forge.com/api'),
         'token' => env('EXTERNAL_API_TOKEN'),
+        'default_order_branch_id' => env('EXTERNAL_API_DEFAULT_ORDER_BRANCH_ID'),
         /** When true (default), checkout OTP uses POST login/ordinary/reset + verify and stores API token in session. */
         'checkout_use_external_login' => filter_var(env('CHECKOUT_USE_EXTERNAL_LOGIN', true), FILTER_VALIDATE_BOOLEAN),
         'use_new_auth_flow' => filter_var(env('CHECKOUT_USE_NEW_AUTH_FLOW', false), FILTER_VALIDATE_BOOLEAN),
