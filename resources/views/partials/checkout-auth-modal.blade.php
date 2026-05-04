@@ -49,7 +49,7 @@
                 <template x-if="step === 'otp_1' || step === 'sending_otp_1' || step === 'verifying_1'">
                     <div>
                         <p class="otp-modal__subtitle" x-text="otpSubtitle()"></p>
-                        <p class="otp-modal__phone" dir="ltr" x-text="mobile"></p>
+                        <p class="otp-modal__phone" dir="ltr" x-text="displayAuthPhone()"></p>
 
                         <div class="otp-modal__digits" dir="ltr">
                             <template x-for="idx in otpIndices" :key="'otp1-' + idx">
@@ -92,7 +92,7 @@
 
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('account.phone') }}</label>
-                            <input type="text" class="form-control" :value="mobile" readonly dir="ltr" />
+                            <p class="form-control border border-gray-200 bg-gray-50 py-2.5 text-gray-900" dir="ltr" x-text="displayAuthPhone()"></p>
                             <button type="button" class="mt-2 text-sm font-semibold text-blue" @click="changeNumber()">
                                 {{ __('checkout.auth.changeNumber') }}
                             </button>
@@ -147,7 +147,7 @@
                 <template x-if="step === 'otp_2' || step === 'sending_otp_2' || step === 'verifying_2'">
                     <div>
                         <p class="otp-modal__subtitle" x-text="otpSubtitle()"></p>
-                        <p class="otp-modal__phone" dir="ltr" x-text="mobile"></p>
+                        <p class="otp-modal__phone" dir="ltr" x-text="displayAuthPhone()"></p>
 
                         <div class="otp-modal__digits" dir="ltr">
                             <template x-for="idx in otpIndices" :key="'otp2-' + idx">
@@ -189,6 +189,27 @@
 
 @push('scripts')
 <script>
+(function () {
+    if (typeof window.dwSaudiPhone966 === 'function') {
+        return;
+    }
+    window.dwSaudiPhoneDigits = function (input) {
+        var d = String(input || '').replace(/\D/g, '');
+        if (d.indexOf('966') === 0) d = d.slice(3);
+        if (d.charAt(0) === '0') d = d.slice(1);
+        return d.slice(-9);
+    };
+    window.dwSaudiPhone966 = function (input) {
+        var nine = window.dwSaudiPhoneDigits(input);
+        if (nine.length !== 9 || nine.charAt(0) !== '5') return '';
+        return '966' + nine;
+    };
+    window.dwSaudiDisplayPhone = function (input) {
+        var f = window.dwSaudiPhone966(input);
+        return f ? ('+' + f) : '';
+    };
+})();
+
 if (typeof window.checkoutAuthModalMock === 'undefined') {
     window.checkoutAuthModalMock = function () {
         return {
@@ -224,7 +245,8 @@ if (typeof window.checkoutAuthModalMock === 'undefined') {
                 'errors.required': @json(__('validation.required')),
             },
             init() {
-                this.mobile = this.getPhoneFromCheckout();
+                const raw = this.getPhoneFromCheckout();
+                this.mobile = window.dwSaudiPhone966(raw) || raw.replace(/\D/g, '');
                 window.addEventListener('open-checkout-auth', (event) => this.openModal(event.detail?.phone || ''));
             },
             getPhoneFromCheckout() {
@@ -232,7 +254,11 @@ if (typeof window.checkoutAuthModalMock === 'undefined') {
                 return el && el.value ? String(el.value) : '';
             },
             otpSubtitle() {
-                return this.i18nOtpSubtitle.replace(':mobile', this.mobile || ':mobile');
+                const display = window.dwSaudiDisplayPhone(this.mobile) || this.mobile || ':mobile';
+                return this.i18nOtpSubtitle.replace(':mobile', display);
+            },
+            displayAuthPhone() {
+                return window.dwSaudiDisplayPhone(this.mobile) || this.mobile || '';
             },
             resendLabel() {
                 if (this.resendIn > 0) {
@@ -265,7 +291,8 @@ if (typeof window.checkoutAuthModalMock === 'undefined') {
                 this.step = 'sending_otp_1';
                 this.errors = {};
                 this.needsRegistrationFlow = false;
-                this.mobile = forcedPhone ? String(forcedPhone).trim() : this.getPhoneFromCheckout();
+                const raw = forcedPhone ? String(forcedPhone).trim() : this.getPhoneFromCheckout();
+                this.mobile = window.dwSaudiPhone966(raw) || raw.replace(/\D/g, '');
                 this.otp1 = ['', '', '', ''];
                 this.otp2 = ['', '', '', ''];
                 this.sendOtp('otp_1');
@@ -322,6 +349,7 @@ if (typeof window.checkoutAuthModalMock === 'undefined') {
                         profile: data.profile || {},
                         addresses: data.addresses || [],
                         isContinue: !!data.is_continue,
+                        phone: this.mobile,
                     },
                 }));
             },
@@ -369,14 +397,16 @@ if (typeof window.checkoutAuthModalMock === 'undefined') {
                 this.step = sendingState;
                 this.errors = {};
                 try {
+                    const phoneE164 = window.dwSaudiPhone966(this.mobile) || this.mobile;
                     const res = await fetch('{{ route('otp.send') }}', {
                         method: 'POST',
                         credentials: 'same-origin',
                         headers: this.buildHeaders(),
-                        body: JSON.stringify({ phone: this.mobile, _token: this.csrfToken() }),
+                        body: JSON.stringify({ phone: phoneE164, _token: this.csrfToken() }),
                     });
                     const data = await res.json();
                     if (data.success || data.ok) {
+                        this.mobile = phoneE164;
                         this.startResend(60);
                         this.step = otpState;
                         this[stepKey === 'otp_1' ? 'otp1' : 'otp2'] = ['', '', '', ''];
@@ -393,12 +423,13 @@ if (typeof window.checkoutAuthModalMock === 'undefined') {
                 this.step = 'verifying_1';
                 this.errors = {};
                 try {
+                    const phoneE164 = window.dwSaudiPhone966(this.mobile) || this.mobile;
                     const res = await fetch('{{ route('otp.verify') }}', {
                         method: 'POST',
                         credentials: 'same-origin',
                         headers: this.buildHeaders(),
                         body: JSON.stringify({
-                            phone: this.mobile,
+                            phone: phoneE164,
                             otp: this.otp1.join(''),
                             device_id: this.deviceId(),
                             _token: this.csrfToken(),
@@ -406,9 +437,11 @@ if (typeof window.checkoutAuthModalMock === 'undefined') {
                     });
                     const data = await res.json();
                     if (data.ok && data.needs_registration === true) {
+                        this.mobile = phoneE164;
                         this.needsRegistrationFlow = true;
                         this.step = 'register';
                     } else if (data.ok && !data.needs_registration) {
+                        this.mobile = phoneE164;
                         this.step = 'authenticated';
                         this.onAuthenticated(data);
                         this.closeModal();
@@ -511,12 +544,13 @@ if (typeof window.checkoutAuthModalMock === 'undefined') {
                 this.step = 'verifying_2';
                 this.errors = {};
                 try {
+                    const phoneE164 = window.dwSaudiPhone966(this.mobile) || this.mobile;
                     const res = await fetch('{{ route('otp.verify') }}', {
                         method: 'POST',
                         credentials: 'same-origin',
                         headers: this.buildHeaders(),
                         body: JSON.stringify({
-                            phone: this.mobile,
+                            phone: phoneE164,
                             otp: this.otp2.join(''),
                             device_id: this.deviceId(),
                             _token: this.csrfToken(),
@@ -524,6 +558,7 @@ if (typeof window.checkoutAuthModalMock === 'undefined') {
                     });
                     const data = await res.json();
                     if (data.ok && ! data.needs_registration) {
+                        this.mobile = phoneE164;
                         this.step = 'authenticated';
                         this.onAuthenticated(data);
                         this.closeModal();

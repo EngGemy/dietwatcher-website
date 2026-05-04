@@ -17,6 +17,8 @@ $sessionVerifiedPhone = session('phone_verified');
 $oldPhone = old('phone', '');
 $initialPhone = $oldPhone !== '' ? $oldPhone : (string) ($sessionVerifiedPhone ?? '');
 $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
+$initialPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput($initialPhone);
+$initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('address_phone', ''));
 @endphp
 
 @section('title', __('Checkout') . ' | ' . $siteName)
@@ -205,14 +207,21 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                             </template>
 
                             <div>
-                                <div class="form-input-action">
-                                    <input type="tel" name="phone" class="form-control @error('phone') border-red-500 @enderror"
-                                           placeholder="{{ __('Add your phone number') }}" value="{{ old('phone') }}" required dir="ltr"
-                                           x-model="phone" :readonly="phoneVerified"
-                                           :class="phoneVerified ? 'bg-gray-50 cursor-default' : ''" />
+                                <div class="form-input-action checkout-phone-row flex w-full flex-row flex-nowrap items-stretch gap-2" dir="ltr">
+                                    <input type="hidden" name="phone" id="checkout_phone_e164" x-bind:value="fullPhone966()" autocomplete="off" />
+                                    <div class="checkout-phone-input-group flex min-w-0 flex-1 items-stretch rounded-md border border-gray-300 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 @error('phone') !border-red-500 @enderror"
+                                         :class="phoneVerified ? 'bg-gray-50' : ''">
+                                        <span class="flex select-none items-center border-e border-gray-200 bg-gray-50 px-3 text-sm font-medium text-gray-600" dir="ltr">+966</span>
+                                        <input type="tel" class="min-w-0 flex-1 border-0 bg-transparent px-3 py-2.5 text-gray-900 outline-none focus:ring-0"
+                                               autocomplete="tel" inputmode="numeric" maxlength="9" placeholder="5XXXXXXXX" required dir="ltr"
+                                               x-model="phoneLocal"
+                                               @input="phoneLocal = ($event.target.value || '').replace(/\D/g, '').slice(0, 9)"
+                                               :readonly="phoneVerified"
+                                               :class="phoneVerified ? 'cursor-default bg-transparent' : ''" />
+                                    </div>
                                     <template x-if="!phoneVerified">
                                         <button type="button" class="form-input-action__btn"
-                                                @click="openOtpModal()" :disabled="otpLoading || !phone.trim()">
+                                                @click="openOtpModal()" :disabled="otpLoading || !fullPhone966()">
                                             <span x-show="!otpLoading">{{ __('Verify') }}</span>
                                             <span x-show="otpLoading" x-cloak>...</span>
                                         </button>
@@ -423,11 +432,15 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
 
                                     <div x-show="deliveryType === 'home' && addingNewAddress" x-cloak>
                                         <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Phone') }}</label>
-                                        <input type="tel" class="form-control" autocomplete="tel" inputmode="tel" dir="ltr"
-                                               name="address_phone"
-                                               placeholder="{{ __('e.g. 05XXXXXXXX') }}"
-                                               x-model="addressPhone"
-                                               :disabled="deliveryType === 'pickup'" />
+                                        <input type="hidden" name="address_phone" x-bind:value="addressPhone966()" autocomplete="off" />
+                                        <div class="flex min-w-0 items-stretch rounded-md border border-gray-300 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+                                            <span class="flex select-none items-center border-e border-gray-200 bg-gray-50 px-3 text-sm font-medium text-gray-600" dir="ltr">+966</span>
+                                            <input type="tel" class="min-w-0 flex-1 border-0 bg-transparent px-3 py-2.5 text-gray-900 outline-none focus:ring-0"
+                                                   autocomplete="tel" inputmode="numeric" maxlength="9" placeholder="5XXXXXXXX" dir="ltr"
+                                                   x-model="addressPhoneLocal"
+                                                   @input="addressPhoneLocal = ($event.target.value || '').replace(/\D/g, '').slice(0, 9)"
+                                                   :disabled="deliveryType === 'pickup'" />
+                                        </div>
                                         <p class="mt-1 text-xs text-gray-500">{{ __('Used for delivery coordination on this address.') }}</p>
                                     </div>
 
@@ -696,7 +709,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                         <p class="otp-modal__subtitle">
                             {{ __('We sent a verification code to') }}
                         </p>
-                        <p class="otp-modal__phone" dir="ltr" x-text="phone"></p>
+                        <p class="otp-modal__phone" dir="ltr" x-text="displayPhone()"></p>
 
                         {{-- 4 OTP Digit Inputs --}}
                         <div class="otp-modal__digits" dir="ltr">
@@ -797,6 +810,29 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
     .form-control,
     .form-input-action__btn {
         transition: all 0.25s ease !important;
+    }
+
+    /* Phone +966 group: global .form-input-action__btn is absolute — avoid overlap with composite field */
+    .checkout-page .checkout-phone-row.form-input-action {
+        position: relative;
+        align-items: stretch;
+    }
+    .checkout-page .checkout-phone-row .form-input-action__btn,
+    .checkout-page .checkout-phone-row > span.form-input-action__btn {
+        position: relative !important;
+        inset: auto !important;
+        flex-shrink: 0;
+        align-self: stretch;
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        min-width: 4.5rem;
+        border-radius: 0.375rem;
+        border: 1px solid rgb(209 213 219);
+        background: #fff;
+    }
+    .checkout-page .checkout-phone-row .checkout-phone-input-group {
+        min-width: 0;
     }
 
     /* Breadcrumb styles */
@@ -1254,6 +1290,30 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ar.js"></script>
 @endif
 <script>
+    (function () {
+        window.dwSaudiPhoneDigits = function (input) {
+            var d = String(input || '').replace(/\D/g, '');
+            if (d.indexOf('966') === 0) {
+                d = d.slice(3);
+            }
+            if (d.charAt(0) === '0') {
+                d = d.slice(1);
+            }
+            return d.slice(-9);
+        };
+        window.dwSaudiPhone966 = function (input) {
+            var nine = window.dwSaudiPhoneDigits(input);
+            if (nine.length !== 9 || nine.charAt(0) !== '5') {
+                return '';
+            }
+            return '966' + nine;
+        };
+        window.dwSaudiDisplayPhone = function (input) {
+            var f = window.dwSaudiPhone966(input);
+            return f ? ('+' + f) : '';
+        };
+    })();
+
     function checkoutPage() {
         return {
             // Reactive state
@@ -1279,7 +1339,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
             addingNewAddress: false,
             savingNewAddress: false,
             newAddressError: '',
-            addressPhone: '{{ old('phone', '') }}',
+            addressPhoneLocal: @json($initialAddressPhoneLocal),
             deviceId: (function () {
                 try {
                     const k = 'dw_checkout_device_id';
@@ -1322,8 +1382,8 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
             // Duration multiplier map from backend
             durationMultipliers: @json($durationMultipliers),
 
-            // Phone / OTP state
-            phone: '{{ $initialPhone }}',
+            // Phone / OTP state (local = 9 digits after +966)
+            phoneLocal: @json($initialPhoneLocal),
             phoneVerified: @json($phoneVerifiedFromSession ?? false),
             otpModalOpen: false,
             otpSent: false,
@@ -1372,6 +1432,19 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                     headers['X-XSRF-TOKEN'] = xsrf;
                 }
                 return { headers, csrf };
+            },
+
+            fullPhone966() {
+                return typeof window.dwSaudiPhone966 === 'function' ? window.dwSaudiPhone966(this.phoneLocal) : '';
+            },
+
+            displayPhone() {
+                const f = this.fullPhone966();
+                return f ? ('+' + f) : '';
+            },
+
+            addressPhone966() {
+                return typeof window.dwSaudiPhone966 === 'function' ? window.dwSaudiPhone966(this.addressPhoneLocal) : '';
             },
 
             // ─── PRICES FROM API ARE VAT-INCLUSIVE (like mobile app) ───
@@ -1653,8 +1726,8 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                     this.deliveryDoor = '';
                     this.buildingNotes = '';
                     this.deliveryType = 'home';
-                    if (! (this.addressPhone || '').trim()) {
-                        this.addressPhone = (this.phone || '').trim();
+                    if (! (this.addressPhoneLocal || '').trim()) {
+                        this.addressPhoneLocal = this.phoneLocal || '';
                     }
                     setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 200);
                 }
@@ -1676,7 +1749,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                     payload.append('delivery_type', payload.get('delivery_kind'));
                     payload.delete('delivery_kind');
                 }
-                const phoneForAddress = (this.addressPhone || this.phone || '').trim();
+                const phoneForAddress = this.addressPhone966() || this.fullPhone966();
                 if (! phoneForAddress) {
                     this.newAddressError = '{{ __('Please enter a phone number for this address.') }}';
                     return;
@@ -2031,7 +2104,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                         body: JSON.stringify({
                             code: this.couponCode.trim(),
                             subtotal: this.subtotal(),
-                            identifier: this.phone || '',
+                            identifier: this.fullPhone966() || '',
                         }),
                     });
 
@@ -2071,10 +2144,10 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
 
             // Open OTP modal and send code
             async openOtpModal() {
-                if (!this.phone.trim()) return;
+                if (!this.fullPhone966()) return;
                 if (@json(config('services.external_api.use_new_auth_flow', false))) {
                     window.dispatchEvent(new CustomEvent('open-checkout-auth', {
-                        detail: { phone: this.phone.trim() },
+                        detail: { phone: this.fullPhone966() },
                     }));
                     return;
                 }
@@ -2090,7 +2163,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
 
             // Send OTP
             async sendOtp() {
-                if (!this.phone.trim()) return;
+                if (!this.fullPhone966()) return;
 
                 this.otpLoading = true;
                 this.otpMessage = '';
@@ -2102,7 +2175,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                         method: 'POST',
                         credentials: 'same-origin',
                         headers,
-                        body: JSON.stringify({ phone: this.phone.trim(), _token: csrf }),
+                        body: JSON.stringify({ phone: this.fullPhone966(), _token: csrf }),
                     });
 
                     const data = await response.json();
@@ -2141,7 +2214,7 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                         credentials: 'same-origin',
                         headers,
                         body: JSON.stringify({
-                            phone: this.phone.trim(),
+                            phone: this.fullPhone966(),
                             otp: code,
                             device_id: this.deviceId,
                             _token: csrf,
@@ -2430,6 +2503,9 @@ $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
                 window.addEventListener('checkout-auth-success', (event) => {
                     const detail = event.detail || {};
                     this.phoneVerified = true;
+                    if (detail.phone && typeof window.dwSaudiPhoneDigits === 'function') {
+                        this.phoneLocal = window.dwSaudiPhoneDigits(String(detail.phone));
+                    }
                     this.savedAddresses = Array.isArray(detail.addresses) ? detail.addresses : [];
                     this.isContinueUser = !!detail.isContinue;
                     if (detail.profile && detail.profile.name) {

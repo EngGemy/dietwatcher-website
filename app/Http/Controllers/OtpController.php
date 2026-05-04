@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Services\ApiAuthService;
+use App\Services\SmsService;
+use App\Support\SaudiPhone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -79,7 +81,7 @@ class OtpController extends Controller
                 $externalOtp = $sendResult['otp'] ?? null;
 
                 if ($externalOtp) {
-                    $deviceId ??= 'web-checkout-' . Str::uuid()->toString();
+                    $deviceId ??= 'web-checkout-'.Str::uuid()->toString();
                     $verifyResult = $this->apiAuth->verifyOtp($phone, (string) $externalOtp, $deviceId);
 
                     if ($verifyResult['_http_ok'] ?? false) {
@@ -114,7 +116,7 @@ class OtpController extends Controller
 
     private function markPendingRegistrationMobile(string $mobile): void
     {
-        $mobile = preg_replace('/\s+/', '', (string) $mobile) ?? $mobile;
+        $mobile = SaudiPhone::to966(preg_replace('/\s+/', '', (string) $mobile) ?? $mobile) ?: preg_replace('/\s+/', '', (string) $mobile);
         session([
             'pending_register_mobile' => $mobile,
             'pending_register_expires_at' => now()->addMinutes(10),
@@ -127,10 +129,17 @@ class OtpController extends Controller
     public function send(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'phone' => 'required|string|max:20',
+            'phone' => 'required|string|max:25',
         ]);
 
-        $phone = preg_replace('/\s+/', '', (string) $validated['phone']) ?? (string) $validated['phone'];
+        $raw = preg_replace('/\s+/', '', (string) $validated['phone']) ?? (string) $validated['phone'];
+        $phone = SaudiPhone::to966($raw);
+        if ($phone === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.phone_saudi_invalid'),
+            ], 422);
+        }
 
         $sessionKey = 'otp_sent_at_'.md5($phone);
         $lastSentAt = session($sessionKey);
@@ -188,7 +197,7 @@ class OtpController extends Controller
         $message = __('sms.otp_code', ['code' => $otp]);
 
         try {
-            \App\Services\SmsService::create()->send($phone, $message);
+            SmsService::create()->send($phone, $message);
         } catch (\Exception $e) {
             Log::error('Failed to send OTP SMS', [
                 'phone' => $phone,
@@ -222,12 +231,22 @@ class OtpController extends Controller
     public function verify(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'phone' => 'required|string|max:20',
+            'phone' => 'required|string|max:25',
             'otp' => 'required|string|size:4',
             'device_id' => 'nullable|string|max:255',
         ]);
 
-        $validated['phone'] = preg_replace('/\s+/', '', (string) $validated['phone']) ?? (string) $validated['phone'];
+        $rawPhone = preg_replace('/\s+/', '', (string) $validated['phone']) ?? (string) $validated['phone'];
+        $validated['phone'] = SaudiPhone::to966($rawPhone);
+        if ($validated['phone'] === '') {
+            return response()->json([
+                'ok' => false,
+                'success' => false,
+                'error' => 'invalid_phone',
+                'message' => __('checkout.phone_saudi_invalid'),
+                'errors' => [],
+            ], 422);
+        }
 
         $storedPhone = session('otp_phone');
         $expiresAt = session('otp_expires_at');
@@ -254,8 +273,8 @@ class OtpController extends Controller
             ]);
         }
 
-        $storedPhoneNormalized = preg_replace('/\s+/', '', (string) $storedPhone) ?? (string) $storedPhone;
-        if ($storedPhoneNormalized !== $validated['phone']) {
+        $storedPhoneNormalized = SaudiPhone::to966((string) $storedPhone);
+        if ($storedPhoneNormalized === '' || $storedPhoneNormalized !== $validated['phone']) {
             return response()->json([
                 'ok' => false,
                 'success' => false,
@@ -371,7 +390,7 @@ class OtpController extends Controller
         // Local OTP verified — now hydrate profile/addresses from external API
         $deviceId = $validated['device_id'] ?? null;
         if ($deviceId === null || $deviceId === '') {
-            $deviceId = 'web-checkout-' . Str::uuid()->toString();
+            $deviceId = 'web-checkout-'.Str::uuid()->toString();
         }
 
         $externalData = $this->hydrateFromExternalApi($validated['phone'], $deviceId);
@@ -456,7 +475,7 @@ class OtpController extends Controller
         }
 
         $pendingMobile = (string) session('pending_register_mobile', '');
-        $pendingMobile = preg_replace('/\s+/', '', $pendingMobile) ?? $pendingMobile;
+        $pendingMobile = SaudiPhone::to966(preg_replace('/\s+/', '', $pendingMobile) ?? $pendingMobile) ?: preg_replace('/\s+/', '', $pendingMobile);
         $pendingExpiresAt = session('pending_register_expires_at');
 
         if ($pendingMobile === '' || ! $pendingExpiresAt) {

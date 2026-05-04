@@ -790,6 +790,7 @@
     "address.save_failed": "We could not save the address to the server. You can still continue checkout.",
     "checkout.saved_addresses_title": "Your saved addresses",
     "checkout.saved_addresses_hint": "Tap one to fill delivery details for this order, or set a new location on the map below.",
+    "checkout.phone_saudi_invalid": "Enter a valid Saudi mobile: 9 digits starting with 5 (after +966).",
     "e.g. 05XXXXXXXX": "e.g. 05XXXXXXXX",
     "Used for delivery coordination on this address.": "Used for delivery coordination on this address.",
     "Please enter a phone number for this address.": "Please enter a phone number for this address.",

@@ -11,9 +11,11 @@ use Livewire\Component;
 class FilterPlans extends Component
 {
     public ?int $selectedCategory = null;
+
     public ?int $initialCategoryId = null;
-    public string $selectedMealType = '';
+
     public string $pageTitle = '';
+
     public string $pageDescription = '';
 
     public function mount(): void
@@ -27,13 +29,13 @@ class FilterPlans extends Component
 
         $locale = app()->getLocale();
 
-        $this->pageTitle = Setting::getValue('meal_plans_title_' . $locale,
+        $this->pageTitle = Setting::getValue('meal_plans_title_'.$locale,
             $locale === 'ar'
                 ? 'اختر خطة الوجبات التي تناسب أسلوب حياتك'
                 : 'Choose the Meal Plan That Fits Your Lifestyle'
         );
 
-        $this->pageDescription = Setting::getValue('meal_plans_description_' . $locale,
+        $this->pageDescription = Setting::getValue('meal_plans_description_'.$locale,
             $locale === 'ar'
                 ? 'جميع خطط Diet Watchers معتمدة من أخصائيي التغذية ومراقبة السعرات الحرارية وقابلة للإدارة بالكامل من خلال تطبيق الهاتف المحمول.'
                 : 'All Diet Watchers plans are nutritionist-approved, calorie-controlled, and fully manageable through our mobile app.'
@@ -43,11 +45,6 @@ class FilterPlans extends Component
     public function filterByCategory(?int $categoryId): void
     {
         $this->selectedCategory = $categoryId;
-    }
-
-    public function filterByMealType(string $type): void
-    {
-        $this->selectedMealType = $type;
     }
 
     public function render()
@@ -74,7 +71,7 @@ class FilterPlans extends Component
         $categories = $service->getCategories();
 
         return view('livewire.meal-plans.filter-plans', [
-            'plans'      => $plans,
+            'plans' => $plans,
             'categories' => $categories,
         ]);
     }
