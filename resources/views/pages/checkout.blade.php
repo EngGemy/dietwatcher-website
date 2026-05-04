@@ -19,6 +19,19 @@ $initialPhone = $oldPhone !== '' ? $oldPhone : (string) ($sessionVerifiedPhone ?
 $phoneVerifiedFromSession = filled($sessionVerifiedPhone);
 $initialPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput($initialPhone);
 $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('address_phone', ''));
+$riyadhZoneForCheckout = collect($zones ?? [])->first(function ($zone) {
+    $name = $zone['name'] ?? '';
+    if (is_array($name)) {
+        $name = ($name[app()->getLocale()] ?? $name['ar'] ?? $name['en'] ?? '');
+    }
+    $n = mb_strtolower((string) $name);
+
+    return str_contains($n, 'riyadh') || str_contains($n, 'الرياض');
+});
+$checkoutDefaultHomeZoneId = (string) (($riyadhZoneForCheckout['id'] ?? '') ?: '');
+if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
+    $checkoutDefaultHomeZoneId = (string) (($zones[0]['id'] ?? ''));
+}
 @endphp
 
 @section('title', __('Checkout') . ' | ' . $siteName)
@@ -59,6 +72,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
               x-ref="checkoutForm"
               x-data="checkoutPage()"
               @address-selected.window="handleAddressFromMap($event)"
+              @checkout-inline-address-editing.window="onInlineAddressEditing()"
               @map-address-draft.window="handleMapAddressDraft($event)"
               @submit.prevent="submitForm($event)">
             @csrf
@@ -1359,6 +1373,10 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             deliveryFloor: '',
             deliveryDoor: '',
             addressConfirmedForSync: false,
+            /** Snapshot from map @address-selected — avoids relying on hidden input DOM sync with Alpine :value. */
+            inlineMapLat: '',
+            inlineMapLng: '',
+            inlineMapDistrictId: '',
             _syncExtTimer: null,
 
             // Zone state
@@ -1701,6 +1719,12 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             handleAddressFromMap(event) {
                 const d = event.detail || {};
                 this.syncAddressError = '';
+                const latRaw = d.latitude != null && d.latitude !== '' ? String(d.latitude).trim() : '';
+                const lngRaw = d.longitude != null && d.longitude !== '' ? String(d.longitude).trim() : '';
+                const distRaw = d.district_id != null && d.district_id !== '' ? String(d.district_id).trim() : '';
+                this.inlineMapLat = latRaw;
+                this.inlineMapLng = lngRaw;
+                this.inlineMapDistrictId = distRaw;
                 if (d.description) {
                     this.addressStreet = d.description;
                 }
@@ -1713,7 +1737,19 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     this.composeBuildingNotes();
                 }
                 this.addressConfirmedForSync = true;
+                const defZone = @json($checkoutDefaultHomeZoneId ?? '');
+                if (this.deliveryType === 'home' && defZone && ! String(this.selectedZoneId || '').trim()) {
+                    this.selectedZoneId = String(defZone);
+                }
                 this.$nextTick(() => this.syncExternalAddress());
+            },
+
+            onInlineAddressEditing() {
+                this.inlineMapLat = '';
+                this.inlineMapLng = '';
+                this.inlineMapDistrictId = '';
+                this.addressConfirmedForSync = false;
+                this.scheduleMoyasarRefresh();
             },
 
             handleMapAddressDraft(event) {
@@ -1742,6 +1778,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 this.addingNewAddress = !this.addingNewAddress;
                 this.newAddressError = '';
                 if (this.addingNewAddress) {
+                    this.onInlineAddressEditing();
+                    this.syncAddressError = '';
                     this.selectedAddressId = null;
                     this.addressStreet = '';
                     this.deliveryBuilding = '';
@@ -2055,9 +2093,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (! form) {
                     return false;
                 }
-                const lat = String(form.querySelector('input[name="delivery_lat"]')?.value ?? '').trim();
-                const lng = String(form.querySelector('input[name="delivery_lng"]')?.value ?? '').trim();
-                const district = String(form.querySelector('input[name="delivery_district_id"]')?.value ?? '').trim();
+                const lat = String(this.inlineMapLat || form.querySelector('input[name="delivery_lat"]')?.value ?? '').trim();
+                const lng = String(this.inlineMapLng || form.querySelector('input[name="delivery_lng"]')?.value ?? '').trim();
+                const district = String(this.inlineMapDistrictId || form.querySelector('input[name="delivery_district_id"]')?.value ?? '').trim();
                 const zone = String(this.selectedZoneId || form.querySelector('select[name="zone_id"]')?.value || '').trim();
 
                 return lat !== '' && lng !== '' && district !== '' && zone !== '';
@@ -2628,6 +2666,13 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
                 if (this.phoneVerified) {
                     await this.refreshCustomerFromServer();
+                }
+                const defaultHomeZoneId = @json($checkoutDefaultHomeZoneId ?? '');
+                if (this.deliveryType === 'home' && defaultHomeZoneId && ! String(this.selectedZoneId || '').trim()) {
+                    this.selectedZoneId = String(defaultHomeZoneId);
+                }
+                if (this.deliveryType === 'home' && ! String(this.selectedZoneId || '').trim() && Array.isArray(this.zones) && this.zones.length === 1) {
+                    this.selectedZoneId = String(this.zones[0].id ?? '');
                 }
                 const startDateInput = document.getElementById('start_date_input');
                 if (startDateInput) {
