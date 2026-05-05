@@ -187,7 +187,33 @@
             $effectivePrice = ($meal['offer_price'] ?? 0) > 0 && $meal['offer_price'] < $meal['price'] ? $meal['offer_price'] : $meal['price'];
             $hasOffer   = ($meal['offer_price'] ?? 0) > 0 && $meal['offer_price'] < $meal['price'];
             $category   = $meal['categories'][0] ?? null;
-            $categoryName = $category['name'] ?? ($meal['category_name'] ?? '');
+            $categoryNameRaw = $category['name'] ?? ($meal['category_name'] ?? '');
+            if (is_array($categoryNameRaw)) {
+                $categoryNameRaw = $categoryNameRaw[app()->getLocale()] ?? $categoryNameRaw['en'] ?? reset($categoryNameRaw) ?? '';
+            }
+            $categoryName = trim((string) $categoryNameRaw);
+            if ($categoryName !== '') {
+                $categoryName = (string) __($categoryName);
+            }
+            $tagNameRaw = $meal['tag_name'] ?? '';
+            if (is_array($tagNameRaw)) {
+                $tagNameRaw = $tagNameRaw[app()->getLocale()] ?? $tagNameRaw['en'] ?? reset($tagNameRaw) ?? '';
+            }
+            if ((string) $tagNameRaw === '' && is_array($meal['tags'] ?? null) && ! empty($meal['tags'])) {
+                $firstTag = $meal['tags'][0];
+                if (is_array($firstTag)) {
+                    $firstTagName = $firstTag['name'] ?? '';
+                    if (is_array($firstTagName)) {
+                        $firstTagName = $firstTagName[app()->getLocale()] ?? $firstTagName['en'] ?? reset($firstTagName) ?? '';
+                    }
+                    $tagNameRaw = $firstTagName;
+                }
+            }
+            $tagName = trim((string) $tagNameRaw);
+            if ($tagName !== '') {
+                $tagName = (string) __($tagName);
+            }
+            $metaLabels = array_values(array_unique(array_filter([$tagName, $categoryName], static fn ($v): bool => $v !== '')));
             $cartQty    = $cartItems['meal_' . $meal['id']]['quantity'] ?? 0;
             $discount   = $hasOffer ? round((1 - $meal['offer_price'] / $meal['price']) * 100) : 0;
             $detailUrl = route('store.show', $meal['id']);
@@ -216,8 +242,8 @@
 
             {{-- Card Body --}}
             <div class="mcard__body">
-                @if(!empty($meal['tag_name']))
-                    <span class="mcard__tag">{{ $meal['tag_name'] }}</span>
+                @if($metaLabels !== [])
+                    <span class="mcard__tag">{{ implode(' • ', $metaLabels) }}</span>
                 @endif
 
                 <h3 class="mcard__name">

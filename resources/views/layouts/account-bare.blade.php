@@ -23,10 +23,33 @@
                 linear-gradient(180deg,#F9FAFB 0%, #EEF2FF 100%);
             min-height: 100vh;
         }
+        .acc-auth-shell {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+        }
+        .acc-auth-wrap {
+            width: min(100%, 560px);
+            margin-inline: auto;
+        }
+        .acc-auth-home {
+            margin-bottom: 1.25rem;
+            display: inline-flex;
+            align-items: center;
+            gap: .45rem;
+            font-size: .87rem;
+            font-weight: 700;
+            color: #4B5563;
+            text-decoration: none;
+        }
+        .acc-auth-home:hover { color:#111827; }
+        .acc-auth-home svg { width: 18px; height: 18px; }
         .acc-card {
             background:#fff;
             border:1px solid rgba(15,23,42,.06);
-            border-radius:24px;
+            border-radius:20px;
             box-shadow:0 30px 80px -30px rgba(15,23,42,.25), 0 8px 30px -12px rgba(15,23,42,.12);
         }
         .acc-input {
@@ -83,16 +106,21 @@
         .acc-ok  { color:#047857; font-size:.86rem; margin-top:.4rem; }
         .acc-meta-link { font-size:.86rem; color:#6B7280; }
         .acc-meta-link a { color:#2563EB; font-weight:600; }
+        @media (max-width: 640px) {
+            .acc-auth-shell { padding: 1rem .75rem; }
+            .acc-auth-wrap { width: 100%; }
+            .acc-card { border-radius: 14px; }
+        }
     </style>
 </head>
 <body class="acc-auth-bg">
-<main class="flex min-h-screen items-center justify-center px-4 py-12">
-    <div class="w-full max-w-md">
-        <a href="{{ route('home') }}" class="mb-8 flex items-center justify-center gap-2 text-gray-600 hover:text-gray-900">
-            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+<main class="acc-auth-shell">
+    <div class="acc-auth-wrap">
+        <a href="{{ route('home') }}" class="acc-auth-home">
+            <svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
             </svg>
-            <span class="text-sm font-semibold">{{ __('Diet Watchers') }}</span>
+            <span>{{ __('Diet Watchers') }}</span>
         </a>
 
         {{ $slot ?? '' }}

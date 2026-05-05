@@ -595,18 +595,23 @@ class CheckoutController extends Controller
         $validated = $request->validate([
             'code' => 'required|string|max:50',
             'subtotal' => 'required|numeric|min:0',
-            'identifier' => 'required|string|max:255',
+            'identifier' => 'nullable|string|max:255',
             'program_id' => 'nullable|integer',
             'plan_duration_id' => 'nullable|integer',
             'plan_calory_id' => 'nullable|integer',
         ]);
 
-        $identifier = SaudiPhone::to966((string) $validated['identifier']);
+        $rawIdentifier = trim((string) ($validated['identifier'] ?? ''));
+        $identifier = SaudiPhone::to966($rawIdentifier);
         if ($identifier === '') {
+            $promoMsg = $rawIdentifier === ''
+                ? __('checkout.promo_requires_verified_phone')
+                : __('checkout.phone_saudi_invalid');
+
             return response()->json([
                 'valid' => false,
                 'discount' => 0,
-                'message' => __('checkout.phone_saudi_invalid'),
+                'message' => $promoMsg,
             ], 422);
         }
         $validated['identifier'] = $identifier;

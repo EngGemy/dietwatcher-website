@@ -601,8 +601,8 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                     </div>
                                     @if($hasPlanItems)
                                         <span class="font-bold text-gray-900 whitespace-nowrap inline-flex items-baseline gap-1" dir="ltr">
-                                            <span x-text="subtotalInclVat().toFixed(2)"></span>
-                                            <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                            <span x-text="money(subtotalInclVat())">{{ number_format((float) $baseSubtotal, 2) }}</span>
+                                            <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
                                         </span>
                                     @else
                                         <span class="font-bold text-gray-900 whitespace-nowrap"><x-sar :amount="$item['price'] * $item['quantity']" /></span>
@@ -619,8 +619,8 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                         <div class="flex items-center justify-between">
                                             <span class="text-gray-600">{{ $hasPlanItems ? __('Plan Price') : __('Items Total') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></span>
                                             <span class="font-bold text-gray-900 inline-flex items-baseline gap-1" dir="ltr">
-                                                <span x-text="subtotalInclVat().toFixed(2)"></span>
-                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                                <span x-text="money(subtotalInclVat())">{{ number_format((float) $baseSubtotal, 2) }}</span>
+                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
                                             </span>
                                         </div>
                                         <div class="flex items-center justify-between text-sm" x-show="isPlanCheckout && planSelectedAvgPerDayAmount()" x-cloak>
@@ -630,22 +630,22 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                         <div class="flex items-center justify-between">
                                             <span class="text-gray-600">{{ __('Delivery fees') }}</span>
                                             <span class="font-bold text-gray-900 inline-flex items-baseline gap-1" dir="ltr">
-                                                <span x-text="deliveryFee().toFixed(2)"></span>
-                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                                <span x-text="money(deliveryFee())">{{ number_format((float) $deliveryFeeAmount, 2) }}</span>
+                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
                                             </span>
                                         </div>
                                         <div class="flex items-center justify-between" x-show="discount > 0" x-cloak>
                                             <span class="text-green-600">{{ __('Discount') }}</span>
                                             <span class="font-bold text-green-600 inline-flex items-baseline gap-1" dir="ltr">
-                                                <span>-<span x-text="discount.toFixed(2)"></span></span>
-                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                                <span>-<span x-text="money(discount)">0.00</span></span>
+                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
                                             </span>
                                         </div>
                                         <div class="flex items-center justify-between text-sm text-gray-400">
                                             <span>{{ __('VAT included') }} ({{ (int)(\App\Models\Settings\Setting::getValue('vat_rate', 15)) }}%)</span>
                                             <span class="inline-flex items-baseline gap-1" dir="ltr">
-                                                <span x-text="vatAmount().toFixed(2)"></span>
-                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                                <span x-text="money(vatAmount())">0.00</span>
+                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
                                             </span>
                                         </div>
                                     </div>
@@ -656,8 +656,8 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                             <div class="flex items-center justify-between">
                                 <span class="text-lg font-semibold md:text-xl">{{ __('Total') }} <span class="text-xs font-normal text-gray-500">({{ __('Incl. VAT') }})</span></span>
                                 <span class="text-lg font-semibold text-green-600 md:text-xl inline-flex items-baseline gap-1" dir="ltr">
-                                    <span x-text="total().toFixed(2)"></span>
-                                    <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                    <span x-text="money(total())">{{ number_format((float) ($baseSubtotal + $deliveryFeeAmount), 2) }}</span>
+                                    <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
                                 </span>
                             </div>
 
@@ -667,8 +667,8 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                         :disabled="!phoneVerified || !canProceedToPayment()">
                                     {{ __('payment.proceed') }} —
                                     <span class="inline-flex items-baseline gap-1" dir="ltr">
-                                        <span x-text="total().toFixed(2)"></span>
-                                        <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
+                                        <span x-text="money(total())">{{ number_format((float) ($baseSubtotal + $deliveryFeeAmount), 2) }}</span>
+                                        <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
                                     </span>
                                 </button>
                             </div>
@@ -1503,14 +1503,23 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 if (total > 0) {
                     const n = Math.round(total * 100) / 100;
 
-                    return '\u20C1 ' + (Number.isInteger(n) ? String(n) : n.toFixed(2));
+                    return '\uFDFC ' + (Number.isInteger(n) ? String(n) : n.toFixed(2));
                 }
                 const ppd = parseFloat(d.price_per_day) || 0;
                 if (ppd > 0) {
-                    return '\u20C1 ' + ppd.toFixed(2) + ' / {{ __('day') }}';
+                    return '\uFDFC ' + ppd.toFixed(2) + ' / {{ __('day') }}';
                 }
 
                 return '';
+            },
+
+            money(value) {
+                const n = Number(value);
+                if (! Number.isFinite(n)) {
+                    return '0.00';
+                }
+
+                return n.toFixed(2);
             },
 
             durationPlanHasOffer(d) {
@@ -2178,12 +2187,12 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
 
             paymentBlockerMessage() {
                 if (this.deliveryType === 'pickup') {
-                    return 'اختر المدة وتاريخ البداية والفرع حتى يتطابق المبلغ قبل الدفع';
+                    return @json(__('checkout.payment_blocker_pickup'));
                 }
                 if (this.syncAddressError && ! this.selectedAddressId && ! this.inlineHomeAddressReady()) {
                     return @json(__('checkout.address_sync_block_payment'));
                 }
-                return 'اختر المدة، المدينة، والعنوان على الخريطة حتى يتطابق المبلغ قبل الدفع';
+                return @json(__('checkout.payment_blocker_home'));
             },
 
             // Computed: subscription line total is fixed; meals use duration multiplier
@@ -2257,10 +2266,17 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                         }),
                     });
 
-                    const data = await response.json();
-                    this.couponMessage = data.message;
+                    const data = await response.json().catch(() => ({}));
+                    let couponMsg = data.message ? String(data.message) : '';
+                    if (data.errors && typeof data.errors === 'object') {
+                        const flat = Object.values(data.errors).flat().filter(Boolean);
+                        if (flat.length > 0) {
+                            couponMsg = String(flat[0]);
+                        }
+                    }
+                    this.couponMessage = couponMsg;
 
-                    if (data.valid) {
+                    if (response.ok && data.valid) {
                         this.discount = data.discount;
                         this.couponApplied = true;
                     } else {
