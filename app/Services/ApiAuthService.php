@@ -55,7 +55,7 @@ class ApiAuthService
         try {
             $mobile = SaudiPhone::forExternalApiMobile($phone);
             $response = $this->http()->asForm()->post($this->url('login/ordinary/reset'), [
-                'mobile' => $mobile,
+                'mobile' => SaudiPhone::toE164($phone),
             ]);
             $json = $response->json() ?? [];
             $json['_http_ok'] = $response->successful();
@@ -79,10 +79,9 @@ class ApiAuthService
     {
         try {
             $deviceId ??= 'web-checkout-'.substr(hash('sha256', session()->getId()), 0, 40);
-            $mobile = SaudiPhone::forExternalApiMobile($phone);
 
             $response = $this->http()->asForm()->post($this->url('login/ordinary/verify'), [
-                'mobile' => $mobile,
+                'mobile' => SaudiPhone::toE164($phone),
                 'code' => $code,
                 'device_id' => $deviceId,
             ]);
@@ -129,10 +128,12 @@ class ApiAuthService
     public function simpleRegister(array $data): array
     {
         try {
-            foreach (['mobile', 'phone'] as $key) {
-                if (isset($data[$key]) && is_string($data[$key]) && $data[$key] !== '') {
-                    $data[$key] = SaudiPhone::forExternalApiMobile($data[$key]);
-                }
+            $rawMobile = (string) ($data['mobile'] ?? '');
+            $rawPhone = (string) ($data['phone'] ?? '');
+            $e164 = SaudiPhone::toE164($rawMobile !== '' ? $rawMobile : $rawPhone);
+            if ($e164 !== '') {
+                $data['mobile'] = $e164;
+                $data['phone'] = $e164;
             }
             $response = $this->http()->post($this->url('register/simple-register'), $data);
             $json = $response->json() ?? [];

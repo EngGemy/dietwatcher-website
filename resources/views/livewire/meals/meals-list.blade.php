@@ -160,14 +160,25 @@
     <p class="meals-info__count">
         @if($search)
             {{ __('Results for') }} "<strong>{{ $search }}</strong>"
+            @if(!empty($clientSearchFallback ?? false))
+                <span class="text-xs text-amber-700"> — {{ __('Local search (API did not return matches).') }}</span>
+            @endif
         @else
             <strong>{{ count($meals) }}</strong> {{ __('meals available') }}
+            @if(!empty($selectedTagIds))
+                <span class="text-xs text-gray-500"> — {{ __('Tag filter active') }}</span>
+            @endif
         @endif
     </p>
+    @if(!empty($selectedTagIds))
+        <button type="button" wire:click="clearTagFilterFromQuery" class="meals-tag" style="border-style:dashed;cursor:pointer">
+            {{ __('Clear tags') }}
+        </button>
+    @endif
 </div>
 
 {{-- ─── Meals Grid ───────────────────────────────────────── --}}
-<div class="meals-grid" wire:key="meals-grid-{{ $currentPage }}-{{ $selectedGroup }}-{{ $search }}">
+<div class="meals-grid" wire:key="meals-grid-{{ $currentPage }}-{{ $selectedGroup }}-{{ md5(json_encode($selectedTagIds)) }}-{{ $search }}">
     @forelse($meals as $meal)
         @php
             $mealImg    = $meal['image_url'] ?? '';

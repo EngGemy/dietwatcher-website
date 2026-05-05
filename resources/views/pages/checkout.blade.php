@@ -1,4 +1,4 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @php
 $locale = app()->getLocale();
@@ -229,7 +229,9 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                         <input type="tel" class="min-w-0 flex-1 border-0 bg-transparent px-3 py-2.5 text-gray-900 outline-none focus:ring-0"
                                                autocomplete="tel" inputmode="numeric" maxlength="9" placeholder="5XXXXXXXX" required dir="ltr"
                                                x-model="phoneLocal"
-                                               @input="phoneLocal = ($event.target.value || '').replace(/\D/g, '').slice(0, 9)"
+                                               @input="phoneLocal = typeof window.dwSaudiPhoneDigits === 'function'
+    ? window.dwSaudiPhoneDigits($event.target.value || '')
+    : ($event.target.value || '').replace(/\D/g, '').slice(0, 9)"
                                                :readonly="phoneVerified"
                                                :class="phoneVerified ? 'cursor-default bg-transparent' : ''" />
                                     </div>
@@ -452,7 +454,9 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                             <input type="tel" class="min-w-0 flex-1 border-0 bg-transparent px-3 py-2.5 text-gray-900 outline-none focus:ring-0"
                                                    autocomplete="tel" inputmode="numeric" maxlength="9" placeholder="5XXXXXXXX" dir="ltr"
                                                    x-model="addressPhoneLocal"
-                                                   @input="addressPhoneLocal = ($event.target.value || '').replace(/\D/g, '').slice(0, 9)"
+                                                   @input="addressPhoneLocal = typeof window.dwSaudiPhoneDigits === 'function'
+    ? window.dwSaudiPhoneDigits($event.target.value || '')
+    : ($event.target.value || '').replace(/\D/g, '').slice(0, 9)"
                                                    :disabled="deliveryType === 'pickup'" />
                                         </div>
                                         <p class="mt-1 text-xs text-gray-500">{{ __('Used for delivery coordination on this address.') }}</p>
@@ -491,7 +495,8 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                         <button
                                             type="button"
                                             class="btn btn--primary btn--md w-full"
-                                            @click="window.dispatchEvent(new CustomEvent('checkout-confirm-inline-address'))"
+                                            @click="confirmInlineAddress()"
+                                            :disabled="!inlineAddressHasRequiredFields()"
                                         >
                                             {{ __('Confirm Address') }}
                                         </button>
@@ -1686,7 +1691,6 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 }
                 if (! this.fullPhone966()) {
                     this.syncAddressError = @json(__('checkout.address_sync_needs_phone'));
-                    this.scheduleMoyasarRefresh();
 
                     return;
                 }
@@ -1704,6 +1708,9 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                     const ok = res.ok && (data.success === true || data.skipped === true);
                     if (ok) {
                         this.syncAddressError = '';
+                        if (this.addressConfirmedForSync) {
+                            this.scheduleMoyasarRefresh();
+                        }
                     } else {
                         const errs = data && data.errors && typeof data.errors === 'object'
                             ? Object.values(data.errors).flat().filter(Boolean)
@@ -1713,7 +1720,6 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 } catch (e) {
                     this.syncAddressError = @json(__('checkout.address_sync_failed'));
                 }
-                this.scheduleMoyasarRefresh();
             },
 
             handleAddressFromMap(event) {
@@ -1736,12 +1742,10 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 } else {
                     this.composeBuildingNotes();
                 }
-                this.addressConfirmedForSync = true;
-                const defZone = @json($checkoutDefaultHomeZoneId ?? '');
-                if (this.deliveryType === 'home' && defZone && ! String(this.selectedZoneId || '').trim()) {
-                    this.selectedZoneId = String(defZone);
+                const fromSaved = d.id != null && String(d.id).trim() !== '';
+                if (! fromSaved) {
+                    this.addressConfirmedForSync = false;
                 }
-                this.$nextTick(() => this.syncExternalAddress());
             },
 
             onInlineAddressEditing() {
@@ -2089,6 +2093,9 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 if (! this.addressConfirmedForSync) {
                     return false;
                 }
+                if (this.syncAddressError) {
+                    return false;
+                }
                 const form = this.$refs.checkoutForm;
                 if (! form) {
                     return false;
@@ -2099,6 +2106,45 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 const zone = String(this.selectedZoneId || form.querySelector('select[name="zone_id"]')?.value || '').trim();
 
                 return lat !== '' && lng !== '' && district !== '' && zone !== '';
+            },
+
+            inlineAddressHasRequiredFields() {
+                const form = this.$refs.checkoutForm;
+                if (! form) {
+                    return false;
+                }
+                const lat = String(form.querySelector('input[name="delivery_lat"]')?.value ?? '').trim();
+                const lng = String(form.querySelector('input[name="delivery_lng"]')?.value ?? '').trim();
+                const dist = String(form.querySelector('input[name="delivery_district_id"]')?.value ?? '').trim();
+                const zone = String(this.selectedZoneId || form.querySelector('select[name="zone_id"]')?.value || '').trim();
+                const street = String(this.addressStreet || '').trim();
+
+                return lat !== '' && lng !== '' && dist !== '' && zone !== '' && street !== '';
+            },
+
+            async confirmInlineAddress() {
+                if (! this.inlineAddressHasRequiredFields()) {
+                    this.syncAddressError = @json(__('checkout.fill_address_fields'));
+
+                    return;
+                }
+                if (! this.fullPhone966()) {
+                    this.syncAddressError = @json(__('checkout.address_sync_needs_phone'));
+
+                    return;
+                }
+                window.dispatchEvent(new CustomEvent('checkout-confirm-inline-address'));
+                await this.$nextTick();
+                if (! this.inlineAddressHasRequiredFields()) {
+                    this.syncAddressError = @json(__('checkout.fill_address_fields'));
+
+                    return;
+                }
+                await this.syncExternalAddress();
+                if (! this.syncAddressError) {
+                    this.addressConfirmedForSync = true;
+                    this.scheduleMoyasarRefresh();
+                }
             },
 
             deliveryReady() {
@@ -2205,6 +2251,9 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                             code: this.couponCode.trim(),
                             subtotal: this.subtotal(),
                             identifier: this.fullPhone966() || '',
+                            program_id: this.selectedPlanId || 0,
+                            plan_duration_id: parseInt(this.selectedPlanDurationId || 0, 10) || 0,
+                            plan_calory_id: 0,
                         }),
                     });
 

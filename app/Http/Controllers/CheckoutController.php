@@ -596,6 +596,9 @@ class CheckoutController extends Controller
             'code' => 'required|string|max:50',
             'subtotal' => 'required|numeric|min:0',
             'identifier' => 'required|string|max:255',
+            'program_id' => 'nullable|integer',
+            'plan_duration_id' => 'nullable|integer',
+            'plan_calory_id' => 'nullable|integer',
         ]);
 
         $identifier = SaudiPhone::to966((string) $validated['identifier']);
@@ -607,6 +610,19 @@ class CheckoutController extends Controller
             ], 422);
         }
         $validated['identifier'] = $identifier;
+
+        $programId = (int) ($validated['program_id'] ?? 0);
+        if ($programId > 0) {
+            $extResult = $this->validatePromoViaExternalApi(
+                (string) $validated['code'],
+                $programId,
+                (int) ($validated['plan_duration_id'] ?? 0),
+                (int) ($validated['plan_calory_id'] ?? 0),
+            );
+            if ($extResult !== null) {
+                return response()->json($extResult);
+            }
+        }
 
         $coupon = Coupon::where('code', strtoupper($validated['code']))->first();
 
@@ -660,7 +676,75 @@ class CheckoutController extends Controller
             'message' => __('Coupon applied successfully!'),
             'type' => $coupon->type,
             'value' => $coupon->type === 'percentage' ? $coupon->value : ($coupon->value / 100),
+            'source' => 'local',
         ]);
+    }
+
+    /**
+     * Try to validate promo via POST /subscriptions/calculate on the external API.
+     *
+     * @return array<string, mixed>|null Normalized JSON shape, or null to fall back to local coupons
+     */
+    private function validatePromoViaExternalApi(
+        string $code,
+        int $programId,
+        int $planDurationId,
+        int $planCaloryId,
+    ): ?array {
+        if (! filled(config('services.external_api.url'))) {
+            return null;
+        }
+
+        try {
+            $baseUrl = rtrim((string) config('services.external_api.url', ''), '/');
+            $payload = [
+                'program_id' => (string) $programId,
+                'plan_id' => (string) $programId,
+                'plan_duration_id' => (string) $planDurationId,
+                'plan_calory_id' => (string) $planCaloryId,
+                'promocode_name' => $code,
+                'receiving' => 'delivery',
+                'with_support' => '0',
+                'with_weekend' => '0',
+            ];
+            $response = $this->externalDataService->httpClient()
+                ->timeout(6)
+                ->asForm()
+                ->post($baseUrl.'/subscriptions/calculate', $payload);
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $json = $response->json() ?? [];
+            $data = $json['data'] ?? $json ?? [];
+            $discountAmount = (float) ($data['discount'] ?? $data['discount_amount'] ?? 0);
+            $promoValid = $discountAmount > 0
+                || isset($data['promocode'])
+                || ($json['success'] ?? false) === true;
+
+            if (! $promoValid) {
+                $message = (string) ($json['message'] ?? __('Invalid coupon code.'));
+
+                return ['valid' => false, 'discount' => 0, 'message' => $message, 'source' => 'external'];
+            }
+
+            return [
+                'valid' => true,
+                'discount' => round($discountAmount, 2),
+                'message' => __('Coupon applied successfully!'),
+                'source' => 'external',
+                'type' => 'fixed',
+                'value' => round($discountAmount, 2),
+            ];
+        } catch (\Exception $e) {
+            Log::warning('External promo validation failed', [
+                'code' => $code,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
     /**
