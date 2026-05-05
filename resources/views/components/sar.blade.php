@@ -9,5 +9,5 @@
     @if($amount !== null)
         <span class="font-semibold tabular-nums">{{ number_format((float) $amount, (int) $decimals) }}</span>
     @endif
-    <span class="sar-symbol" style="font-size: {{ $size }};" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
+    <span class="sar-symbol" style="font-size: {{ $size }};" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
 </span>
