@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @php
 $locale = app()->getLocale();
@@ -280,7 +280,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                                     <button type="button"
                                                             class="shrink-0 rounded-md border border-blue-500 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
                                                             @click="selectSavedAddress(addr)">
-                                                        اختيار العنوان
+                                                        ?????? ???????
                                                     </button>
                                                 </div>
                                             </div>
@@ -295,12 +295,12 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                         </div>
                     </div>
 
-                    {{-- Delivery address: map (home) or branch (pickup) — toggles live in Select Options --}}
+                    {{-- Delivery address: map (home) or branch (pickup) ? toggles live in Select Options --}}
                     <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-ref="paymentCard">
                         <input type="hidden" name="selected_address_id" :value="selectedAddressId || ''" :disabled="deliveryType !== 'home'" />
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Delivery Address') }}</h3>
 
-                        {{-- Delivery preference (under heading — matches reference layout) --}}
+                        {{-- Delivery preference (under heading ? matches reference layout) --}}
                         <div class="mb-6">
                             <p class="mb-3 text-lg md:text-xl">{{ __('Delivery Preference') }}</p>
                             <div class="choice-group choice-group--two">
@@ -332,7 +332,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                             @enderror
                         </div>
 
-                        {{-- Pickup: choose branch → search list → confirmed --}}
+                        {{-- Pickup: choose branch ? search list ? confirmed --}}
                         <div x-show="deliveryType === 'pickup'" x-transition class="space-y-4">
                             <input type="hidden" name="branch_id" :value="selectedBranchId" :disabled="deliveryType === 'home'" />
 
@@ -380,7 +380,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                             @enderror
                         </div>
 
-                        {{-- Home: city + inline map + address — no x-transition (can leave map invisible); x-show keeps block in DOM --}}
+                        {{-- Home: city + inline map + address ? no x-transition (can leave map invisible); x-show keeps block in DOM --}}
                         @php
                             $riyadhZone = collect($zones)->first(function ($zone) {
                                 $name = $zone['name'] ?? '';
@@ -388,7 +388,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                     $name = ($name[app()->getLocale()] ?? $name['ar'] ?? $name['en'] ?? '');
                                 }
                                 $n = mb_strtolower((string) $name);
-                                return str_contains($n, 'riyadh') || str_contains($n, 'الرياض');
+                                return str_contains($n, 'riyadh') || str_contains($n, '??????');
                             });
                         @endphp
                         <div x-show="deliveryType === 'home' && (savedAddresses.length === 0 || addingNewAddress)" class="space-y-4" x-init="if (!selectedZoneId) selectedZoneId = '{{ (string) (($riyadhZone['id'] ?? '') ?: '') }}'">
@@ -437,7 +437,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                         <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Address') }}</label>
                                         <textarea name="street" rows="3"
                                                   class="form-control @error('street') border-red-500 @enderror"
-                                                  placeholder="{{ __('Street, district, details…') }}"
+                                                  placeholder="{{ __('Street, district, details?') }}"
                                                   x-model="addressStreet"
                                                   :required="deliveryType === 'home'"
                                                   :disabled="deliveryType === 'pickup'"></textarea>
@@ -570,7 +570,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                     </div>
                 </div>
 
-                {{-- Right: Plan summary (sticky on desktop — matches Figma) --}}
+                {{-- Right: Plan summary (sticky on desktop ? matches Figma) --}}
                 <div class="order-2 min-w-0 space-y-6">
                     <div class="rounded-md border border-gray-200 bg-white p-5 lg:sticky lg:top-24 lg:z-10">
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Plan Summary') }}</h3>
@@ -602,7 +602,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                     @if($hasPlanItems)
                                         <span class="font-bold text-gray-900 whitespace-nowrap inline-flex items-baseline gap-1" dir="ltr">
                                             <span x-text="money(subtotalInclVat())">{{ number_format((float) $baseSubtotal, 2) }}</span>
-                                            <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
+                                            <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
                                         </span>
                                     @else
                                         <span class="font-bold text-gray-900 whitespace-nowrap"><x-sar :amount="$item['price'] * $item['quantity']" /></span>
@@ -620,7 +620,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                             <span class="text-gray-600">{{ $hasPlanItems ? __('Plan Price') : __('Items Total') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></span>
                                             <span class="font-bold text-gray-900 inline-flex items-baseline gap-1" dir="ltr">
                                                 <span x-text="money(subtotalInclVat())">{{ number_format((float) $baseSubtotal, 2) }}</span>
-                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
+                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
                                             </span>
                                         </div>
                                         <div class="flex items-center justify-between text-sm" x-show="isPlanCheckout && planSelectedAvgPerDayAmount()" x-cloak>
@@ -631,21 +631,21 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                             <span class="text-gray-600">{{ __('Delivery fees') }}</span>
                                             <span class="font-bold text-gray-900 inline-flex items-baseline gap-1" dir="ltr">
                                                 <span x-text="money(deliveryFee())">{{ number_format((float) $deliveryFeeAmount, 2) }}</span>
-                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
+                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
                                             </span>
                                         </div>
                                         <div class="flex items-center justify-between" x-show="discount > 0" x-cloak>
                                             <span class="text-green-600">{{ __('Discount') }}</span>
                                             <span class="font-bold text-green-600 inline-flex items-baseline gap-1" dir="ltr">
                                                 <span>-<span x-text="money(discount)">0.00</span></span>
-                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
+                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
                                             </span>
                                         </div>
                                         <div class="flex items-center justify-between text-sm text-gray-400">
                                             <span>{{ __('VAT included') }} ({{ (int)(\App\Models\Settings\Setting::getValue('vat_rate', 15)) }}%)</span>
                                             <span class="inline-flex items-baseline gap-1" dir="ltr">
                                                 <span x-text="money(vatAmount())">0.00</span>
-                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
+                                                <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
                                             </span>
                                         </div>
                                     </div>
@@ -657,7 +657,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                 <span class="text-lg font-semibold md:text-xl">{{ __('Total') }} <span class="text-xs font-normal text-gray-500">({{ __('Incl. VAT') }})</span></span>
                                 <span class="text-lg font-semibold text-green-600 md:text-xl inline-flex items-baseline gap-1" dir="ltr">
                                     <span x-text="money(total())">{{ number_format((float) ($baseSubtotal + $deliveryFeeAmount), 2) }}</span>
-                                    <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
+                                    <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
                                 </span>
                             </div>
 
@@ -665,10 +665,10 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                             <div class="pt-2">
                                 <button type="submit" class="btn btn--primary btn--md w-full"
                                         :disabled="!phoneVerified || !canProceedToPayment()">
-                                    {{ __('payment.proceed') }} —
+                                    {{ __('payment.proceed') }} ?
                                     <span class="inline-flex items-baseline gap-1" dir="ltr">
                                         <span x-text="money(total())">{{ number_format((float) ($baseSubtotal + $deliveryFeeAmount), 2) }}</span>
-                                        <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#xFDFC;</span>
+                                        <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
                                     </span>
                                 </button>
                             </div>
@@ -682,7 +682,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
             @endif
 
             @if(!config('services.external_api.use_new_auth_flow', false))
-            {{-- ── OTP Verification Modal (teleported to body) ──── --}}
+            {{-- -- OTP Verification Modal (teleported to body) ---- --}}
             <template x-teleport="body">
                 <div x-show="otpModalOpen"
                      x-transition:enter="transition ease-out duration-300"
@@ -810,7 +810,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
 @push('styles')
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <style>
-    /* ─── Smooth Page Animations ───────────────────── */
+    /* --- Smooth Page Animations --------------------- */
     .checkout-page .rounded-md {
         animation: checkout-fade-up 0.5s ease both;
     }
@@ -832,7 +832,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
         transition: all 0.25s ease !important;
     }
 
-    /* Phone +966 group: global .form-input-action__btn is absolute — avoid overlap with composite field */
+    /* Phone +966 group: global .form-input-action__btn is absolute ? avoid overlap with composite field */
     .checkout-page .checkout-phone-row.form-input-action {
         position: relative;
         align-items: stretch;
@@ -872,7 +872,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
         @apply text-gray-900 font-medium;
     }
 
-    /* ─── Date Picker Input ─────────────────────────── */
+    /* --- Date Picker Input --------------------------- */
     .date-picker-wrap {
         position: relative;
         display: flex;
@@ -936,7 +936,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
         line-height: 1;
     }
 
-    /* ─── Flatpickr Theme Override ──────────────────── */
+    /* --- Flatpickr Theme Override -------------------- */
     .flatpickr-calendar {
         border-radius: 16px !important;
         box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.04) !important;
@@ -1059,10 +1059,10 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
         color: #ccc !important;
     }
 
-    /* Only hide cloaked nodes inside checkout — avoids stuck hidden UI if Alpine loads late */
+    /* Only hide cloaked nodes inside checkout ? avoids stuck hidden UI if Alpine loads late */
     .checkout-page [x-cloak] { display: none !important; }
 
-    /* ─── OTP Modal ─────────────────────────────────── */
+    /* --- OTP Modal ----------------------------------- */
     .otp-overlay {
         position: fixed;
         inset: 0;
@@ -1389,7 +1389,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
             zones: @json($zones),
 
             checkoutProgramId: {{ (int) ($checkoutProgramId ?? 0) }},
-            /** Matches cart line duration_days — used when API duration_id differs from list ids */
+            /** Matches cart line duration_days ? used when API duration_id differs from list ids */
             cartDurationDaysHint: {{ (int) ($planDurationDays ?? 0) }},
             cartDurationFallback: @json($cartDurationFallback ?? null),
             durationsLoading: @json($hasPlanItems),
@@ -1473,7 +1473,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 return typeof window.dwSaudiPhone966 === 'function' ? window.dwSaudiPhone966(this.addressPhoneLocal) : '';
             },
 
-            // ─── PRICES FROM API ARE VAT-INCLUSIVE (like mobile app) ───
+            // --- PRICES FROM API ARE VAT-INCLUSIVE (like mobile app) ---
             // The baseSubtotal already includes VAT. We extract VAT for display only.
 
             durationCardTitle(d) {
@@ -1503,11 +1503,11 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 if (total > 0) {
                     const n = Math.round(total * 100) / 100;
 
-                    return '\uFDFC ' + (Number.isInteger(n) ? String(n) : n.toFixed(2));
+                    return '\u20C1 ' + (Number.isInteger(n) ? String(n) : n.toFixed(2));
                 }
                 const ppd = parseFloat(d.price_per_day) || 0;
                 if (ppd > 0) {
-                    return '\uFDFC ' + ppd.toFixed(2) + ' / {{ __('day') }}';
+                    return '\u20C1 ' + ppd.toFixed(2) + ' / {{ __('day') }}';
                 }
 
                 return '';
@@ -1569,7 +1569,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 const avg = Math.round((e / days) * 100) / 100;
                 const ns = Number.isInteger(avg) ? String(avg) : avg.toFixed(2);
 
-                return '{{ __('SAR') }} ' + ns + ' · {{ __('per day') }}';
+                return '{{ __('SAR') }} ' + ns + ' � {{ __('per day') }}';
             },
 
             planSelectedAvgPerDayAmount() {
@@ -1663,7 +1663,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                     return `${daysNum} {{ __('days') }}`;
                 }
                 if (labelStr && daysNum > 0) {
-                    return labelStr + ` · ${daysNum} {{ __('days') }}`;
+                    return labelStr + ` � ${daysNum} {{ __('days') }}`;
                 }
 
                 return labelStr;
@@ -1901,7 +1901,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 // API might return, then fall back to matching the district against
                 // the locally known zones list. Without a valid zone the server
                 // can't compute the correct delivery fee and the Moyasar session
-                // fails silently — so we *must* have one populated.
+                // fails silently ? so we *must* have one populated.
                 let cityId = addr.city?.id
                     ?? addr.city_id
                     ?? addr.zone_id
@@ -2016,7 +2016,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                         const isNewUser = !!(d.is_continue);
                         this.isContinueUser = isNewUser;
                         this.showNameField = isNewUser || !hasName;
-                        // Keep selection manual: user confirms address with "اختيار العنوان" button.
+                        // Keep selection manual: user confirms address with "?????? ???????" button.
                     }
                 } catch (e) {}
             },
@@ -2204,7 +2204,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 return Math.round(this.baseSubtotal * multiplier * 100) / 100;
             },
 
-            // Computed: subtotal including VAT (same as subtotal — price already includes VAT)
+            // Computed: subtotal including VAT (same as subtotal ? price already includes VAT)
             subtotalInclVat() {
                 return this.subtotal();
             },
@@ -2408,7 +2408,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                             this.showNameField = true;
                         }
 
-                        // Keep selection manual: user confirms address with "اختيار العنوان" button.
+                        // Keep selection manual: user confirms address with "?????? ???????" button.
                         if (isNewUser) {
                             this.$nextTick(() => this.$refs.checkoutUserCard?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
                         }
@@ -2429,7 +2429,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 this.otpLoading = false;
             },
 
-            // Handle single digit input → auto-focus next
+            // Handle single digit input ? auto-focus next
             handleOtpInput(event, index) {
                 const val = event.target.value.replace(/\D/g, '');
                 const digit = val.charAt(0) || '';
@@ -2448,14 +2448,14 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 }
             },
 
-            // Handle backspace → go to previous input
+            // Handle backspace ? go to previous input
             handleOtpBackspace(event, index) {
                 if (!this.otpDigits[index] && index > 0) {
                     this.$nextTick(() => document.getElementById('otp-input-' + (index - 1))?.focus());
                 }
             },
 
-            // Handle paste → fill all digits
+            // Handle paste ? fill all digits
             handleOtpPaste(event) {
                 event.preventDefault();
                 const paste = (event.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '').substring(0, 4);
@@ -2482,7 +2482,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 }, 1000);
             },
 
-            // Form submission — require phone verification
+            // Form submission ? require phone verification
             submitForm(event) {
                 if (!this.phoneVerified) {
                     // Open OTP modal so user can verify
@@ -2757,7 +2757,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
     document.addEventListener('DOMContentLoaded', function() {
         const locale = '{{ $locale }}';
         const months = locale === 'ar'
-            ? ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
+            ? ['?????','??????','????','?????','????','?????','?????','?????','??????','??????','??????','??????']
             : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
         function updateDisplay(dateStr) {
