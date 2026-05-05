@@ -53,6 +53,7 @@ class ApiAuthService
     public function sendOtp(string $phone): array
     {
         try {
+            $mobile = SaudiPhone::forExternalApiMobile($phone);
             $response = $this->http()->asForm()->post($this->url('login/ordinary/reset'), [
                 'mobile' => SaudiPhone::toE164($phone),
             ]);
@@ -105,6 +106,11 @@ class ApiAuthService
     public function registerMobile(array $data): array
     {
         try {
+            foreach (['mobile', 'phone'] as $key) {
+                if (isset($data[$key]) && is_string($data[$key]) && $data[$key] !== '') {
+                    $data[$key] = SaudiPhone::forExternalApiMobile($data[$key]);
+                }
+            }
             $response = $this->http()->post($this->url('register/mobile'), $data);
 
             return $response->json() ?? [];

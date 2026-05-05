@@ -605,6 +605,7 @@ function googleMapPicker(opts) {
 
         editInlineAddress() {
             this.inlineConfirmed = false;
+            this.$dispatch('checkout-inline-address-editing');
             this.$nextTick(() => {
                 if (this._map && window.google && window.google.maps) {
                     window.google.maps.event.trigger(this._map, 'resize');
