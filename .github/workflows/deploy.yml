@@ -23,12 +23,15 @@ jobs:
             git stash
             GIT_SSH_COMMAND="ssh -i /home/developers/.ssh/id_ed25519" git pull origin main
             php /usr/local/bin/composer install --no-dev --optimize-autoloader --ignore-platform-req=php
+            php artisan optimize:clear
             php artisan migrate --force
             php artisan filament:upgrade
             php artisan config:cache
             php artisan route:cache
-            php artisan view:clear
+            php artisan view:cache
             php artisan storage:link
+            if command -v /usr/local/bin/ea-php83 >/dev/null 2>&1; then /usr/local/bin/ea-php83 -r "if (function_exists('opcache_reset')) { opcache_reset(); }"; fi
+            if command -v /usr/sbin/service >/dev/null 2>&1; then /usr/sbin/service ea-php83-php-fpm reload || true; fi
             chown -R dwsa:dwsa /home/dwsa/public_html/website
             chmod 711 /home/dwsa
             chmod 755 /home/dwsa/public_html

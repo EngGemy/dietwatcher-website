@@ -263,7 +263,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                         </svg>
-                                        <span x-text="addingNewAddress ? '{{ __('Cancel') }}' : '{{ __('Add new address') }}'"></span>
+                                        <span x-text="addingNewAddress ? @js(__('Cancel')) : @js(__('Add new address'))"></span>
                                     </button>
                                 </div>
                                 <p class="mb-3 text-xs text-gray-600">{{ __('checkout.saved_addresses_hint') }}</p>
@@ -1342,10 +1342,10 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
             duration: @json($hasPlanItems ? 'once' : old('duration', 'monthly')),
             selectedPlanDurationId: @json((string) ($preferredPlanDurationId ?? '')),
             planDurationPrices: @json($planDurationPrices ?? []),
-            deliveryType: '{{ old('delivery_type', 'home') }}',
+            deliveryType: @json(old('delivery_type', 'home')),
             selectedPlanId: @json((int) (collect($cart)->first()['id'] ?? 0)),
             hasCartItems: @json(!empty($cart)),
-            startDate: '{{ old('start_date', now()->addHours(48)->format('Y-m-d')) }}',
+            startDate: @json(old('start_date', now()->addHours(48)->format('Y-m-d'))),
             vatRate: {{ $vatRate }},
             deliveryFeeAmount: {{ $deliveryFeeAmount }},
             discount: 0,
@@ -1385,7 +1385,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
             _syncExtTimer: null,
 
             // Zone state
-            selectedZoneId: '{{ old('zone_id', '') }}',
+            selectedZoneId: @json(old('zone_id', '')),
             zones: @json($zones),
 
             checkoutProgramId: {{ (int) ($checkoutProgramId ?? 0) }},
@@ -1397,7 +1397,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
             planDurations: @json($planDurations ?? []),
 
             // Branch pickup state
-            selectedBranchId: '{{ old('branch_id', '') }}',
+            selectedBranchId: @json(old('branch_id', '')),
             branches: [],
             branchesLoading: true,
             pickupPhase: @json(old('branch_id') && old('delivery_type') === 'pickup' ? 'done' : 'cta'),
@@ -1418,7 +1418,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
             otpCooldown: 0,
 
             // Coupon state
-            couponCode: '{{ old('coupon', '') }}',
+            couponCode: @json(old('coupon', '')),
             couponApplied: false,
             couponLoading: false,
             couponMessage: '',
@@ -1488,7 +1488,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                     return String(label);
                 }
                 if (d.days) {
-                    return String(d.days) + ' {{ __('days') }}';
+                    return String(d.days) + ' ' + @json(__('days'));
                 }
 
                 return '';
@@ -1507,7 +1507,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 }
                 const ppd = parseFloat(d.price_per_day) || 0;
                 if (ppd > 0) {
-                    return '\u20C1 ' + ppd.toFixed(2) + ' / {{ __('day') }}';
+                    return '\u20C1 ' + ppd.toFixed(2) + ' / ' + @json(__('day'));
                 }
 
                 return '';
@@ -1569,7 +1569,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 const avg = Math.round((e / days) * 100) / 100;
                 const ns = Number.isInteger(avg) ? String(avg) : avg.toFixed(2);
 
-                return '{{ __('SAR') }} ' + ns + ' · {{ __('per day') }}';
+                return @json(__('SAR')) + ' ' + ns + ' - ' + @json(__('per day'));
             },
 
             planSelectedAvgPerDayAmount() {
@@ -1588,7 +1588,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 }
                 const avg = Math.round((e / days) * 100) / 100;
 
-                return '{{ __('SAR') }} ' + (Number.isInteger(avg) ? String(avg) : avg.toFixed(2));
+                return @json(__('SAR')) + ' ' + (Number.isInteger(avg) ? String(avg) : avg.toFixed(2));
             },
 
             normalizeDurationRow(row) {
@@ -1660,10 +1660,10 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                     return labelStr;
                 }
                 if (! labelStr && daysNum > 0) {
-                    return `${daysNum} {{ __('days') }}`;
+                    return `${daysNum} ${@json(__('days'))}`;
                 }
                 if (labelStr && daysNum > 0) {
-                    return labelStr + ` · ${daysNum} {{ __('days') }}`;
+                    return labelStr + ` - ${daysNum} ${@json(__('days'))}`;
                 }
 
                 return labelStr;
@@ -1825,20 +1825,20 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 }
                 const phoneForAddress = this.addressPhone966() || this.fullPhone966();
                 if (! phoneForAddress) {
-                    this.newAddressError = '{{ __('Please enter a phone number for this address.') }}';
+                    this.newAddressError = @json(__('Please enter a phone number for this address.'));
                     return;
                 }
                 payload.set('phone', phoneForAddress);
                 if (! payload.get('delivery_lat') || ! payload.get('delivery_lng')) {
-                    this.newAddressError = '{{ __('Please set a location on the map first.') }}';
+                    this.newAddressError = @json(__('Please set a location on the map first.'));
                     return;
                 }
                 if (! payload.get('delivery_district_id')) {
-                    this.newAddressError = '{{ __('Please confirm the address (district) on the map.') }}';
+                    this.newAddressError = @json(__('Please confirm the address (district) on the map.'));
                     return;
                 }
                 if (! payload.get('zone_id')) {
-                    this.newAddressError = '{{ __('Please select a city first.') }}';
+                    this.newAddressError = @json(__('Please select a city first.'));
                     return;
                 }
                 this.savingNewAddress = true;
@@ -1856,7 +1856,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                         const errs = data && data.errors && typeof data.errors === 'object'
                             ? Object.values(data.errors).flat().filter(Boolean)
                             : [];
-                        this.newAddressError = errs[0] || data.message || '{{ __('address.save_failed') }}';
+                        this.newAddressError = errs[0] || data.message || @json(__('address.save_failed'));
                         this.syncAddressError = this.newAddressError;
                         return;
                     }
@@ -1880,7 +1880,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                     }
                     this.addingNewAddress = false;
                 } catch (e) {
-                    this.newAddressError = '{{ __('An error occurred. Please try again.') }}';
+                    this.newAddressError = @json(__('An error occurred. Please try again.'));
                 } finally {
                     this.savingNewAddress = false;
                 }
@@ -2284,7 +2284,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                         this.couponApplied = false;
                     }
                 } catch (error) {
-                    this.couponMessage = '{{ __('An error occurred. Please try again.') }}';
+                    this.couponMessage = @json(__('An error occurred. Please try again.'));
                     this.discount = 0;
                     this.couponApplied = false;
                 }
@@ -2357,7 +2357,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                         this.otpMessageType = 'error';
                     }
                 } catch (error) {
-                    this.otpMessage = '{{ __('An error occurred. Please try again.') }}';
+                    this.otpMessage = @json(__('An error occurred. Please try again.'));
                     this.otpMessageType = 'error';
                 }
 
@@ -2422,7 +2422,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                         this.$nextTick(() => document.getElementById('otp-input-0')?.focus());
                     }
                 } catch (error) {
-                    this.otpMessage = '{{ __('An error occurred. Please try again.') }}';
+                    this.otpMessage = @json(__('An error occurred. Please try again.'));
                     this.otpMessageType = 'error';
                 }
 
@@ -2490,7 +2490,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                     return;
                 }
                 if (!this.canProceedToPayment()) {
-                    this.moyasarError = '{{ __('payment.fill_delivery_first') }}';
+                    this.moyasarError = @json(__('payment.fill_delivery_first'));
                     return;
                 }
                 event.target.submit();
@@ -2524,7 +2524,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 }
                 const hasSdk = await this.waitForMoyasar();
                 if (! hasSdk) {
-                    this.moyasarError = '{{ __('payment.moyasar_load_failed') }}';
+                    this.moyasarError = @json(__('payment.moyasar_load_failed'));
 
                     return;
                 }
@@ -2549,7 +2549,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                         return;
                     }
                     if (! res.ok || ! data.success) {
-                        this.moyasarError = data.message || '{{ __('payment.fill_delivery_first') }}';
+                        this.moyasarError = data.message || @json(__('payment.fill_delivery_first'));
                         const el = document.getElementById('moyasar-form-checkout');
                         if (el) {
                             el.innerHTML = '';
@@ -2559,7 +2559,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                     }
                     this.initMoyasarWidget(data);
                 } catch (e) {
-                    this.moyasarError = '{{ __('An error occurred. Please try again.') }}';
+                    this.moyasarError = @json(__('An error occurred. Please try again.'));
                 }
             },
 
@@ -2594,7 +2594,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                 }
                 const hasSdk = await this.waitForMoyasar();
                 if (! hasSdk) {
-                    this.moyasarError = '{{ __('payment.moyasar_load_failed') }}';
+                    this.moyasarError = @json(__('payment.moyasar_load_failed'));
 
                     return;
                 }
@@ -2620,7 +2620,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                         return;
                     }
                     if (! res.ok || ! data.success) {
-                        this.moyasarError = data.message || '{{ __('payment.fill_delivery_first') }}';
+                        this.moyasarError = data.message || @json(__('payment.fill_delivery_first'));
                         const el = document.getElementById('moyasar-form-checkout');
                         if (el) {
                             el.innerHTML = '';
@@ -2630,7 +2630,7 @@ if ($checkoutDefaultHomeZoneId === '' && isset($zones) && count($zones) === 1) {
                     }
                     this.initMoyasarWidget(data);
                 } catch (e) {
-                    this.moyasarError = '{{ __('An error occurred. Please try again.') }}';
+                    this.moyasarError = @json(__('An error occurred. Please try again.'));
                 }
             },
 
