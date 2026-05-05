@@ -28,10 +28,18 @@ jobs:
             php artisan filament:upgrade
             php artisan config:cache
             php artisan route:cache
-            php artisan view:cache
+            php artisan view:clear
             php artisan storage:link
-            if command -v /usr/local/bin/ea-php83 >/dev/null 2>&1; then /usr/local/bin/ea-php83 -r "if (function_exists('opcache_reset')) { opcache_reset(); }"; fi
-            if command -v /usr/sbin/service >/dev/null 2>&1; then /usr/sbin/service ea-php83-php-fpm reload || true; fi
+            PHP_BIN="$(command -v php || true)"
+            if [ -n "$PHP_BIN" ]; then "$PHP_BIN" -r "if (function_exists('opcache_reset')) { opcache_reset(); }" || true; fi
+            FPM_SERVICE="$(systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -E '(^|-)php([0-9.-]+)?-fpm\\.service$|^php-fpm\\.service$|^ea-php[0-9]+-php-fpm\\.service$' | head -n 1)"
+            if [ -n "$FPM_SERVICE" ]; then
+              systemctl reload "$FPM_SERVICE" || true
+            elif systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -q '^httpd\\.service$'; then
+              systemctl reload httpd || true
+            elif systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -q '^apache2\\.service$'; then
+              systemctl reload apache2 || true
+            fi
             chown -R dwsa:dwsa /home/dwsa/public_html/website
             chmod 711 /home/dwsa
             chmod 755 /home/dwsa/public_html
