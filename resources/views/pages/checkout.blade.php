@@ -240,44 +240,6 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                 @enderror
                             </div>
 
-                            <div x-show="phoneVerified && savedAddresses.length > 0" x-cloak class="rounded-lg border border-blue-100 bg-blue-50/80 p-4">
-                                <div class="mb-2 flex items-center justify-between gap-2">
-                                    <p class="text-sm font-semibold text-gray-900">{{ __('checkout.saved_addresses_title') }}</p>
-                                    <button type="button"
-                                            class="inline-flex items-center gap-1 rounded-lg border border-blue-500 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
-                                            @click="startAddingAddress()">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                                        </svg>
-                                        <span x-text="addingNewAddress ? @js(__('Cancel')) : @js(__('Add new address'))"></span>
-                                    </button>
-                                </div>
-                                <p class="mb-3 text-xs text-gray-600">{{ __('checkout.saved_addresses_hint') }}</p>
-                                <ul class="max-h-64 space-y-2 overflow-y-auto" x-show="!addingNewAddress">
-                                    <template x-for="addr in savedAddresses" :key="addr.id">
-                                        <li>
-                                            <div class="w-full rounded-lg border px-3 py-2.5 text-sm text-gray-800 transition hover:border-blue-400 hover:bg-blue-50/50"
-                                                 :class="String(addr.id) === String(selectedAddressId) ? 'border-blue-500 bg-white shadow-sm ring-1 ring-blue-200' : 'border-gray-200 bg-white'">
-                                                <div class="flex items-start justify-between gap-3">
-                                                    <div class="min-w-0 flex-1">
-                                                        <span class="line-clamp-2 block text-left" x-text="addr.description || addr.title || ''"></span>
-                                                        <span class="mt-1 block text-xs text-gray-500 text-left" x-text="savedAddressDistrict(addr)"></span>
-                                                    </div>
-                                                    <button type="button"
-                                                            class="shrink-0 rounded-md border border-blue-500 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
-                                                            @click="selectSavedAddress(addr)">
-                                                        ?????? ???????
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </li>
-                                    </template>
-                                </ul>
-                                <p x-show="addingNewAddress" x-cloak class="text-xs text-blue-700">
-                                    {{ __('Fill the map and address fields below, then tap "Save address".') }}
-                                </p>
-                            </div>
-
                         </div>
                     </div>
 
@@ -316,6 +278,44 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             @error('delivery_type')
                                 <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
                             @enderror
+                        </div>
+
+                        <div x-show="phoneVerified && deliveryType === 'home' && savedAddresses.length > 0" x-cloak class="mb-6 rounded-lg border border-blue-100 bg-blue-50/80 p-4">
+                            <div class="mb-2 flex items-center justify-between gap-2">
+                                <p class="text-sm font-semibold text-gray-900">{{ __('checkout.saved_addresses_title') }}</p>
+                                <button type="button"
+                                        class="inline-flex items-center gap-1 rounded-lg border border-blue-500 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
+                                        @click="startAddingAddress()">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                    </svg>
+                                    <span x-text="addingNewAddress ? @js(__('Cancel')) : @js(__('Add new address'))"></span>
+                                </button>
+                            </div>
+                            <p class="mb-3 text-xs text-gray-600">{{ __('checkout.saved_addresses_hint') }}</p>
+                            <ul class="max-h-64 space-y-2 overflow-y-auto" x-show="!addingNewAddress">
+                                <template x-for="addr in savedAddresses" :key="addr.id">
+                                    <li>
+                                        <div class="w-full rounded-lg border px-3 py-2.5 text-sm text-gray-800 transition hover:border-blue-400 hover:bg-blue-50/50"
+                                             :class="String(addr.id) === String(selectedAddressId) ? 'border-blue-500 bg-white shadow-sm ring-1 ring-blue-200' : 'border-gray-200 bg-white'">
+                                            <div class="flex items-start justify-between gap-3">
+                                                <div class="min-w-0 flex-1">
+                                                    <span class="line-clamp-2 block text-left" x-text="addr.description || addr.title || ''"></span>
+                                                    <span class="mt-1 block text-xs text-gray-500 text-left" x-text="savedAddressDistrict(addr)"></span>
+                                                </div>
+                                                <button type="button"
+                                                        class="shrink-0 rounded-md border border-blue-500 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
+                                                        @click="selectSavedAddress(addr)">
+                                                    {{ __('Select') }}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </li>
+                                </template>
+                            </ul>
+                            <p x-show="addingNewAddress" x-cloak class="text-xs text-blue-700">
+                                {{ __('Fill the map and address fields below, then tap "Save address".') }}
+                            </p>
                         </div>
 
                         {{-- Pickup: choose branch ? search list ? confirmed --}}
@@ -419,33 +419,14 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                         </p>
                                     @endunless
 
-                                    <div>
-                                        <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Address') }}</label>
+                                    {{-- Hidden by request: area/address/duplicate phone fields.
+                                         Values are still submitted to keep backend validation intact. --}}
+                                    <div class="hidden">
                                         <textarea name="street" rows="3"
-                                                  class="form-control @error('street') border-red-500 @enderror"
-                                                  placeholder="{{ __('Street, district, details?') }}"
                                                   x-model="addressStreet"
                                                   :required="deliveryType === 'home'"
                                                   :disabled="deliveryType === 'pickup'"></textarea>
-                                        @error('street')
-                                            <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
-                                        @enderror
-                                    </div>
-
-                                    <div x-show="deliveryType === 'home' && addingNewAddress" x-cloak>
-                                        <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Phone') }}</label>
-                                        <input type="hidden" name="address_phone" x-bind:value="addressPhone966()" autocomplete="off" />
-                                        <div class="flex min-w-0 items-stretch rounded-md border border-gray-300 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
-                                            <span class="flex select-none items-center border-e border-gray-200 bg-gray-50 px-3 text-sm font-medium text-gray-600" dir="ltr">+966</span>
-                                            <input type="tel" class="min-w-0 flex-1 border-0 bg-transparent px-3 py-2.5 text-gray-900 outline-none focus:ring-0"
-                                                   autocomplete="tel" inputmode="numeric" maxlength="9" placeholder="5XXXXXXXX" dir="ltr"
-                                                   x-model="addressPhoneLocal"
-                                                   @input="addressPhoneLocal = typeof window.dwSaudiPhoneDigits === 'function'
-    ? window.dwSaudiPhoneDigits($event.target.value || '')
-    : ($event.target.value || '').replace(/\D/g, '').slice(0, 9)"
-                                                   :disabled="deliveryType === 'pickup'" />
-                                        </div>
-                                        <p class="mt-1 text-xs text-gray-500">{{ __('Used for delivery coordination on this address.') }}</p>
+                                        <input type="hidden" name="address_phone" x-bind:value="fullPhone966() || addressPhone966()" autocomplete="off" />
                                     </div>
 
                                     <div class="grid grid-cols-1 gap-3 sm:grid-cols-3" x-show="deliveryType === 'home'" x-cloak>
@@ -1330,6 +1311,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             planDurationPrices: @json($planDurationPrices ?? []),
             deliveryType: @json(old('delivery_type', 'home')),
             selectedPlanId: @json((int) (collect($cart)->first()['id'] ?? 0)),
+            selectedSubscriptionPlanId: @json((int) data_get(collect($cart)->first(), 'options.subscription_plan_id', 0)),
+            selectedPlanCaloryId: @json((int) data_get(collect($cart)->first(), 'options.calorie_id', 0)),
             hasCartItems: @json(!empty($cart)),
             startDate: @json(old('start_date', now()->addHours(48)->format('Y-m-d'))),
             vatRate: {{ $vatRate }},
@@ -2227,8 +2210,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             subtotal: this.subtotal(),
                             identifier: this.fullPhone966() || '',
                             program_id: this.selectedPlanId || 0,
+                            subscription_plan_id: parseInt(this.selectedSubscriptionPlanId || 0, 10) || 0,
                             plan_duration_id: parseInt(this.selectedPlanDurationId || 0, 10) || 0,
-                            plan_calory_id: 0,
+                            plan_calory_id: parseInt(this.selectedPlanCaloryId || 0, 10) || 0,
                         }),
                     });
 

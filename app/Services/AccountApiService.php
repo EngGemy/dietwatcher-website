@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\PaymentKind;
 use App\Enums\PaymentStatus;
 use App\Models\Payment;
+use App\Services\ExternalDataService;
+use App\Support\SubscriptionCheckoutPayload;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -173,11 +176,16 @@ class AccountApiService
         return $this->listSubscriptions($subscriptionId, $date);
     }
 
-    public function startSubscription(string $date): array
+    public function startSubscription(string $date, ?string $token = null): array
     {
+        $token = (string) ($token ?: session('external_api_token', ''));
+        if ($token === '') {
+            return $this->empty(__('account.login_required'));
+        }
+
         try {
             return $this->decode(
-                $this->authed()->asForm()->post($this->url('subscriptions/start'), ['date' => $date])
+                $this->authedWithToken($token)->asForm()->post($this->url('subscriptions/start'), ['date' => $date])
             );
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::startSubscription failed', ['error' => $e->getMessage()]);
@@ -314,6 +322,170 @@ class AccountApiService
 
             return $this->empty();
         }
+    }
+
+    /**
+     * POST /subscriptions/calculate — authoritative subscription pricing (customer token).
+     */
+    public function calculateSubscription(array $payload, ?string $token = null): array
+    {
+        $token = (string) ($token ?: session('external_api_token', ''));
+        if ($token === '') {
+            return $this->empty(__('account.login_required'));
+        }
+
+        try {
+            return $this->decode(
+                $this->authedWithToken($token)->asForm()->post($this->url('subscriptions/calculate'), $payload)
+            );
+        } catch (\Throwable $e) {
+            Log::warning('AccountApiService::calculateSubscription failed', ['error' => $e->getMessage()]);
+
+            return $this->empty(__('account.request_failed'));
+        }
+    }
+
+    /**
+     * POST /subscriptions — create subscription for authenticated customer.
+     */
+    public function createSubscription(array $payload, ?string $token = null): array
+    {
+        $token = (string) ($token ?: session('external_api_token', ''));
+        if ($token === '') {
+            return $this->empty(__('account.login_required'));
+        }
+
+        try {
+            return $this->decode(
+                $this->authedWithToken($token)->asForm()->post($this->url('subscriptions'), $payload)
+            );
+        } catch (\Throwable $e) {
+            Log::warning('AccountApiService::createSubscription failed', ['error' => $e->getMessage()]);
+
+            return $this->empty(__('account.request_failed'));
+        }
+    }
+
+    /**
+     * Parse /subscriptions/calculate data into SAR amounts for Moyasar.
+     *
+     * @return array{subtotal: float, delivery: float, discount: float, vat: float, total: float}|null
+     */
+    public function parseSubscriptionCalculateTotals(mixed $data): ?array
+    {
+        if (! is_array($data)) {
+            return null;
+        }
+
+        $total = $this->moneyAmount($data['total'] ?? $data['grand_total'] ?? $data['amount'] ?? $data['final_total'] ?? null);
+        if ($total <= 0) {
+            return null;
+        }
+
+        $subtotal = $this->moneyAmount($data['subtotal'] ?? $data['price'] ?? $data['plan_price'] ?? 0);
+        $delivery = $this->moneyAmount($data['delivery'] ?? $data['delivery_price'] ?? $data['delivery_fee'] ?? 0);
+        $discount = $this->moneyAmount($data['discount'] ?? $data['discount_amount'] ?? 0);
+        $vat = $this->moneyAmount($data['vat'] ?? $data['tax'] ?? $data['vat_amount'] ?? 0);
+
+        if ($vat <= 0 && $subtotal > 0) {
+            $vat = max(0, $total - $subtotal - $delivery + $discount);
+        }
+
+        return [
+            'subtotal' => round($subtotal > 0 ? $subtotal : max(0, $total - $delivery + $discount - $vat), 2),
+            'delivery' => round($delivery, 2),
+            'discount' => round($discount, 2),
+            'vat' => round($vat, 2),
+            'total' => round($total, 2),
+        ];
+    }
+
+    protected function moneyAmount(mixed $value): float
+    {
+        if (is_array($value)) {
+            $value = $value['amount'] ?? $value['value'] ?? 0;
+        }
+
+        return is_numeric($value) ? (float) $value : 0.0;
+    }
+
+    /**
+     * Sync a paid subscription payment to POST /subscriptions (+ optional start).
+     *
+     * @return array{ok: bool, message: string, external_subscription_id: int|null}
+     */
+    public function syncPaidPaymentToExternalSubscription(
+        Payment $payment,
+        ?string $token = null,
+        ?ExternalDataService $externalData = null,
+    ): array {
+        if ($payment->status !== PaymentStatus::PAID) {
+            return ['ok' => false, 'message' => 'payment_not_paid', 'external_subscription_id' => null];
+        }
+
+        if (! empty($payment->external_subscription_id)) {
+            return [
+                'ok' => true,
+                'message' => 'already_synced',
+                'external_subscription_id' => (int) $payment->external_subscription_id,
+            ];
+        }
+
+        $externalData ??= app(ExternalDataService::class);
+        $payload = SubscriptionCheckoutPayload::buildFromPayment($payment, $externalData);
+
+        if (($payload['program_id'] ?? '') === '' || ($payload['plan_duration_id'] ?? '') === '' || ($payload['plan_duration_id'] ?? '') === '0') {
+            return ['ok' => false, 'message' => 'missing_subscription_fields', 'external_subscription_id' => null];
+        }
+
+        if (($payload['plan_calory_id'] ?? '') === '' || ($payload['plan_calory_id'] ?? '') === '0') {
+            return ['ok' => false, 'message' => 'missing_plan_calory_id', 'external_subscription_id' => null];
+        }
+
+        $result = $this->createSubscription($payload, $token);
+        if (! ($result['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'message' => (string) ($result['message'] ?? 'external_subscription_create_failed'),
+                'external_subscription_id' => null,
+            ];
+        }
+
+        $subscriptionId = $this->extractExternalSubscriptionId($result['data'] ?? []);
+
+        $startDate = (string) ($payment->start_date ?: ($payload['start_date'] ?? ''));
+        if ($subscriptionId !== null && $startDate !== '') {
+            $start = $this->startSubscription($startDate, $token);
+            if (! ($start['ok'] ?? false)) {
+                Log::warning('AccountApiService::syncPaidPaymentToExternalSubscription start failed', [
+                    'payment' => $payment->order_number,
+                    'subscription_id' => $subscriptionId,
+                    'message' => $start['message'] ?? '',
+                ]);
+            }
+        }
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'external_subscription_id' => $subscriptionId,
+        ];
+    }
+
+    protected function extractExternalSubscriptionId(mixed $data): ?int
+    {
+        if (! is_array($data)) {
+            return null;
+        }
+
+        $sub = $data['subscription'] ?? $data['data'] ?? $data;
+        if (! is_array($sub)) {
+            return null;
+        }
+
+        $id = $sub['id'] ?? $sub['subscription_id'] ?? null;
+
+        return is_numeric($id) ? (int) $id : null;
     }
 
     // ─── Orders ───────────────────────────────────────────────────────
@@ -566,6 +738,15 @@ class AccountApiService
      */
     public function syncPaidPaymentToExternalOrder(Payment $payment, ?string $token = null): array
     {
+        if ($payment->kind === PaymentKind::Subscription) {
+            return [
+                'ok' => false,
+                'message' => 'wrong_payment_kind',
+                'external_order_id' => null,
+                'external_order_number' => null,
+            ];
+        }
+
         if ($payment->status !== PaymentStatus::PAID) {
             return ['ok' => false, 'message' => 'payment_not_paid', 'external_order_id' => null, 'external_order_number' => null];
         }

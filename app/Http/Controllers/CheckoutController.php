@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\PaymentKind;
 use App\Enums\PaymentStatus;
 use App\Livewire\Cart\CartManager;
 use App\Models\Coupon;
 use App\Models\Payment;
 use App\Models\Settings\Setting;
+use App\Services\AccountApiService;
 use App\Services\ApiAuthService;
 use App\Services\ExternalDataService;
+use App\Support\SubscriptionCheckoutPayload;
 use App\Services\Payment\MoyasarPaymentService;
 use App\Support\SaudiPhone;
 use Illuminate\Http\JsonResponse;
@@ -36,7 +39,8 @@ class CheckoutController extends Controller
     }
 
     public function __construct(
-        private ExternalDataService $externalDataService
+        private ExternalDataService $externalDataService,
+        private AccountApiService $accountApiService,
     ) {}
 
     public function index(Request $request): View|RedirectResponse
@@ -128,6 +132,16 @@ class CheckoutController extends Controller
             $displayName = $variantName !== '' ? $planName.' — '.$variantName : $planName;
             $linePrice = $planTotalParam > 0 ? $planTotalParam : (float) ($plan->price ?? 0);
 
+            $calorieId = (int) $request->get('calorie_id', 0);
+            if ($calorieId <= 0 && $calories !== '') {
+                $calorieId = SubscriptionCheckoutPayload::resolvePlanCaloryId(
+                    $planId,
+                    $subscriptionPlanId,
+                    (string) $calories,
+                    $this->externalDataService
+                );
+            }
+
             $subscriptionCart = [
                 'plan_'.$planId => [
                     'id' => $planId,
@@ -138,6 +152,7 @@ class CheckoutController extends Controller
                     'options' => [
                         'mealType' => $mealType,
                         'subscription_plan_id' => $subscriptionPlanId > 0 ? $subscriptionPlanId : null,
+                        'calorie_id' => $calorieId > 0 ? $calorieId : null,
                         'calories' => $calories,
                         'duration_days' => $resolvedDurationDays,
                         'duration_id' => $resolvedDurationId !== '' ? $resolvedDurationId : $durationId,
@@ -491,15 +506,26 @@ class CheckoutController extends Controller
             }
         }
 
-        // Prices from API are VAT-INCLUSIVE (like mobile app)
-        // Extract VAT from the inclusive price for record-keeping
         $vatRate = (float) Setting::getValue('vat_rate', 15) / 100;
-        $total = $subtotal + $deliveryFee - $discountAmount;
-        // VAT is extracted from the inclusive total: VAT = total - (total / (1 + vatRate))
-        $vatAmount = round($total - ($total / (1 + $vatRate)), 2);
-
-        // Convert to halalas (smallest currency unit) for Moyasar
+        $isSubscriptionCheckout = $hasPlanItems && session()->has(CartManager::SESSION_SUBSCRIPTION);
+        $planDurationId = (int) $request->input('plan_duration_id', 0);
+        $amounts = $this->resolvePaymentAmounts(
+            $isSubscriptionCheckout,
+            $cart,
+            $validated,
+            $planDurationId,
+            $subtotal,
+            $deliveryFee,
+            $discountAmount,
+            $vatRate,
+        );
+        $subtotal = $amounts['subtotal'];
+        $deliveryFee = $amounts['delivery'];
+        $discountAmount = $amounts['discount'];
+        $vatAmount = $amounts['vat'];
+        $total = $amounts['total'];
         $amountInHalalas = (int) round($total * 100);
+        $subscriptionApiPayload = $amounts['subscription_api_payload'];
 
         $pickupDescription = null;
         if (($validated['delivery_type'] ?? '') === 'pickup' && ! empty($validated['branch_id'])) {
@@ -536,7 +562,22 @@ class CheckoutController extends Controller
             $buildingForPayment = trim($buildingForPayment.' | pickup: '.$request->input('delivery_pickup_type'));
         }
 
+        $checkoutPayload = [
+            'delivery_type' => $validated['delivery_type'] ?? null,
+            'branch_id' => $validated['branch_id'] ?? null,
+            'selected_address_id' => $validated['selected_address_id'] ?? null,
+            'zone_id' => $validated['zone_id'] ?? null,
+            'note' => (string) ($request->input('note', '') ?? ''),
+            'payment_option' => 'credit_card',
+            'use_wallet' => (string) ($request->input('useWallet', '0') ?? '0'),
+            'plan_duration_id' => $planDurationId > 0 ? $planDurationId : null,
+        ];
+        if ($subscriptionApiPayload !== []) {
+            $checkoutPayload['subscription_api'] = $subscriptionApiPayload;
+        }
+
         $paymentData = [
+            'kind' => $isSubscriptionCheckout ? PaymentKind::Subscription : PaymentKind::Order,
             'amount' => $amountInHalalas,
             'currency' => 'SAR',
             'subtotal' => (int) round($subtotal * 100),
@@ -548,15 +589,7 @@ class CheckoutController extends Controller
             'customer_phone' => $validated['phone'],
             'customer_phone_normalized' => self::normalizePhoneForMatch((string) $validated['phone']),
             'cart_items' => $cart,
-            'checkout_payload' => [
-                'delivery_type' => $validated['delivery_type'] ?? null,
-                'branch_id' => $validated['branch_id'] ?? null,
-                'selected_address_id' => $validated['selected_address_id'] ?? null,
-                'zone_id' => $validated['zone_id'] ?? null,
-                'note' => (string) ($request->input('note', '') ?? ''),
-                'payment_option' => 'credit_card',
-                'use_wallet' => (string) ($request->input('useWallet', '0') ?? '0'),
-            ],
+            'checkout_payload' => $checkoutPayload,
             'start_date' => $validated['start_date'] ?? now()->format('Y-m-d'),
             'duration' => $validated['duration'],
             'delivery_type' => $validated['delivery_type'],
@@ -597,6 +630,7 @@ class CheckoutController extends Controller
             'subtotal' => 'required|numeric|min:0',
             'identifier' => 'nullable|string|max:255',
             'program_id' => 'nullable|integer',
+            'subscription_plan_id' => 'nullable|integer',
             'plan_duration_id' => 'nullable|integer',
             'plan_calory_id' => 'nullable|integer',
         ]);
@@ -618,11 +652,29 @@ class CheckoutController extends Controller
 
         $programId = (int) ($validated['program_id'] ?? 0);
         if ($programId > 0) {
+            $planCaloryId = (int) ($validated['plan_calory_id'] ?? 0);
+            if ($planCaloryId <= 0) {
+                $cart = session()->get(CartManager::SESSION_SUBSCRIPTION, []);
+                $line = SubscriptionCheckoutPayload::firstPlanLine($cart)['line'];
+                $options = is_array($line['options'] ?? null) ? $line['options'] : [];
+                $planCaloryId = (int) ($options['calorie_id'] ?? 0);
+                if ($planCaloryId <= 0) {
+                    $subPlanId = (int) ($validated['subscription_plan_id'] ?? $options['subscription_plan_id'] ?? 0);
+                    $planCaloryId = SubscriptionCheckoutPayload::resolvePlanCaloryId(
+                        $programId,
+                        $subPlanId,
+                        (string) ($options['calories'] ?? ''),
+                        $this->externalDataService
+                    );
+                }
+            }
+
             $extResult = $this->validatePromoViaExternalApi(
                 (string) $validated['code'],
                 $programId,
                 (int) ($validated['plan_duration_id'] ?? 0),
-                (int) ($validated['plan_calory_id'] ?? 0),
+                $planCaloryId,
+                (int) ($validated['subscription_plan_id'] ?? 0),
             );
             if ($extResult !== null) {
                 return response()->json($extResult);
@@ -695,16 +747,22 @@ class CheckoutController extends Controller
         int $programId,
         int $planDurationId,
         int $planCaloryId,
+        int $subscriptionPlanId = 0,
     ): ?array {
         if (! filled(config('services.external_api.url'))) {
             return null;
         }
 
+        $token = (string) session('external_api_token', '');
+        if ($token === '') {
+            return null;
+        }
+
         try {
-            $baseUrl = rtrim((string) config('services.external_api.url', ''), '/');
+            $planId = $subscriptionPlanId > 0 ? $subscriptionPlanId : $programId;
             $payload = [
                 'program_id' => (string) $programId,
-                'plan_id' => (string) $programId,
+                'plan_id' => (string) $planId,
                 'plan_duration_id' => (string) $planDurationId,
                 'plan_calory_id' => (string) $planCaloryId,
                 'promocode_name' => $code,
@@ -712,24 +770,20 @@ class CheckoutController extends Controller
                 'with_support' => '0',
                 'with_weekend' => '0',
             ];
-            $response = $this->externalDataService->httpClient()
-                ->timeout(6)
-                ->asForm()
-                ->post($baseUrl.'/subscriptions/calculate', $payload);
-
-            if (! $response->successful()) {
+            $response = $this->accountApiService
+                ->calculateSubscription($payload, $token);
+            if (! ($response['ok'] ?? false)) {
                 return null;
             }
 
-            $json = $response->json() ?? [];
-            $data = $json['data'] ?? $json ?? [];
+            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
             $discountAmount = (float) ($data['discount'] ?? $data['discount_amount'] ?? 0);
             $promoValid = $discountAmount > 0
                 || isset($data['promocode'])
-                || ($json['success'] ?? false) === true;
+                || ($response['raw']['success'] ?? false) === true;
 
             if (! $promoValid) {
-                $message = (string) ($json['message'] ?? __('Invalid coupon code.'));
+                $message = (string) ($response['message'] ?? __('Invalid coupon code.'));
 
                 return ['valid' => false, 'discount' => 0, 'message' => $message, 'source' => 'external'];
             }
@@ -750,6 +804,67 @@ class CheckoutController extends Controller
 
             return null;
         }
+    }
+
+    /**
+     * @return array{subtotal: float, delivery: float, discount: float, vat: float, total: float, subscription_api_payload: array<string, string>}
+     */
+    private function resolvePaymentAmounts(
+        bool $isSubscriptionCheckout,
+        array $cart,
+        array $validated,
+        int $planDurationId,
+        float $subtotal,
+        float $deliveryFee,
+        float $discountAmount,
+        float $vatRate,
+    ): array {
+        $subscriptionApiPayload = [];
+        $total = $subtotal + $deliveryFee - $discountAmount;
+        $vatAmount = round($total - ($total / (1 + $vatRate)), 2);
+
+        if (! $isSubscriptionCheckout) {
+            return [
+                'subtotal' => $subtotal,
+                'delivery' => $deliveryFee,
+                'discount' => $discountAmount,
+                'vat' => $vatAmount,
+                'total' => $total,
+                'subscription_api_payload' => [],
+            ];
+        }
+
+        $subscriptionApiPayload = SubscriptionCheckoutPayload::buildFormPayload(
+            $validated,
+            $cart,
+            $this->externalDataService,
+            $planDurationId > 0 ? $planDurationId : null,
+        );
+
+        $token = (string) session('external_api_token', '');
+        if ($token !== '' && $subscriptionApiPayload !== []) {
+            $calc = $this->accountApiService->calculateSubscription($subscriptionApiPayload, $token);
+            $parsed = $this->accountApiService->parseSubscriptionCalculateTotals($calc['data'] ?? null);
+            if ($parsed !== null) {
+                return [
+                    'subtotal' => $parsed['subtotal'],
+                    'delivery' => $parsed['delivery'],
+                    'discount' => $parsed['discount'] > 0 ? $parsed['discount'] : $discountAmount,
+                    'vat' => $parsed['vat'],
+                    'total' => $parsed['total'],
+                    'subscription_api_payload' => $subscriptionApiPayload,
+                ];
+            }
+        }
+
+        return [
+            'subtotal' => $subtotal,
+            'delivery' => $deliveryFee,
+            'discount' => $discountAmount,
+            'vat' => $vatAmount,
+            'total' => $total,
+            'subscription_api_payload' => $subscriptionApiPayload,
+        ];
     }
 
     /**
@@ -1103,9 +1218,25 @@ class CheckoutController extends Controller
         }
 
         $vatRate = (float) Setting::getValue('vat_rate', 15) / 100;
-        $total = $subtotal + $deliveryFee - $discountAmount;
-        $vatAmount = round($total - ($total / (1 + $vatRate)), 2);
+        $isSubscriptionCheckout = $hasPlanItems && session()->has(CartManager::SESSION_SUBSCRIPTION);
+        $planDurationId = (int) ($validated['plan_duration_id'] ?? $request->input('plan_duration_id', 0));
+        $amounts = $this->resolvePaymentAmounts(
+            $isSubscriptionCheckout,
+            $cart,
+            $validated,
+            $planDurationId,
+            $subtotal,
+            $deliveryFee,
+            $discountAmount,
+            $vatRate,
+        );
+        $subtotal = $amounts['subtotal'];
+        $deliveryFee = $amounts['delivery'];
+        $discountAmount = $amounts['discount'];
+        $vatAmount = $amounts['vat'];
+        $total = $amounts['total'];
         $amountInHalalas = (int) round($total * 100);
+        $subscriptionApiPayload = $amounts['subscription_api_payload'];
 
         $pickupDescription = null;
         if (($validated['delivery_type'] ?? '') === 'pickup' && ! empty($validated['branch_id'])) {
@@ -1149,7 +1280,22 @@ class CheckoutController extends Controller
             }
         }
 
+        $checkoutPayload = [
+            'delivery_type' => $validated['delivery_type'] ?? null,
+            'branch_id' => $validated['branch_id'] ?? null,
+            'selected_address_id' => $validated['selected_address_id'] ?? null,
+            'zone_id' => $validated['zone_id'] ?? null,
+            'note' => (string) ($request->input('note', '') ?? ''),
+            'payment_option' => 'credit_card',
+            'use_wallet' => (string) ($request->input('useWallet', '0') ?? '0'),
+            'plan_duration_id' => $planDurationId > 0 ? $planDurationId : null,
+        ];
+        if ($subscriptionApiPayload !== []) {
+            $checkoutPayload['subscription_api'] = $subscriptionApiPayload;
+        }
+
         $paymentData = [
+            'kind' => $isSubscriptionCheckout ? PaymentKind::Subscription : PaymentKind::Order,
             'amount' => $amountInHalalas,
             'currency' => 'SAR',
             'subtotal' => (int) round($subtotal * 100),
@@ -1161,15 +1307,7 @@ class CheckoutController extends Controller
             'customer_phone' => $phone,
             'customer_phone_normalized' => self::normalizePhoneForMatch($phone),
             'cart_items' => $cart,
-            'checkout_payload' => [
-                'delivery_type' => $validated['delivery_type'] ?? null,
-                'branch_id' => $validated['branch_id'] ?? null,
-                'selected_address_id' => $validated['selected_address_id'] ?? null,
-                'zone_id' => $validated['zone_id'] ?? null,
-                'note' => (string) ($request->input('note', '') ?? ''),
-                'payment_option' => 'credit_card',
-                'use_wallet' => (string) ($request->input('useWallet', '0') ?? '0'),
-            ],
+            'checkout_payload' => $checkoutPayload,
             'start_date' => $validated['start_date'] ?? now()->format('Y-m-d'),
             'duration' => $validated['duration'],
             'delivery_type' => $validated['delivery_type'],

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\PaymentKind;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use Illuminate\Database\Eloquent\Model;
@@ -14,6 +15,7 @@ class Payment extends Model
         'order_number',
         'moyasar_id',
         'status',
+        'kind',
         'payment_method',
         'amount',
         'currency',
@@ -42,6 +44,7 @@ class Payment extends Model
         'raw_response',
         'external_order_id',
         'external_order_number',
+        'external_subscription_id',
         'external_sync_status',
         'external_sync_message',
         'external_synced_at',
@@ -52,6 +55,7 @@ class Payment extends Model
     {
         return [
             'status' => PaymentStatus::class,
+            'kind' => PaymentKind::class,
             'payment_method' => PaymentMethod::class,
             'cart_items' => 'array',
             'checkout_payload' => 'array',
@@ -62,6 +66,7 @@ class Payment extends Model
             'vat_amount' => 'integer',
             'discount_amount' => 'integer',
             'external_order_id' => 'integer',
+            'external_subscription_id' => 'integer',
             'external_synced_at' => 'datetime',
             'expires_at' => 'datetime',
         ];
