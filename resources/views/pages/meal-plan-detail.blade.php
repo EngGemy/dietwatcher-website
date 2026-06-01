@@ -1300,6 +1300,10 @@ function planDetail() {
             }
             if (this.hasSubscriptionPlans && this.selectedSubscriptionPlanId) {
                 url += '&subscription_plan_id=' + encodeURIComponent(this.selectedSubscriptionPlanId);
+                const cal = this.calories.find(c => c.range === this.selectedCalories);
+                if (cal && cal.id) {
+                    url += '&calorie_id=' + encodeURIComponent(String(cal.id));
+                }
             } else {
                 url += '&meal_type=' + encodeURIComponent(this.selectedMeal);
             }

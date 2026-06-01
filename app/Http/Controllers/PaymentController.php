@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\PaymentKind;
 use App\Enums\PaymentStatus;
 use App\Livewire\Cart\CartManager;
 use App\Models\Payment;
@@ -136,15 +137,25 @@ class PaymentController extends Controller
         if ($payment->status === PaymentStatus::PAID) {
             $externalToken = (string) session('external_api_token', '');
             if ($externalToken !== '') {
-                $syncResult = $this->accountApiService->syncPaidPaymentToExternalOrder($payment, $externalToken);
-                $payment->update([
-                    'external_sync_status' => $syncResult['ok'] ? 'synced' : 'failed',
-                    'external_sync_message' => $syncResult['ok'] ? null : (string) ($syncResult['message'] ?? 'sync_failed'),
-                    'external_order_id' => $syncResult['external_order_id'] ?? null,
-                    'external_order_number' => $syncResult['external_order_number'] ?? null,
-                    'external_synced_at' => $syncResult['ok'] ? now() : null,
-                ]);
-                $this->accountApiService->clearOrdersCache($externalToken);
+                if ($payment->kind === PaymentKind::Subscription) {
+                    $syncResult = $this->accountApiService->syncPaidPaymentToExternalSubscription($payment, $externalToken);
+                    $payment->update([
+                        'external_sync_status' => $syncResult['ok'] ? 'synced' : 'failed',
+                        'external_sync_message' => $syncResult['ok'] ? null : (string) ($syncResult['message'] ?? 'sync_failed'),
+                        'external_subscription_id' => $syncResult['external_subscription_id'] ?? null,
+                        'external_synced_at' => $syncResult['ok'] ? now() : null,
+                    ]);
+                } else {
+                    $syncResult = $this->accountApiService->syncPaidPaymentToExternalOrder($payment, $externalToken);
+                    $payment->update([
+                        'external_sync_status' => $syncResult['ok'] ? 'synced' : 'failed',
+                        'external_sync_message' => $syncResult['ok'] ? null : (string) ($syncResult['message'] ?? 'sync_failed'),
+                        'external_order_id' => $syncResult['external_order_id'] ?? null,
+                        'external_order_number' => $syncResult['external_order_number'] ?? null,
+                        'external_synced_at' => $syncResult['ok'] ? now() : null,
+                    ]);
+                    $this->accountApiService->clearOrdersCache($externalToken);
+                }
             } else {
                 $payment->update([
                     'external_sync_status' => 'skipped',
