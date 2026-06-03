@@ -161,11 +161,17 @@ final class SubscriptionCheckoutPayload
 
     public static function defaultCheckoutMinimumStartDate(): string
     {
+        // Match API helper twoDaysAfterNoon(): +48h before noon, +72h after noon (Asia/Riyadh).
         $now = now(config('app.timezone', 'Asia/Riyadh'));
-        $noonCutoff = $now->copy()->startOfDay()->addHours(12);
-        $daysToAdd = $now->lt($noonCutoff) ? 2 : 3;
+        $noon = $now->copy()->setTime(12, 0, 0);
 
-        return $now->copy()->startOfDay()->addDays($daysToAdd)->format('Y-m-d');
+        if ($now->greaterThan($noon)) {
+            $now->addHours(72);
+        } else {
+            $now->addHours(48);
+        }
+
+        return $now->format('Y-m-d');
     }
 
     public static function effectiveStartDateForPayload(string $candidate): string
@@ -394,21 +400,42 @@ final class SubscriptionCheckoutPayload
     }
 
     /**
+     * API weekday index: Sat=1, Sun=2, Mon=3, Tue=4, Wed=5, Thu=6, Fri=7.
+     *
      * @return array<int, int>
      */
     public static function defaultDeliveryWeekdays(bool $withWeekend): array
     {
-        return $withWeekend ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5];
+        return $withWeekend ? [1, 2, 3, 4, 5, 6, 7] : [2, 3, 4, 5, 6];
     }
 
     /**
+     * @param  array<string, mixed>|null  $address
      * @param  array<string, mixed>|null  $daysData
      * @return array<int, int>
      */
-    public static function extractDeliveryDaysFromApi(?array $daysData, bool $withWeekend): array
+    public static function extractDeliveryDays(?array $address, ?array $daysData, bool $withWeekend): array
     {
         $days = [];
-        if (is_array($daysData)) {
+
+        if (is_array($address['days'] ?? null)) {
+            foreach ($address['days'] as $entry) {
+                if (is_numeric($entry)) {
+                    $days[] = (int) $entry;
+                }
+            }
+        }
+
+        if ($days === [] && is_array($daysData)) {
+            $selected = $daysData['selected'] ?? null;
+            if (is_array($selected)) {
+                foreach ($selected as $entry) {
+                    if (is_numeric($entry)) {
+                        $days[] = (int) $entry;
+                    }
+                }
+            }
+
             $list = $daysData['days'] ?? null;
             if (is_array($list)) {
                 foreach ($list as $entry) {
@@ -447,6 +474,19 @@ final class SubscriptionCheckoutPayload
         int $planDurationId,
         array $durationRows,
     ): int {
+        $districtDurations = is_array($address) ? data_get($address, 'district.durations', []) : [];
+        if (is_array($districtDurations)) {
+            foreach ($districtDurations as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+                $id = (int) ($row['id'] ?? 0);
+                if ($id > 0) {
+                    return $id;
+                }
+            }
+        }
+
         foreach (['region_duration_id', 'regionDurationId'] as $key) {
             $fromDays = is_array($daysData) ? data_get($daysData, $key) : null;
             if (is_numeric($fromDays) && (int) $fromDays > 0) {
@@ -550,7 +590,7 @@ final class SubscriptionCheckoutPayload
             $planDurationId,
             $durationRows,
         );
-        $days = self::extractDeliveryDaysFromApi($daysData, $withWeekend);
+        $days = self::extractDeliveryDays($address, $daysData, $withWeekend);
 
         $payload['addresses[0][address_id]'] = (string) $addressId;
         $companyId = (string) ($address['company_id'] ?? $address['company']['id'] ?? '');

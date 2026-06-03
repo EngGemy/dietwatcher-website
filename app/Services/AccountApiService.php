@@ -504,6 +504,66 @@ class AccountApiService
     }
 
     /**
+     * Use POST /subscriptions/calculate (same as mobile app) for authoritative start date.
+     *
+     * @param  array<string, string>  $payload
+     * @return array{ok: bool, message: string, min_start_date: string|null, adjusted_start_date: string|null, payload: array<string, string>}
+     */
+    protected function syncSubscriptionStartDateFromCalculate(array $payload, string $token): array
+    {
+        $calcPayload = $payload;
+        unset($calcPayload['payment_option']);
+
+        $calc = $this->calculateSubscription($calcPayload, $token);
+        if (! ($calc['ok'] ?? false)) {
+            $message = $this->extractApiValidationMessage($calc);
+            $minStartDate = SubscriptionCheckoutPayload::extractMinStartDateFromApiResult($calc);
+            if ($minStartDate === '') {
+                $minStartDate = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
+            }
+            if ($minStartDate !== '') {
+                $minStartDate = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($minStartDate);
+            }
+
+            return [
+                'ok' => false,
+                'message' => $message,
+                'min_start_date' => $minStartDate !== '' ? $minStartDate : null,
+                'adjusted_start_date' => null,
+                'payload' => $payload,
+            ];
+        }
+
+        $data = is_array($calc['data'] ?? null) ? $calc['data'] : [];
+        $apiMin = SubscriptionCheckoutPayload::normalizeStartDate(
+            (string) ($data['min_start_date'] ?? $data['first_available_date_for_subscription'] ?? '')
+        );
+        if ($apiMin === '') {
+            $apiMin = SubscriptionCheckoutPayload::normalizeStartDate(
+                (string) ($data['first_available_date'] ?? '')
+            );
+        }
+
+        $current = SubscriptionCheckoutPayload::normalizeStartDate(
+            (string) ($payload['date'] ?? $payload['start_date'] ?? '')
+        );
+        $adjusted = null;
+        if ($apiMin !== '' && ($current === '' || $current < $apiMin)) {
+            $payload['date'] = $apiMin;
+            $payload['start_date'] = $apiMin;
+            $adjusted = $apiMin;
+        }
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'min_start_date' => $apiMin !== '' ? $apiMin : null,
+            'adjusted_start_date' => $adjusted,
+            'payload' => $payload,
+        ];
+    }
+
+    /**
      * Create (or reuse) a pending API subscription and return Moyasar bootstrap from PaymentResource.
      *
      * @param  array<string, string>  $payload
@@ -552,9 +612,37 @@ class AccountApiService
             ];
         }
 
-        $payloadHash = $this->hashSubscriptionPayload($payload);
         $adjustedStartDate = null;
         $minStartDate = null;
+
+        $schedule = $this->syncSubscriptionStartDateFromCalculate($payload, $token);
+        if (! ($schedule['ok'] ?? false)) {
+            $message = (string) ($schedule['message'] ?? __('account.request_failed'));
+            $minStartDate = (string) ($schedule['min_start_date'] ?? '');
+            $dateRelated = SubscriptionCheckoutPayload::isStartDateValidationMessage($message)
+                || $minStartDate !== '';
+
+            return [
+                'ok' => false,
+                'message' => $dateRelated
+                    ? SubscriptionCheckoutPayload::resolveStartDateErrorMessage($message, $minStartDate)
+                    : $message,
+                'min_start_date' => $dateRelated ? ($minStartDate !== '' ? $minStartDate : null) : null,
+                'adjusted_start_date' => null,
+                'subscription_id' => null,
+                'bootstrap' => null,
+            ];
+        }
+
+        $payload = $schedule['payload'];
+        if (! empty($schedule['adjusted_start_date'])) {
+            $adjustedStartDate = (string) $schedule['adjusted_start_date'];
+        }
+        if (! empty($schedule['min_start_date'])) {
+            $minStartDate = (string) $schedule['min_start_date'];
+        }
+
+        $payloadHash = $this->hashSubscriptionPayload($payload);
 
         $cached = session('checkout_api_subscription_checkout');
         if (is_array($cached) && ($cached['payload_hash'] ?? '') === $payloadHash) {
