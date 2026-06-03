@@ -128,16 +128,16 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                                     <label class="duration-pills__face" :for="'plan-dur-' + d.id">
                                                         <span class="duration-pills__offer-badge" x-show="durationPlanHasOffer(d)" x-cloak>{{ __('Offer') }}</span>
                                                         <span class="duration-pills__title" x-text="durationCardTitle(d)"></span>
-                                                        <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="@js(__('SAR')) + ' ' + durationPlanListTotalStr(d)"></span>
-                                                        <span class="duration-pills__total-line" x-text="@js(__('SAR')) + ' ' + durationPlanEffectiveTotalStr(d)"></span>
+                                                        <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="durationStrikeLine(d)"></span>
+                                                        <span class="duration-pills__total-line" x-text="durationTotalLine(d)"></span>
                                                         <span class="duration-pills__avg" x-show="durationPlanAvgLine(d)" x-text="durationPlanAvgLine(d)"></span>
                                                     </label>
                                                 </div>
                                                 <div x-show="Number(d.id) <= 0" class="duration-pills__face duration-pills__face--static">
                                                     <span class="duration-pills__offer-badge" x-show="durationPlanHasOffer(d)" x-cloak>{{ __('Offer') }}</span>
                                                     <span class="duration-pills__title" x-text="durationCardTitle(d)"></span>
-                                                    <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="@js(__('SAR')) + ' ' + durationPlanListTotalStr(d)"></span>
-                                                    <span class="duration-pills__total-line" x-text="@js(__('SAR')) + ' ' + durationPlanEffectiveTotalStr(d)"></span>
+                                                    <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="durationStrikeLine(d)"></span>
+                                                    <span class="duration-pills__total-line" x-text="durationTotalLine(d)"></span>
                                                     <span class="duration-pills__avg" x-show="durationPlanAvgLine(d)" x-text="durationPlanAvgLine(d)"></span>
                                                 </div>
                                             </div>
@@ -288,7 +288,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                     </svg>
-                                    <span x-text="addingNewAddress ? @js(__('Cancel')) : @js(__('Add new address'))"></span>
+                                    <span x-text="newAddressToggleLabel()"></span>
                                 </button>
                             </div>
                             <p class="mb-3 text-xs text-gray-600">{{ __('checkout.saved_addresses_hint') }}</p>
@@ -381,7 +381,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                     <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('City') }}</label>
                                     <select name="zone_id" class="form-control @error('zone_id') border-red-500 @enderror"
                                             x-model="selectedZoneId" @change="onZoneChange()"
-                                            :disabled="deliveryType === 'pickup' || @js((bool) $riyadhZone)"
+                                            :disabled="deliveryType === 'pickup' || @json((bool) $riyadhZone)"
                                             :required="deliveryType === 'home'">
                                         @if($riyadhZone)
                                             <option value="{{ $riyadhZone['id'] }}">
@@ -756,7 +756,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             <button type="button" class="otp-modal__resend-btn"
                                     @click="sendOtp()"
                                     :disabled="otpLoading || otpCooldown > 0">
-                                <span x-text="otpCooldown > 0 ? (@js(__('Resend in')) + ' ' + otpCooldown + 's') : @js(__('Resend'))"></span>
+                                <span x-text="otpResendLabel()"></span>
                             </button>
                         </p>
                     </div>
@@ -1331,6 +1331,13 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             addingNewAddress: false,
             savingNewAddress: false,
             newAddressError: '',
+            sarSymbol: '\u20C1',
+            uiLabels: {
+                cancel: @json(__('Cancel')),
+                addNewAddress: @json(__('Add new address')),
+                resendIn: @json(__('Resend in')),
+                resend: @json(__('Resend')),
+            },
             addressPhoneLocal: @json($initialAddressPhoneLocal),
             deviceId: (function () {
                 try {
@@ -1526,6 +1533,24 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 const n = Math.round(this.durationPlanEffectiveTotal(d) * 100) / 100;
 
                 return Number.isInteger(n) ? String(n) : n.toFixed(2);
+            },
+
+            durationStrikeLine(d) {
+                return this.sarSymbol + ' ' + this.durationPlanListTotalStr(d);
+            },
+
+            durationTotalLine(d) {
+                return this.sarSymbol + ' ' + this.durationPlanEffectiveTotalStr(d);
+            },
+
+            newAddressToggleLabel() {
+                return this.addingNewAddress ? this.uiLabels.cancel : this.uiLabels.addNewAddress;
+            },
+
+            otpResendLabel() {
+                return this.otpCooldown > 0
+                    ? this.uiLabels.resendIn + ' ' + this.otpCooldown + 's'
+                    : this.uiLabels.resend;
             },
 
             durationPlanAvgLine(d) {
@@ -2078,9 +2103,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (! form) {
                     return false;
                 }
-                const lat = String(form.querySelector('input[name="delivery_lat"]')?.value ?? '').trim();
-                const lng = String(form.querySelector('input[name="delivery_lng"]')?.value ?? '').trim();
-                const district = String(form.querySelector('input[name="delivery_district_id"]')?.value ?? '').trim();
+                const lat = String(this.inlineMapLat || (form.querySelector('input[name="delivery_lat"]')?.value ?? '')).trim();
+                const lng = String(this.inlineMapLng || (form.querySelector('input[name="delivery_lng"]')?.value ?? '')).trim();
+                const district = String(this.inlineMapDistrictId || (form.querySelector('input[name="delivery_district_id"]')?.value ?? '')).trim();
                 const zone = String(this.selectedZoneId || form.querySelector('select[name="zone_id"]')?.value || '').trim();
 
                 return lat !== '' && lng !== '' && district !== '' && zone !== '';
