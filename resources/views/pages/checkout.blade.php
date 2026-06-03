@@ -1317,6 +1317,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             minStartDate: @json($minStartDate ?? now()->addHours(48)->format('Y-m-d')),
             _moyasarFingerprint: '',
             _moyasarRequestId: 0,
+            _moyasarStartDateRetries: 0,
             lastAppliedMinStartDate: '',
             vatRate: @json((float) $vatRate),
             deliveryFeeAmount: @json((float) $deliveryFeeAmount),
@@ -1635,6 +1636,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     if (sel !== '' && this.planDurationPrices[sel] != null) {
                         this.baseSubtotal = Math.round(this.planDurationPrices[sel] * 100) / 100;
                     }
+                    this.applyDurationMinimumStartDate();
                 } finally {
                     this.durationsLoading = false;
                 }
@@ -2602,6 +2604,30 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 });
             },
 
+            durationMinimumStartDate(durationId) {
+                const floor = String(this.minStartDate || '').trim();
+                const row = (this.planDurations || []).find((d) => String(d.id) === String(durationId));
+                if (! row || ! row.start_date) {
+                    return floor;
+                }
+                const catalog = String(row.start_date).trim().slice(0, 10);
+                if (! /^\d{4}-\d{2}-\d{2}$/.test(catalog)) {
+                    return floor;
+                }
+
+                return catalog > floor ? catalog : floor;
+            },
+
+            applyDurationMinimumStartDate() {
+                if (! this.isPlanCheckout) {
+                    return;
+                }
+                const min = this.durationMinimumStartDate(this.selectedPlanDurationId);
+                if (min) {
+                    this.applyMinimumStartDate(min, { silent: true });
+                }
+            },
+
             applyMinimumStartDate(minDate, options = {}) {
                 const silent = options.silent === true;
                 const normalized = String(minDate || '').trim();
@@ -2672,9 +2698,14 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         } else {
                             this.moyasarError = data.message || @json(__('payment.fill_delivery_first'));
                         }
-                        if (data.min_start_date && data.min_start_date !== this.lastAppliedMinStartDate) {
-                            this.lastAppliedMinStartDate = data.min_start_date;
-                            this.applyMinimumStartDate(data.min_start_date, { silent: true });
+                        const apiMin = String(data.min_start_date || '').trim().slice(0, 10);
+                        const canAutoFixDate = apiMin
+                            && apiMin !== this.lastAppliedMinStartDate
+                            && this._moyasarStartDateRetries < 1;
+                        if (canAutoFixDate) {
+                            this._moyasarStartDateRetries += 1;
+                            this.lastAppliedMinStartDate = apiMin;
+                            this.applyMinimumStartDate(apiMin, { silent: true });
                             this._moyasarFingerprint = '';
                             await this.$nextTick();
 
@@ -2691,6 +2722,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     if (data.adjusted_start_date) {
                         this.applyMinimumStartDate(data.adjusted_start_date, { silent: true });
                     }
+                    this._moyasarStartDateRetries = 0;
                     this._moyasarFingerprint = fingerprint;
                     this.initMoyasarWidget(data);
                 } catch (e) {
@@ -2754,6 +2786,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         this.customerName = String(detail.profile.name);
                     }
                     this.showNameField = this.isContinueUser || ! (this.customerName || '').trim();
+                    this.applyDurationMinimumStartDate();
                     this.$nextTick(() => this.scheduleMoyasarRefresh());
                 });
 
@@ -2775,6 +2808,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         this.baseSubtotal = Math.round(p * 100) / 100;
                         this.revalidateCoupon();
                     }
+                    this.applyDurationMinimumStartDate();
                     this.scheduleMoyasarRefresh();
                 });
                 this.$watch('duration', () => this.revalidateCoupon());

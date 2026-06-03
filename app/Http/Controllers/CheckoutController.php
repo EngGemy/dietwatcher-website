@@ -312,7 +312,11 @@ class CheckoutController extends Controller
 
         $checkoutProgramId = $hasPlanItems && $firstPlanItem ? (int) ($firstPlanItem['id'] ?? 0) : 0;
 
-        $minStartDate = SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate();
+        $preferredDurationIdForMin = (int) ($preferredPlanDurationId ?? 0);
+        $minStartDate = SubscriptionCheckoutPayload::minimumStartDateForDurationId(
+            $planDurations,
+            $preferredDurationIdForMin > 0 ? $preferredDurationIdForMin : null,
+        );
         $defaultStartDate = SubscriptionCheckoutPayload::normalizeStartDate((string) old('start_date', ''));
         if ($defaultStartDate === '' || $defaultStartDate < $minStartDate) {
             $defaultStartDate = $minStartDate;
@@ -1294,7 +1298,18 @@ class CheckoutController extends Controller
                     'errors' => ['plan_duration_id' => [__('checkout.invalid_plan_duration')]],
                 ], 422);
             }
-            $dateError = self::validateSubscriptionStartDate($validated['start_date'] ?? '');
+            $programIdForDate = 0;
+            foreach ($cart as $item) {
+                if (! empty($item['options']['duration_days'])) {
+                    $programIdForDate = (int) ($item['id'] ?? 0);
+                    break;
+                }
+            }
+            $dateError = $this->validateSubscriptionStartDate(
+                $validated['start_date'] ?? '',
+                $programIdForDate,
+                (int) ($validated['plan_duration_id'] ?? $planDurationId),
+            );
             if ($dateError !== null) {
                 return response()->json($dateError, 422);
             }
@@ -1442,10 +1457,17 @@ class CheckoutController extends Controller
     /**
      * @return array<string, mixed>|null
      */
-    private static function validateSubscriptionStartDate(string $startDate): ?array
+    private function validateSubscriptionStartDate(string $startDate, int $programId = 0, int $planDurationId = 0): ?array
     {
         $normalized = SubscriptionCheckoutPayload::normalizeStartDate($startDate);
         $minDate = SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate();
+        if ($programId > 0) {
+            $durations = $this->externalDataService->getAuthoritativePlanDurations($programId);
+            $minDate = SubscriptionCheckoutPayload::minimumStartDateForDurationId(
+                $durations,
+                $planDurationId > 0 ? $planDurationId : null,
+            );
+        }
 
         if ($normalized === '' || $normalized >= $minDate) {
             return null;
@@ -1457,6 +1479,7 @@ class CheckoutController extends Controller
             'success' => false,
             'message' => $message,
             'errors' => ['start_date' => [$message]],
+            'min_start_date' => $minDate,
         ];
     }
 
@@ -1484,7 +1507,9 @@ class CheckoutController extends Controller
 
         $boot = $this->accountApiService->bootstrapSubscriptionMoyasar($subscriptionApiPayload, $token);
         if (! ($boot['ok'] ?? false) || ! is_array($boot['bootstrap'] ?? null)) {
-            $minStart = (string) ($boot['min_start_date'] ?? '');
+            $minStart = SubscriptionCheckoutPayload::sanitizeApiMinimumStartDate(
+                (string) ($boot['min_start_date'] ?? '')
+            );
             $message = (string) ($boot['message'] ?? __('account.request_failed'));
             if (str_contains($message, 'PlanDuration')) {
                 $message = __('checkout.invalid_plan_duration');

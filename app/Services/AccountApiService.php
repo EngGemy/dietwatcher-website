@@ -407,6 +407,11 @@ class AccountApiService
             ];
         }
 
+        $payload = SubscriptionCheckoutPayload::clampPayloadStartDate(
+            $payload,
+            app(ExternalDataService::class),
+        );
+
         $payloadHash = $this->hashSubscriptionPayload($payload);
         $adjustedStartDate = null;
         $minStartDate = null;
@@ -433,7 +438,10 @@ class AccountApiService
 
         while (! ($result['ok'] ?? false) && $dateRetryCount < 3) {
             $message = $this->extractApiValidationMessage($result);
-            $parsedMin = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
+            $parsedMin = SubscriptionCheckoutPayload::extractMinStartDateFromApiResult($result);
+            if ($parsedMin === '') {
+                $parsedMin = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
+            }
 
             if ($parsedMin === '') {
                 break;
@@ -461,7 +469,13 @@ class AccountApiService
         if (! ($result['ok'] ?? false)) {
             $message = $this->extractApiValidationMessage($result);
             if ($minStartDate === null) {
+                $minStartDate = SubscriptionCheckoutPayload::extractMinStartDateFromApiResult($result);
+            }
+            if ($minStartDate === null || $minStartDate === '') {
                 $minStartDate = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
+            }
+            if ($minStartDate !== null && $minStartDate !== '') {
+                $minStartDate = SubscriptionCheckoutPayload::sanitizeApiMinimumStartDate($minStartDate);
             }
             $dateRelated = $minStartDate !== ''
                 && (
