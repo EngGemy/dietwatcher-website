@@ -1915,17 +1915,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             deliverableSavedAddresses() {
-                return (this.savedAddresses || []).filter((addr) => {
-                    if (! addr || addr.id == null) {
-                        return false;
-                    }
-                    const active = addr.is_active ?? addr.isActive;
-                    if (active === undefined || active === null) {
-                        return true;
-                    }
-
-                    return active === true || active === 1 || active === '1';
-                });
+                return (this.savedAddresses || []).filter((addr) => addr && addr.id != null);
             },
 
             applyCheckoutAddresses(addresses) {
@@ -2263,6 +2253,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             if (idx >= 0) {
                                 this.savedAddresses.splice(idx, 1, data.data);
                             }
+                        }
+                        if (Array.isArray(data.addresses)) {
+                            this.applyCheckoutAddresses(data.addresses);
                         }
                         this.syncAddressError = '';
 

@@ -810,6 +810,7 @@
     "address.delete_failed": "Could not delete this address. Please try again.",
     "address.deleted": "Address deleted.",
     "checkout.delete_saved_address_confirm": "Delete this saved address?",
+    "checkout.address_max_active_delivery": "You can only have two active delivery addresses. Delete an unused address or select an existing one to continue.",
     "checkout.saved_addresses_title": "Your saved addresses",
     "checkout.saved_addresses_hint": "Tap one to fill delivery details for this order, or set a new location on the map below.",
     "checkout.verify_phone_to_save_address": "Verify your phone number to save and load delivery addresses.",

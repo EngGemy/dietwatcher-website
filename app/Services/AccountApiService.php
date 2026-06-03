@@ -482,15 +482,22 @@ class AccountApiService
         $defaultDays = SubscriptionCheckoutPayload::defaultDeliveryWeekdays($withWeekend);
         $storedDays = is_array($address['days'] ?? null) ? $address['days'] : [];
         if ($storedDays === []) {
+            $prepareError = $auth->prepareAddressForDeliveryActivation($token, $addressId);
+            if ($prepareError !== null) {
+                return $prepareError;
+            }
+
             $daysSync = $auth->updateAddressDeliveryDays($token, $addressId, $defaultDays);
             if (! ($daysSync['_http_ok'] ?? false)) {
                 Log::warning('AccountApiService::updateAddressDeliveryDays failed', [
                     'address_id' => $addressId,
                     'body' => $daysSync,
                 ]);
-            } else {
-                $address['days'] = $defaultDays;
+
+                return (string) ($daysSync['message'] ?? __('checkout.address_max_active_delivery'));
             }
+
+            $address['days'] = $defaultDays;
         }
 
         $daysResult = $this->getAddressDeliveryDays($addressId, $token);

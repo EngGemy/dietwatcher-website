@@ -35,7 +35,7 @@ class OtpController extends Controller
      */
     private function checkoutAddressesForToken(string $token): array
     {
-        $addresses = $this->apiAuth->getAddresses($token, true, true);
+        $addresses = $this->apiAuth->getAddresses($token, true, false);
 
         return AddressCheckoutHelper::markDeliverability(is_array($addresses) ? $addresses : []);
     }

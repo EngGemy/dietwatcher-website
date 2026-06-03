@@ -300,7 +300,12 @@ class ApiAuthService
                 $payload
             );
             $json = $response->json() ?? [];
+            if (! is_array($json)) {
+                $json = [];
+            }
             $json['_http_ok'] = $response->successful();
+            $json['status'] = $response->status();
+            $json['message'] = $this->extractApiMessage($json, $response->status());
 
             return $json;
         } catch (\Exception $e) {
@@ -311,6 +316,80 @@ class ApiAuthService
 
             return ['success' => false, 'message' => __('address.save_failed'), '_http_ok' => false];
         }
+    }
+
+    /**
+     * Deactivate delivery on an address so another can be activated (API max: 2 active).
+     */
+    public function deactivateAddress(string $token, int $addressId): array
+    {
+        if ($addressId <= 0) {
+            return ['success' => false, 'message' => __('address.save_failed'), '_http_ok' => false];
+        }
+
+        try {
+            $response = $this->httpWithToken($token)->asForm()->post(
+                $this->url("addresses/{$addressId}"),
+                ['is_active' => '0']
+            );
+            $json = $response->json() ?? [];
+            if (! is_array($json)) {
+                $json = [];
+            }
+            $json['_http_ok'] = $response->successful();
+            $json['message'] = $this->extractApiMessage($json, $response->status());
+
+            return $json;
+        } catch (\Exception $e) {
+            Log::warning('ApiAuthService::deactivateAddress failed', [
+                'address_id' => $addressId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ['success' => false, 'message' => __('address.save_failed'), '_http_ok' => false];
+        }
+    }
+
+    /**
+     * Free a delivery slot before activating $addressId (external API allows 2 active max).
+     */
+    public function prepareAddressForDeliveryActivation(string $token, int $addressId): ?string
+    {
+        if ($addressId <= 0) {
+            return __('checkout.confirm_saved_address_before_payment');
+        }
+
+        $rows = $this->getAddresses($token, true, false);
+        $otherActive = array_values(array_filter(
+            $rows,
+            static fn (array $row): bool => (int) ($row['id'] ?? 0) !== $addressId
+                && self::isAddressRowActive($row)
+        ));
+
+        if (count($otherActive) <= 1) {
+            return null;
+        }
+
+        foreach ($otherActive as $other) {
+            $otherId = (int) ($other['id'] ?? 0);
+            if ($otherId <= 0) {
+                continue;
+            }
+            $this->deactivateAddress($token, $otherId);
+        }
+
+        $rows = $this->getAddresses($token, true, false);
+        $stillBlocked = array_values(array_filter(
+            $rows,
+            static fn (array $row): bool => (int) ($row['id'] ?? 0) !== $addressId
+                && self::isAddressRowActive($row)
+        ));
+
+        if (count($stillBlocked) > 1) {
+            return __('checkout.address_max_active_delivery');
+        }
+
+        return null;
     }
 
     /**
@@ -365,15 +444,35 @@ class ApiAuthService
 
             return [
                 'success' => false,
-                'message' => (string) ($json['message'] ?? __('address.delete_failed')),
+                'message' => $this->extractApiMessage($json, (int) ($json['status'] ?? $response->status()))
+                    ?: __('address.delete_failed'),
                 '_http_ok' => (bool) ($json['_http_ok'] ?? false),
-                'status' => (int) ($json['status'] ?? 0),
+                'status' => (int) ($json['status'] ?? $response->status()),
             ];
         } catch (\Exception $e) {
             Log::error('ApiAuthService::deleteAddress failed', ['id' => $id, 'error' => $e->getMessage()]);
 
             return ['success' => false, 'message' => __('address.delete_failed'), '_http_ok' => false];
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $json
+     */
+    private function extractApiMessage(array $json, int $status = 0): string
+    {
+        foreach (['message', 'error', 'detail'] as $key) {
+            $value = $json[$key] ?? null;
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        if ($status >= 400) {
+            return __('address.save_failed');
+        }
+
+        return '';
     }
 
     /**
@@ -418,7 +517,12 @@ class ApiAuthService
             return false;
         }
 
-        return $this->findAddressById($token, $id, false) === null;
+        $remaining = $this->findAddressById($token, $id, false);
+        if ($remaining === null) {
+            return true;
+        }
+
+        return ! self::isAddressRowActive($remaining);
     }
 
     /**
