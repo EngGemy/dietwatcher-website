@@ -302,21 +302,87 @@ class ApiAuthService
     {
         try {
             $response = $this->httpWithToken($token)->delete($this->url("addresses/{$id}"));
-            $json = $response->json() ?? [];
-            if (! is_array($json)) {
-                $json = [];
-            }
-            $json['_http_ok'] = $response->successful();
-            if ($response->successful() && ! isset($json['success'])) {
+            $json = $this->normalizeAddressMutationResponse($response);
+
+            if ($this->addressDeleteVerified($token, $id, $json)) {
                 $json['success'] = true;
+
+                return $json;
             }
 
-            return $json;
+            foreach ($this->addressDeleteFallbackAttempts($id) as $attempt) {
+                try {
+                    $fallbackResponse = $attempt($token);
+                    $fallbackJson = $this->normalizeAddressMutationResponse($fallbackResponse);
+                    if ($this->addressDeleteVerified($token, $id, $fallbackJson)) {
+                        $fallbackJson['success'] = true;
+
+                        return $fallbackJson;
+                    }
+                } catch (\Throwable $fallbackError) {
+                    Log::debug('ApiAuthService::deleteAddress fallback failed', [
+                        'id' => $id,
+                        'error' => $fallbackError->getMessage(),
+                    ]);
+                }
+            }
+
+            return [
+                'success' => false,
+                'message' => (string) ($json['message'] ?? __('address.delete_failed')),
+                '_http_ok' => (bool) ($json['_http_ok'] ?? false),
+                'status' => (int) ($json['status'] ?? 0),
+            ];
         } catch (\Exception $e) {
             Log::error('ApiAuthService::deleteAddress failed', ['id' => $id, 'error' => $e->getMessage()]);
 
             return ['success' => false, 'message' => __('address.delete_failed'), '_http_ok' => false];
         }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function normalizeAddressMutationResponse(\Illuminate\Http\Client\Response $response): array
+    {
+        $json = $response->json() ?? [];
+        if (! is_array($json)) {
+            $json = [];
+        }
+        $json['_http_ok'] = $response->successful();
+        $json['status'] = $response->status();
+
+        return $json;
+    }
+
+    /**
+     * @param  array<string, mixed>  $json
+     */
+    private function addressDeleteVerified(string $token, int $id, array $json): bool
+    {
+        if (isset($json['success']) && ! filter_var($json['success'], FILTER_VALIDATE_BOOLEAN)) {
+            return false;
+        }
+
+        $httpOk = filter_var($json['_http_ok'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $explicitSuccess = filter_var($json['success'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        if (! $httpOk && ! $explicitSuccess) {
+            return false;
+        }
+
+        return $this->findAddressById($token, $id, true) === null;
+    }
+
+    /**
+     * @return array<int, callable(string): \Illuminate\Http\Client\Response>
+     */
+    private function addressDeleteFallbackAttempts(int $id): array
+    {
+        return [
+            fn (string $token) => $this->httpWithToken($token)->asForm()->post($this->url("addresses/{$id}"), ['_method' => 'DELETE']),
+            fn (string $token) => $this->httpWithToken($token)->asForm()->patch($this->url("addresses/{$id}"), ['is_active' => '0']),
+            fn (string $token) => $this->httpWithToken($token)->put($this->url("addresses/{$id}"), ['is_active' => false]),
+        ];
     }
 
     // ─── Districts ────────────────────────────────────────────────────

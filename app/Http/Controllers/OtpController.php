@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Services\ApiAuthService;
 use App\Services\SmsService;
+use App\Support\AddressCheckoutHelper;
 use App\Support\SaudiPhone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,6 +28,16 @@ class OtpController extends Controller
     {
         return (bool) config('services.external_api.checkout_use_external_login', false)
             && filled(config('services.external_api.url'));
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function checkoutAddressesForToken(string $token): array
+    {
+        $addresses = $this->apiAuth->getAddresses($token, true, true);
+
+        return AddressCheckoutHelper::markDeliverability(is_array($addresses) ? $addresses : []);
     }
 
     /**
@@ -92,8 +103,7 @@ class OtpController extends Controller
                             $result['profile'] = $parsed['profile'];
                             $result['is_continue'] = $parsed['is_continue'];
 
-                            $addresses = $this->apiAuth->getAddresses($parsed['token'], false, false);
-                            $result['addresses'] = is_array($addresses) ? $addresses : [];
+                            $result['addresses'] = $this->checkoutAddressesForToken($parsed['token']);
 
                             return $result;
                         }
@@ -349,10 +359,7 @@ class OtpController extends Controller
                 'pending_register_expires_at',
             ]);
 
-            $addresses = $this->apiAuth->getAddresses($parsed['token'], false, false);
-            if (! is_array($addresses)) {
-                $addresses = [];
-            }
+            $addresses = $this->checkoutAddressesForToken($parsed['token']);
 
             return response()->json([
                 'ok' => true,

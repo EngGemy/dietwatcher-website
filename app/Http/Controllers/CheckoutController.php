@@ -39,6 +39,18 @@ class CheckoutController extends Controller
         return SaudiPhone::matchKey($phone);
     }
 
+    /**
+     * Active saved addresses for checkout UI (excludes soft-deleted rows).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function checkoutActiveAddresses(string $token): array
+    {
+        $addresses = app(ApiAuthService::class)->getAddresses($token, true, true);
+
+        return AddressCheckoutHelper::markDeliverability(is_array($addresses) ? $addresses : []);
+    }
+
     public function __construct(
         private ExternalDataService $externalDataService,
         private AccountApiService $accountApiService,
@@ -433,24 +445,22 @@ class CheckoutController extends Controller
         ) {
             $token = session('external_api_token');
             if (is_string($token) && $token !== '') {
-                $savedAddresses = app(ApiAuthService::class)->getAddresses($token, true, false);
-                if (is_array($savedAddresses)) {
-                    $picked = collect($savedAddresses)->first(
-                        fn ($a) => (int) ($a['id'] ?? 0) === (int) $validated['selected_address_id']
-                    );
-                    if (is_array($picked)) {
-                        $resolvedZoneId = $picked['city']['id']
-                            ?? $picked['city_id']
-                            ?? $picked['zone_id']
-                            ?? $picked['zone']['id']
-                            ?? $picked['district']['city_id']
-                            ?? $picked['district']['zone_id']
-                            ?? $picked['district']['city']['id']
-                            ?? $picked['district']['zone']['id']
-                            ?? null;
-                        if ($resolvedZoneId) {
-                            $validated['zone_id'] = (int) $resolvedZoneId;
-                        }
+                $savedAddresses = $this->checkoutActiveAddresses($token);
+                $picked = collect($savedAddresses)->first(
+                    fn ($a) => (int) ($a['id'] ?? 0) === (int) $validated['selected_address_id']
+                );
+                if (is_array($picked)) {
+                    $resolvedZoneId = $picked['city']['id']
+                        ?? $picked['city_id']
+                        ?? $picked['zone_id']
+                        ?? $picked['zone']['id']
+                        ?? $picked['district']['city_id']
+                        ?? $picked['district']['zone_id']
+                        ?? $picked['district']['city']['id']
+                        ?? $picked['district']['zone']['id']
+                        ?? null;
+                    if ($resolvedZoneId) {
+                        $validated['zone_id'] = (int) $resolvedZoneId;
                     }
                 }
             }
@@ -1017,7 +1027,7 @@ class CheckoutController extends Controller
         }
 
         $auth = app(ApiAuthService::class);
-        $existing = $auth->getAddresses($userToken, true, false);
+        $existing = $auth->getAddresses($userToken, true, true);
         $candidate = array_merge($payload, [
             'district_id' => (int) $data['delivery_district_id'],
             'latitude' => (float) $data['delivery_lat'],
@@ -1030,6 +1040,7 @@ class CheckoutController extends Controller
                 'already_saved' => true,
                 'message' => __('checkout.address_already_saved'),
                 'data' => $duplicate,
+                'addresses' => $this->checkoutActiveAddresses($userToken),
             ]);
         }
 
@@ -1049,12 +1060,14 @@ class CheckoutController extends Controller
                 return response()->json([
                     'success' => true,
                     'data' => $stored,
+                    'addresses' => $this->checkoutActiveAddresses($userToken),
                 ]);
             }
 
             return response()->json([
                 'success' => true,
                 'data' => $result['data'] ?? null,
+                'addresses' => $this->checkoutActiveAddresses($userToken),
             ]);
         }
 
@@ -1091,7 +1104,7 @@ class CheckoutController extends Controller
 
         $addressId = (int) $data['address_id'];
         $auth = app(ApiAuthService::class);
-        $address = $auth->findAddressById($token, $addressId, false);
+        $address = $auth->findAddressById($token, $addressId, true);
         if (! is_array($address)) {
             return response()->json([
                 'success' => false,
@@ -1128,7 +1141,7 @@ class CheckoutController extends Controller
             ], 422);
         }
 
-        $refreshed = $auth->findAddressById($token, $addressId, false);
+        $refreshed = $auth->findAddressById($token, $addressId, true);
 
         return response()->json([
             'success' => true,
@@ -1157,7 +1170,7 @@ class CheckoutController extends Controller
         }
 
         $auth = app(ApiAuthService::class);
-        $address = $auth->findAddressById($token, $addressId, false);
+        $address = $auth->findAddressById($token, $addressId, true);
         if (! is_array($address)) {
             return response()->json([
                 'success' => false,
@@ -1166,11 +1179,7 @@ class CheckoutController extends Controller
         }
 
         $result = $auth->deleteAddress($token, $addressId);
-        $ok = filter_var($result['success'] ?? false, FILTER_VALIDATE_BOOLEAN)
-            || filter_var($result['ok'] ?? false, FILTER_VALIDATE_BOOLEAN)
-            || filter_var($result['_http_ok'] ?? false, FILTER_VALIDATE_BOOLEAN);
-
-        if (! $ok) {
+        if (! filter_var($result['success'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             return response()->json([
                 'success' => false,
                 'message' => (string) ($result['message'] ?? __('address.delete_failed')),
@@ -1180,6 +1189,7 @@ class CheckoutController extends Controller
         return response()->json([
             'success' => true,
             'message' => __('address.deleted'),
+            'addresses' => $this->checkoutActiveAddresses($token),
         ]);
     }
 
@@ -1197,11 +1207,7 @@ class CheckoutController extends Controller
             ]);
         }
 
-        $addresses = app(ApiAuthService::class)->getAddresses($token, true, false);
-        if (! is_array($addresses)) {
-            $addresses = [];
-        }
-        $addresses = AddressCheckoutHelper::markDeliverability($addresses);
+        $addresses = $this->checkoutActiveAddresses($token);
 
         $profile = session('external_api_profile', []);
         if (! is_array($profile)) {
@@ -1520,44 +1526,42 @@ class CheckoutController extends Controller
         ) {
             $token = session('external_api_token');
             if (is_string($token) && $token !== '') {
-                $savedAddresses = app(ApiAuthService::class)->getAddresses($token, true, false);
-                if (is_array($savedAddresses)) {
-                    $picked = collect($savedAddresses)->first(
-                        fn ($a) => (int) ($a['id'] ?? 0) === (int) $validated['selected_address_id']
-                    );
-                    if (is_array($picked)) {
-                        $resolvedZoneId = $picked['city']['id']
-                            ?? $picked['city_id']
-                            ?? $picked['zone_id']
-                            ?? $picked['zone']['id']
-                            ?? $picked['district']['city_id']
-                            ?? $picked['district']['zone_id']
-                            ?? $picked['district']['city']['id']
-                            ?? $picked['district']['zone']['id']
-                            ?? null;
-                        if (! $resolvedZoneId) {
-                            $districtId = $picked['district']['id'] ?? $picked['district_id'] ?? null;
-                            if ($districtId) {
-                                $zonesList = $this->externalDataService->getZones();
-                                $match = collect($zonesList)->first(function ($z) use ($districtId) {
-                                    $districtList = $z['districts'] ?? $z['district_ids'] ?? [];
-                                    foreach ((array) $districtList as $d) {
-                                        $id = is_array($d) ? ($d['id'] ?? $d['district_id'] ?? null) : $d;
-                                        if ((int) $id === (int) $districtId) {
-                                            return true;
-                                        }
+                $savedAddresses = $this->checkoutActiveAddresses($token);
+                $picked = collect($savedAddresses)->first(
+                    fn ($a) => (int) ($a['id'] ?? 0) === (int) $validated['selected_address_id']
+                );
+                if (is_array($picked)) {
+                    $resolvedZoneId = $picked['city']['id']
+                        ?? $picked['city_id']
+                        ?? $picked['zone_id']
+                        ?? $picked['zone']['id']
+                        ?? $picked['district']['city_id']
+                        ?? $picked['district']['zone_id']
+                        ?? $picked['district']['city']['id']
+                        ?? $picked['district']['zone']['id']
+                        ?? null;
+                    if (! $resolvedZoneId) {
+                        $districtId = $picked['district']['id'] ?? $picked['district_id'] ?? null;
+                        if ($districtId) {
+                            $zonesList = $this->externalDataService->getZones();
+                            $match = collect($zonesList)->first(function ($z) use ($districtId) {
+                                $districtList = $z['districts'] ?? $z['district_ids'] ?? [];
+                                foreach ((array) $districtList as $d) {
+                                    $id = is_array($d) ? ($d['id'] ?? $d['district_id'] ?? null) : $d;
+                                    if ((int) $id === (int) $districtId) {
+                                        return true;
                                     }
-
-                                    return false;
-                                });
-                                if ($match) {
-                                    $resolvedZoneId = $match['id'] ?? null;
                                 }
+
+                                return false;
+                            });
+                            if ($match) {
+                                $resolvedZoneId = $match['id'] ?? null;
                             }
                         }
-                        if ($resolvedZoneId) {
-                            $validated['zone_id'] = (int) $resolvedZoneId;
-                        }
+                    }
+                    if ($resolvedZoneId) {
+                        $validated['zone_id'] = (int) $resolvedZoneId;
                     }
                 }
             }

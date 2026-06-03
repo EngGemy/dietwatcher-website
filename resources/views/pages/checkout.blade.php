@@ -1800,6 +1800,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         this.syncAddressError = data.already_saved
                             ? (data.message || @json(__('checkout.address_already_saved')))
                             : '';
+                        if (Array.isArray(data.addresses)) {
+                            this.applyCheckoutAddresses(data.addresses);
+                        }
                         if (data.data && data.data.id) {
                             this.selectedAddressId = String(data.data.id);
                             const existingIdx = this.savedAddresses.findIndex(a => String(a.id) === String(data.data.id));
@@ -1809,7 +1812,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                 this.savedAddresses = [data.data, ...this.savedAddresses];
                             }
                             this.applySavedAddress(data.data);
-                        } else {
+                        } else if (! Array.isArray(data.addresses)) {
                             await this.refreshCustomerFromServer();
                         }
                         if (this.selectedAddressId) {
@@ -1911,7 +1914,21 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             deliverableSavedAddresses() {
-                return (this.savedAddresses || []).filter((addr) => addr && addr.id != null);
+                return (this.savedAddresses || []).filter((addr) => {
+                    if (! addr || addr.id == null) {
+                        return false;
+                    }
+                    const active = addr.is_active ?? addr.isActive;
+                    if (active === undefined || active === null) {
+                        return true;
+                    }
+
+                    return active === true || active === 1 || active === '1';
+                });
+            },
+
+            applyCheckoutAddresses(addresses) {
+                this.savedAddresses = Array.isArray(addresses) ? addresses : [];
             },
 
             startAddingAddress() {
@@ -1995,6 +2012,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     this.syncAddressError = '';
                     this._moyasarSessionFailed = false;
                     this._moyasarFingerprint = '';
+                    if (Array.isArray(data.addresses)) {
+                        this.applyCheckoutAddresses(data.addresses);
+                    }
                     if (data.data && data.data.id) {
                         const existingIdx = this.savedAddresses.findIndex(a => String(a.id) === String(data.data.id));
                         if (existingIdx >= 0) {
@@ -2003,7 +2023,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             this.savedAddresses = [data.data, ...this.savedAddresses];
                         }
                         this.applySavedAddress(data.data);
-                    } else {
+                    } else if (! Array.isArray(data.addresses)) {
                         await this.refreshCustomerFromServer();
                     }
                     this.addingNewAddress = false;
@@ -2237,6 +2257,12 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     });
                     const data = await res.json().catch(() => ({}));
                     if (res.ok && data.success) {
+                        if (data.data && data.data.id) {
+                            const idx = this.savedAddresses.findIndex((a) => String(a.id) === String(data.data.id));
+                            if (idx >= 0) {
+                                this.savedAddresses.splice(idx, 1, data.data);
+                            }
+                        }
                         this.syncAddressError = '';
 
                         return true;
@@ -2340,6 +2366,10 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         }
 
                         return;
+                    }
+
+                    if (Array.isArray(data.addresses)) {
+                        this.applyCheckoutAddresses(data.addresses);
                     }
 
                     if (typeof Swal !== 'undefined') {
@@ -3248,8 +3278,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     if (detail.phone && typeof window.dwSaudiPhoneDigits === 'function') {
                         this.phoneLocal = window.dwSaudiPhoneDigits(String(detail.phone));
                     }
-                    this.savedAddresses = Array.isArray(detail.addresses) ? detail.addresses : [];
-                    await this.refreshCustomerFromServer();
+                    this.applyCheckoutAddresses(detail.addresses || []);
                     this.isContinueUser = !!detail.isContinue;
                     if (detail.profile && detail.profile.name) {
                         this.customerName = String(detail.profile.name);
@@ -3347,12 +3376,13 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
                 let bootstrappedViaAddress = false;
                 if (this.phoneVerified) {
-                    await this.refreshCustomerFromServer();
+                    const hydrateTasks = [this.refreshCustomerFromServer()];
+                    if (this.isPlanCheckout) {
+                        hydrateTasks.push(this.refreshMinStartDateFromApi());
+                    }
+                    await Promise.all(hydrateTasks);
                     if (this.deliveryType === 'home' && ! this.selectedAddressId) {
                         bootstrappedViaAddress = await this.autoSelectSavedAddressIfNeeded();
-                    }
-                    if (this.isPlanCheckout && ! bootstrappedViaAddress) {
-                        await this.refreshMinStartDateFromApi();
                     }
                 }
                 if (this.isPlanCheckout && this.phoneVerified) {
