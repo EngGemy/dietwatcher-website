@@ -758,6 +758,7 @@
     "checkout.session_expired_reverify": "انتهت جلستك. تحقق من رقم الجوال مرة أخرى لتحميل العناوين المحفوظة.",
     "checkout.reverify_phone": "إعادة التحقق من الجوال",
     "checkout.start_date_before_minimum": "اختر تاريخ بدء في :date أو بعده (قبل 12 ظهراً يبدأ بعد يومين، وبعد 12 ظهراً بعد 3 أيام).",
+    "checkout.start_date_required": "اختر تاريخ البداية.",
     "checkout.confirm_saved_address_before_payment": "أكد عنوان التوصيل على الخريطة لحفظه في حسابك قبل الدفع.",
     "checkout.api_temporarily_unavailable": "خدمة الاشتراك غير متاحة مؤقتاً. يرجى المحاولة بعد قليل.",
     "checkout.subscription_payment_unavailable": "تعذر بدء الدفع لهذا الاشتراك. حدّث الصفحة وحاول مرة أخرى.",

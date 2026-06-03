@@ -417,11 +417,6 @@ class AccountApiService
      */
     protected function prepareSubscriptionApiPayload(array $payload, string $token): array
     {
-        $payload = SubscriptionCheckoutPayload::clampPayloadStartDate(
-            $payload,
-            app(ExternalDataService::class),
-        );
-
         $enrichError = $this->enrichSubscriptionDeliveryPayload($payload, $token);
         if ($enrichError !== null) {
             Log::warning('AccountApiService subscription payload enrichment issue', [
@@ -523,13 +518,27 @@ class AccountApiService
     }
 
     /**
-     * Use POST /subscriptions/calculate (same as mobile app) for authoritative start date.
+     * Validate start date via POST /subscriptions/calculate — never mutates the user's chosen date.
      *
      * @param  array<string, string>  $payload
-     * @return array{ok: bool, message: string, min_start_date: string|null, adjusted_start_date: string|null, payload: array<string, string>}
+     * @return array{ok: bool, message: string, min_start_date: string|null, payload: array<string, string>}
      */
-    protected function syncSubscriptionStartDateFromCalculate(array $payload, string $token): array
+    protected function validateSubscriptionStartDateFromCalculate(array $payload, string $token): array
     {
+        $userDate = SubscriptionCheckoutPayload::normalizeStartDate(
+            (string) ($payload['date'] ?? $payload['start_date'] ?? '')
+        );
+        if ($userDate === '') {
+            return [
+                'ok' => false,
+                'message' => SubscriptionCheckoutPayload::startDateBeforeMinimumMessage(
+                    SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate()
+                ),
+                'min_start_date' => SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate(),
+                'payload' => $payload,
+            ];
+        }
+
         $calcPayload = $payload;
         unset($calcPayload['payment_option']);
 
@@ -544,11 +553,15 @@ class AccountApiService
                 $minStartDate = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($minStartDate);
             }
 
+            $dateRelated = SubscriptionCheckoutPayload::isStartDateValidationMessage($message)
+                || $minStartDate !== '';
+
             return [
                 'ok' => false,
-                'message' => $message,
-                'min_start_date' => $minStartDate !== '' ? $minStartDate : null,
-                'adjusted_start_date' => null,
+                'message' => $dateRelated
+                    ? SubscriptionCheckoutPayload::resolveStartDateErrorMessage($message, $minStartDate)
+                    : ($message !== '' ? $message : __('account.request_failed')),
+                'min_start_date' => $dateRelated ? ($minStartDate !== '' ? $minStartDate : null) : null,
                 'payload' => $payload,
             ];
         }
@@ -562,22 +575,29 @@ class AccountApiService
                 (string) ($data['first_available_date'] ?? '')
             );
         }
-
-        $current = SubscriptionCheckoutPayload::normalizeStartDate(
-            (string) ($payload['date'] ?? $payload['start_date'] ?? '')
-        );
-        $adjusted = null;
-        if ($apiMin !== '' && ($current === '' || $current < $apiMin)) {
-            $payload['date'] = $apiMin;
-            $payload['start_date'] = $apiMin;
-            $adjusted = $apiMin;
+        if ($apiMin !== '') {
+            $apiMin = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($apiMin);
         }
+
+        $localFloor = SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate();
+        $effectiveMin = $apiMin !== '' ? max($apiMin, $localFloor) : $localFloor;
+
+        if ($userDate < $effectiveMin) {
+            return [
+                'ok' => false,
+                'message' => SubscriptionCheckoutPayload::startDateBeforeMinimumMessage($effectiveMin),
+                'min_start_date' => $effectiveMin,
+                'payload' => $payload,
+            ];
+        }
+
+        $payload['date'] = $userDate;
+        $payload['start_date'] = $userDate;
 
         return [
             'ok' => true,
             'message' => '',
-            'min_start_date' => $apiMin !== '' ? $apiMin : null,
-            'adjusted_start_date' => $adjusted,
+            'min_start_date' => $effectiveMin,
             'payload' => $payload,
         ];
     }
@@ -614,11 +634,6 @@ class AccountApiService
             ];
         }
 
-        $payload = SubscriptionCheckoutPayload::clampPayloadStartDate(
-            $payload,
-            app(ExternalDataService::class),
-        );
-
         $enrichError = $this->enrichSubscriptionDeliveryPayload($payload, $token);
         if (($payload['receiving'] ?? '') === 'delivery' && ! isset($payload['addresses[0][region_duration_id]'])) {
             return [
@@ -631,22 +646,17 @@ class AccountApiService
             ];
         }
 
-        $adjustedStartDate = null;
         $minStartDate = null;
 
-        $schedule = $this->syncSubscriptionStartDateFromCalculate($payload, $token);
+        $schedule = $this->validateSubscriptionStartDateFromCalculate($payload, $token);
         if (! ($schedule['ok'] ?? false)) {
             $message = (string) ($schedule['message'] ?? __('account.request_failed'));
             $minStartDate = (string) ($schedule['min_start_date'] ?? '');
-            $dateRelated = SubscriptionCheckoutPayload::isStartDateValidationMessage($message)
-                || $minStartDate !== '';
 
             return [
                 'ok' => false,
-                'message' => $dateRelated
-                    ? SubscriptionCheckoutPayload::resolveStartDateErrorMessage($message, $minStartDate)
-                    : $message,
-                'min_start_date' => $dateRelated ? ($minStartDate !== '' ? $minStartDate : null) : null,
+                'message' => $message,
+                'min_start_date' => $minStartDate !== '' ? $minStartDate : null,
                 'adjusted_start_date' => null,
                 'subscription_id' => null,
                 'bootstrap' => null,
@@ -654,12 +664,6 @@ class AccountApiService
         }
 
         $payload = $schedule['payload'];
-        if (! empty($schedule['adjusted_start_date'])) {
-            $adjustedStartDate = (string) $schedule['adjusted_start_date'];
-        }
-        if (! empty($schedule['min_start_date'])) {
-            $minStartDate = (string) $schedule['min_start_date'];
-        }
 
         $payloadHash = $this->hashSubscriptionPayload($payload);
 
@@ -680,64 +684,25 @@ class AccountApiService
         }
 
         $result = $this->createSubscription($payload, $token);
-        $minStartDate = null;
-        $dateRetryCount = 0;
-
-        while (! ($result['ok'] ?? false) && $dateRetryCount < 3) {
-            $message = $this->extractApiValidationMessage($result);
-            if (! SubscriptionCheckoutPayload::isStartDateValidationMessage($message)) {
-                break;
-            }
-
-            $parsedMin = SubscriptionCheckoutPayload::extractMinStartDateFromApiResult($result);
-            if ($parsedMin === '') {
-                $parsedMin = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
-            }
-            if ($parsedMin === '') {
-                break;
-            }
-
-            $currentDate = SubscriptionCheckoutPayload::normalizeStartDate(
-                (string) ($payload['date'] ?? $payload['start_date'] ?? '')
-            );
-            $nextDate = SubscriptionCheckoutPayload::nextStartDateAfterApiRejection($currentDate, $parsedMin);
-            $parsedMin = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($parsedMin);
-
-            if ($currentDate !== '' && $nextDate === $currentDate) {
-                $minStartDate = $parsedMin;
-                break;
-            }
-
-            session()->forget('checkout_api_subscription_checkout');
-            $payload['date'] = $nextDate;
-            $payload['start_date'] = $nextDate;
-            $minStartDate = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($nextDate);
-            $adjustedStartDate = $nextDate;
-            $payloadHash = $this->hashSubscriptionPayload($payload);
-            $dateRetryCount++;
-            $result = $this->createSubscription($payload, $token);
-        }
 
         if (! ($result['ok'] ?? false)) {
             $message = $this->extractApiValidationMessage($result);
-            if ($minStartDate === null) {
-                $minStartDate = SubscriptionCheckoutPayload::extractMinStartDateFromApiResult($result);
-            }
-            if ($minStartDate === null || $minStartDate === '') {
+            $minStartDate = SubscriptionCheckoutPayload::extractMinStartDateFromApiResult($result);
+            if ($minStartDate === '') {
                 $minStartDate = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
             }
-            if ($minStartDate !== null && $minStartDate !== '') {
+            if ($minStartDate !== '') {
                 $minStartDate = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($minStartDate);
             }
             $dateRelated = SubscriptionCheckoutPayload::isStartDateValidationMessage($message)
-                || $dateRetryCount > 0;
+                || $minStartDate !== '';
 
             return [
                 'ok' => false,
                 'message' => $dateRelated
                     ? SubscriptionCheckoutPayload::resolveStartDateErrorMessage($message, $minStartDate)
                     : $message,
-                'min_start_date' => $dateRelated ? $minStartDate : null,
+                'min_start_date' => $dateRelated ? ($minStartDate !== '' ? $minStartDate : null) : null,
                 'adjusted_start_date' => null,
                 'subscription_id' => null,
                 'bootstrap' => null,
@@ -775,7 +740,7 @@ class AccountApiService
             'ok' => true,
             'message' => '',
             'min_start_date' => null,
-            'adjusted_start_date' => $adjustedStartDate,
+            'adjusted_start_date' => null,
             'subscription_id' => $subscriptionId,
             'bootstrap' => $bootstrap,
         ];

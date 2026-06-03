@@ -1343,8 +1343,17 @@ class CheckoutController extends Controller
             if ($dateError !== null) {
                 return response()->json($dateError, 422);
             }
-            $normalizedStart = SubscriptionCheckoutPayload::normalizeStartDate($validated['start_date'] ?? '')
-                ?: SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate();
+            $normalizedStart = SubscriptionCheckoutPayload::normalizeStartDate($validated['start_date'] ?? '');
+            if ($normalizedStart === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => SubscriptionCheckoutPayload::startDateBeforeMinimumMessage(
+                        SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate()
+                    ),
+                    'errors' => ['start_date' => [__('checkout.start_date_required')]],
+                    'min_start_date' => SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate(),
+                ], 422);
+            }
             $subscriptionApiPayload['date'] = $normalizedStart;
             $subscriptionApiPayload['start_date'] = $normalizedStart;
         }
@@ -1586,7 +1595,6 @@ class CheckoutController extends Controller
             'preview' => false,
             'api_checkout' => true,
             'subscription_id' => $subscriptionId,
-            'adjusted_start_date' => $boot['adjusted_start_date'] ?? null,
             'amount_halalas' => (int) $bootstrap['amount_halalas'],
             'publishable_key' => $publishableKey,
             'callback_url' => route('payment.callback'),

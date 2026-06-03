@@ -1318,10 +1318,10 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             hasCartItems: @json(!empty($cart)),
             startDate: @json($defaultStartDate),
             minStartDate: @json($minStartDate),
+            startDateTouched: false,
+            _skipStartDateTouch: false,
             _moyasarFingerprint: '',
             _moyasarRequestId: 0,
-            _moyasarStartDateRetries: 0,
-            lastAppliedMinStartDate: '',
             vatRate: @json((float) $vatRate),
             deliveryFeeAmount: @json((float) $deliveryFeeAmount),
             discount: 0,
@@ -2708,15 +2708,16 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (! this.isPlanCheckout || ! this.minStartDate) {
                     return;
                 }
-                this.applyMinimumStartDate(this.minStartDate, { silent: true });
+                this.updateStartDatePickerMinimum(this.minStartDate);
+                this.applyDefaultStartDateIfNeeded(this.minStartDate);
             },
 
-            applyMinimumStartDate(minDate, options = {}) {
-                const silent = options.silent === true;
-                const normalized = String(minDate || '').trim();
+            updateStartDatePickerMinimum(minDate) {
+                const normalized = String(minDate || '').trim().slice(0, 10);
                 if (! normalized) {
                     return;
                 }
+                this.minStartDate = normalized;
                 const input = document.getElementById('start_date_input');
                 if (! input) {
                     return;
@@ -2724,34 +2725,39 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 const picker = input._flatpickr;
                 if (picker) {
                     picker.set('minDate', normalized);
-                    if (! this.startDate || this.startDate < normalized) {
-                        picker.setDate(normalized, true);
-                    }
-                } else {
-                    input.value = normalized;
-                }
-                this.startDate = normalized;
-                if (! silent) {
-                    input.dispatchEvent(new Event('change', { bubbles: true }));
                 }
             },
 
-            addDaysToIsoDate(isoDate, days) {
-                const parts = String(isoDate || '').trim().slice(0, 10).split('-');
-                if (parts.length !== 3) {
-                    return isoDate;
+            applyDefaultStartDateIfNeeded(minDate) {
+                if (this.startDateTouched) {
+                    return;
                 }
-                const dt = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-                if (Number.isNaN(dt.getTime())) {
-                    return isoDate;
+                const normalized = String(minDate || '').trim().slice(0, 10);
+                if (! normalized) {
+                    return;
                 }
-                dt.setDate(dt.getDate() + days);
+                const input = document.getElementById('start_date_input');
+                if (! input) {
+                    return;
+                }
+                const current = String(this.startDate || input.value || '').trim().slice(0, 10);
+                const nextDate = (! current || current < normalized) ? normalized : current;
+                const picker = input._flatpickr;
+                this._skipStartDateTouch = true;
+                if (picker) {
+                    picker.setDate(nextDate, true);
+                } else {
+                    input.value = nextDate;
+                }
+                this.startDate = nextDate;
+                this._skipStartDateTouch = false;
+            },
 
-                return dt.getFullYear()
-                    + '-'
-                    + String(dt.getMonth() + 1).padStart(2, '0')
-                    + '-'
-                    + String(dt.getDate()).padStart(2, '0');
+            markStartDateTouched() {
+                if (this._skipStartDateTouch) {
+                    return;
+                }
+                this.startDateTouched = true;
             },
 
             async bootstrapMoyasar() {
@@ -2809,21 +2815,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             this.moyasarError = data.message || @json(__('payment.fill_delivery_first'));
                         }
                         const apiMin = String(data.min_start_date || '').trim().slice(0, 10);
-                        let retryDate = apiMin;
-                        if (retryDate && retryDate === String(this.startDate || '').trim().slice(0, 10)) {
-                            retryDate = this.addDaysToIsoDate(retryDate, 1);
-                        }
-                        const canAutoFixDate = retryDate
-                            && retryDate !== this.lastAppliedMinStartDate
-                            && this._moyasarStartDateRetries < 2;
-                        if (canAutoFixDate) {
-                            this._moyasarStartDateRetries += 1;
-                            this.lastAppliedMinStartDate = retryDate;
-                            this.applyMinimumStartDate(retryDate, { silent: true });
-                            this._moyasarFingerprint = '';
-                            await this.$nextTick();
-
-                            return this.bootstrapMoyasar();
+                        if (apiMin) {
+                            this.updateStartDatePickerMinimum(apiMin);
                         }
                         this._moyasarFingerprint = '';
                         const el = document.getElementById('moyasar-form-checkout');
@@ -2833,10 +2826,6 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
                         return;
                     }
-                    if (data.adjusted_start_date) {
-                        this.applyMinimumStartDate(data.adjusted_start_date, { silent: true });
-                    }
-                    this._moyasarStartDateRetries = 0;
                     this._moyasarFingerprint = fingerprint;
                     this.initMoyasarWidget(data);
                 } catch (e) {
@@ -2963,6 +2952,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (startDateInput) {
                     this.startDate = String(startDateInput.value || this.startDate || '');
                     startDateInput.addEventListener('change', () => {
+                        this.markStartDateTouched();
                         this.startDate = String(startDateInput.value || '');
                         this.scheduleMoyasarRefresh();
                     });
@@ -3017,6 +3007,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     updateDisplay(dateStr);
                     const input = document.getElementById('start_date_input');
                     if (input) {
+                        input.dispatchEvent(new CustomEvent('checkout-start-date-changed', { bubbles: true }));
                         input.dispatchEvent(new Event('change', { bubbles: true }));
                     }
                 },
