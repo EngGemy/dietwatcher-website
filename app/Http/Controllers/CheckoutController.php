@@ -93,28 +93,25 @@ class CheckoutController extends Controller
             $subscriptionPlanId = (int) $request->get('subscription_plan_id', 0);
             $planTotalParam = (float) $request->get('plan_total', 0);
 
-            // Resolve duration days + id from API list (cart must not use $plan->duration_days alone — it is often the default e.g. 5 days)
-            $apiDurations = $this->externalDataService->getPlanDurations($planId);
+            // Resolve duration days + id from authoritative API list (not nested profile ids)
+            $apiDurations = $this->externalDataService->getAuthoritativePlanDurations($planId);
             $resolvedDurationDays = (int) ($plan->duration_days ?? 28);
             $resolvedDurationId = $durationId;
-
-            if ($apiDurations !== []) {
-                $byId = collect($apiDurations)->first(function (array $d) use ($durationId): bool {
-                    return $durationId !== '' && (string) ($d['id'] ?? '') === (string) $durationId;
-                });
+            $resolvedDurationIdInt = SubscriptionCheckoutPayload::resolvePlanDurationId(
+                $planId,
+                (int) $durationId,
+                $durationDaysParam,
+                $this->externalDataService,
+            );
+            if ($resolvedDurationIdInt > 0) {
+                $resolvedDurationId = (string) $resolvedDurationIdInt;
+                $byId = collect($apiDurations)->first(fn (array $d) => (int) ($d['id'] ?? 0) === $resolvedDurationIdInt);
                 if ($byId !== null) {
                     $resolvedDurationDays = (int) ($byId['days'] ?? $resolvedDurationDays);
-                } elseif ($durationDaysParam > 0) {
-                    $byDays = collect($apiDurations)->first(function (array $d) use ($durationDaysParam): bool {
-                        return (int) ($d['days'] ?? 0) === $durationDaysParam;
-                    });
-                    if ($byDays !== null) {
-                        $resolvedDurationDays = (int) ($byDays['days'] ?? $durationDaysParam);
-                        $resolvedDurationId = (string) ($byDays['id'] ?? $resolvedDurationId);
-                    }
                 }
             } elseif ($durationDaysParam > 0) {
                 $resolvedDurationDays = $durationDaysParam;
+                $resolvedDurationId = '';
             }
 
             $variantName = '';
@@ -215,7 +212,10 @@ class CheckoutController extends Controller
             if ($firstPlanItem) {
                 $programId = (int) ($firstPlanItem['id'] ?? 0);
                 if ($programId > 0) {
-                    $rawDurations = $this->externalDataService->getPlanDurations($programId);
+                    $rawDurations = $this->externalDataService->getAuthoritativePlanDurations($programId);
+                    if ($rawDurations === []) {
+                        $rawDurations = $this->externalDataService->getPlanDurations($programId);
+                    }
                     $planDurations = array_map(function (array $d): array {
                         $days = (int) ($d['days'] ?? 0);
                         $list = (float) ($d['price'] ?? 0);
@@ -443,21 +443,26 @@ class CheckoutController extends Controller
                 }
             }
             $programId = $firstKey !== null ? (int) ($cart[$firstKey]['id'] ?? 0) : 0;
-            $planDurationsFromApi = $programId > 0 ? $this->externalDataService->getPlanDurations($programId) : [];
-
-            if ($planDurationsFromApi !== []) {
-                $requestedId = (int) $request->input('plan_duration_id', 0);
-                $ids = array_map(fn ($d) => (int) ($d['id'] ?? 0), $planDurationsFromApi);
-                if (! in_array($requestedId, $ids, true)) {
-                    return redirect()->back()
-                        ->withErrors(['plan_duration_id' => __('Please select a plan duration.')])
-                        ->withInput();
-                }
-                $match = collect($planDurationsFromApi)->first(fn ($d) => (int) ($d['id'] ?? 0) === $requestedId);
+            $planDurationsFromApi = $programId > 0 ? $this->externalDataService->getAuthoritativePlanDurations($programId) : [];
+            $cartDurationDays = $firstKey !== null ? (int) ($cart[$firstKey]['options']['duration_days'] ?? 0) : 0;
+            $requestedId = (int) $request->input('plan_duration_id', 0);
+            $resolvedDurationId = SubscriptionCheckoutPayload::resolvePlanDurationId(
+                $programId,
+                $requestedId,
+                $cartDurationDays,
+                $this->externalDataService,
+            );
+            if ($planDurationsFromApi !== [] && $resolvedDurationId <= 0) {
+                return redirect()->back()
+                    ->withErrors(['plan_duration_id' => __('checkout.invalid_plan_duration')])
+                    ->withInput();
+            }
+            if ($resolvedDurationId > 0) {
+                $match = collect($planDurationsFromApi)->first(fn ($d) => (int) ($d['id'] ?? 0) === $resolvedDurationId);
                 if ($match && $firstKey !== null) {
                     $linePrice = self::planDurationEffectivePrice($match);
                     $cart[$firstKey]['price'] = $linePrice;
-                    $cart[$firstKey]['options']['duration_id'] = (string) ($match['id'] ?? $requestedId);
+                    $cart[$firstKey]['options']['duration_id'] = (string) ($match['id'] ?? $resolvedDurationId);
                     $cart[$firstKey]['options']['duration_days'] = (int) ($match['days'] ?? 0);
                     if (session()->has(CartManager::SESSION_SUBSCRIPTION)) {
                         session()->put(CartManager::SESSION_SUBSCRIPTION, $cart);
@@ -465,6 +470,7 @@ class CheckoutController extends Controller
                         session()->put(CartManager::SESSION_MARKET, $cart);
                     }
                 }
+                $request->merge(['plan_duration_id' => $resolvedDurationId]);
             }
         }
 
@@ -1187,19 +1193,28 @@ class CheckoutController extends Controller
                 }
             }
             $programId = $firstKey !== null ? (int) ($cart[$firstKey]['id'] ?? 0) : 0;
-            $planDurationsFromApi = $programId > 0 ? $this->externalDataService->getPlanDurations($programId) : [];
-
-            if ($planDurationsFromApi !== []) {
-                $requestedId = (int) $request->input('plan_duration_id', 0);
-                $ids = array_map(fn ($d) => (int) ($d['id'] ?? 0), $planDurationsFromApi);
-                if (! in_array($requestedId, $ids, true)) {
-                    return response()->json(['success' => false, 'message' => __('Please select a plan duration.')], 422);
-                }
-                $match = collect($planDurationsFromApi)->first(fn ($d) => (int) ($d['id'] ?? 0) === $requestedId);
+            $planDurationsFromApi = $programId > 0 ? $this->externalDataService->getAuthoritativePlanDurations($programId) : [];
+            $cartDurationDays = $firstKey !== null ? (int) ($cart[$firstKey]['options']['duration_days'] ?? 0) : 0;
+            $requestedId = (int) $request->input('plan_duration_id', 0);
+            $resolvedDurationId = SubscriptionCheckoutPayload::resolvePlanDurationId(
+                $programId,
+                $requestedId,
+                $cartDurationDays,
+                $this->externalDataService,
+            );
+            if ($planDurationsFromApi !== [] && $resolvedDurationId <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('checkout.invalid_plan_duration'),
+                    'errors' => ['plan_duration_id' => [__('checkout.invalid_plan_duration')]],
+                ], 422);
+            }
+            if ($resolvedDurationId > 0) {
+                $match = collect($planDurationsFromApi)->first(fn ($d) => (int) ($d['id'] ?? 0) === $resolvedDurationId);
                 if ($match && $firstKey !== null) {
                     $linePrice = self::planDurationEffectivePrice($match);
                     $cart[$firstKey]['price'] = $linePrice;
-                    $cart[$firstKey]['options']['duration_id'] = (string) ($match['id'] ?? $requestedId);
+                    $cart[$firstKey]['options']['duration_id'] = (string) ($match['id'] ?? $resolvedDurationId);
                     $cart[$firstKey]['options']['duration_days'] = (int) ($match['days'] ?? 0);
                     if (session()->has(CartManager::SESSION_SUBSCRIPTION)) {
                         session()->put(CartManager::SESSION_SUBSCRIPTION, $cart);
@@ -1207,6 +1222,7 @@ class CheckoutController extends Controller
                         session()->put(CartManager::SESSION_MARKET, $cart);
                     }
                 }
+                $validated['plan_duration_id'] = $resolvedDurationId;
             }
         }
 
@@ -1271,6 +1287,13 @@ class CheckoutController extends Controller
         $subscriptionApiPayload = $amounts['subscription_api_payload'];
 
         if ($isSubscriptionCheckout && ! $previewOnly) {
+            if ($subscriptionApiPayload === []) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('checkout.invalid_plan_duration'),
+                    'errors' => ['plan_duration_id' => [__('checkout.invalid_plan_duration')]],
+                ], 422);
+            }
             $dateError = self::validateSubscriptionStartDate($validated['start_date'] ?? '');
             if ($dateError !== null) {
                 return response()->json($dateError, 422);
@@ -1463,6 +1486,9 @@ class CheckoutController extends Controller
         if (! ($boot['ok'] ?? false) || ! is_array($boot['bootstrap'] ?? null)) {
             $minStart = (string) ($boot['min_start_date'] ?? '');
             $message = (string) ($boot['message'] ?? __('account.request_failed'));
+            if (str_contains($message, 'PlanDuration')) {
+                $message = __('checkout.invalid_plan_duration');
+            }
             if ($minStart !== '') {
                 $message = SubscriptionCheckoutPayload::resolveStartDateErrorMessage($message, $minStart);
             }

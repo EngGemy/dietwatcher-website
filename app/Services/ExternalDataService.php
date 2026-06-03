@@ -1174,6 +1174,18 @@ class ExternalDataService
     }
 
     /**
+     * Durations safe for POST /subscriptions (endpoint only — no nested profile ids).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getAuthoritativePlanDurations(int $planId): array
+    {
+        return Cache::remember($this->cacheKey("plan_durations_auth_{$planId}"), 3600, function () use ($planId) {
+            return $this->fetchPlanDurationsFromEndpoint($planId);
+        });
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     protected function fetchPlanDurationsFromEndpoint(int $planId): array

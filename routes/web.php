@@ -86,7 +86,7 @@ Route::get('/subscriptions/{id}', [SubscriptionController::class, 'show'])->name
 Route::get('/api/plan/{id}/durations', function (int $id) {
     $service = app(\App\Services\ExternalDataService::class);
 
-    return response()->json($service->getPlanDurations($id));
+    return response()->json($service->getAuthoritativePlanDurations($id));
 })->name('api.plan.durations');
 
 Route::get('/api/plan/{id}/calories', function (int $id) {

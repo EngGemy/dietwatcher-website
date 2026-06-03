@@ -61,11 +61,21 @@ final class SubscriptionCheckoutPayload
         $subscriptionPlanId = (int) ($options['subscription_plan_id'] ?? 0);
         $planId = $subscriptionPlanId > 0 ? $subscriptionPlanId : $programId;
 
-        $durationId = $planDurationIdOverride !== null && $planDurationIdOverride > 0
+        $requestedDurationId = $planDurationIdOverride !== null && $planDurationIdOverride > 0
             ? $planDurationIdOverride
             : (int) ($validated['plan_duration_id'] ?? 0);
-        if ($durationId <= 0 && ! empty($options['duration_id'])) {
-            $durationId = (int) $options['duration_id'];
+        if ($requestedDurationId <= 0 && ! empty($options['duration_id'])) {
+            $requestedDurationId = (int) $options['duration_id'];
+        }
+        $cartDurationDays = (int) ($options['duration_days'] ?? 0);
+        $durationId = self::resolvePlanDurationId(
+            $programId,
+            $requestedDurationId,
+            $cartDurationDays,
+            $external,
+        );
+        if ($durationId <= 0) {
+            return [];
         }
 
         $caloryId = (int) ($options['calorie_id'] ?? $options['plan_calory_id'] ?? 0);
@@ -267,6 +277,59 @@ final class SubscriptionCheckoutPayload
         $durationId = (int) ($payment->checkout_payload['plan_duration_id'] ?? 0);
 
         return self::buildFormPayload($validated, $cart, $external, $durationId > 0 ? $durationId : null);
+    }
+
+    /**
+     * Map checkout duration selection to an id returned by GET /programs/{id}/durations.
+     * Stale cart or nested-plan ids (e.g. from meal-plan profile only) must not be sent to POST /subscriptions.
+     */
+    public static function resolvePlanDurationId(
+        int $programId,
+        int $requestedId,
+        int $cartDurationDays,
+        ExternalDataService $external,
+    ): int {
+        if ($programId <= 0) {
+            return 0;
+        }
+
+        $durations = $external->getAuthoritativePlanDurations($programId);
+        if ($durations === []) {
+            return 0;
+        }
+
+        $validIds = [];
+        foreach ($durations as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $id = (int) ($row['id'] ?? 0);
+            if ($id > 0) {
+                $validIds[] = $id;
+                if ($requestedId > 0 && $id === $requestedId) {
+                    return $requestedId;
+                }
+            }
+        }
+
+        if ($cartDurationDays > 0) {
+            foreach ($durations as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+                if ((int) ($row['days'] ?? 0) === $cartDurationDays) {
+                    $matchId = (int) ($row['id'] ?? 0);
+                    if ($matchId > 0) {
+                        return $matchId;
+                    }
+                }
+            }
+        }
+
+        $pick = collect($durations)->first(fn ($d) => is_array($d) && ($d['is_default'] ?? false))
+            ?? collect($durations)->first(fn ($d) => is_array($d) && (int) ($d['id'] ?? 0) > 0);
+
+        return is_array($pick) ? (int) ($pick['id'] ?? 0) : 0;
     }
 
     public static function resolvePlanCaloryId(
