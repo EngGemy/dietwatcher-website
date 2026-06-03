@@ -1524,10 +1524,14 @@ class CheckoutController extends Controller
 
         $boot = $this->accountApiService->bootstrapSubscriptionMoyasar($subscriptionApiPayload, $token);
         if (! ($boot['ok'] ?? false) || ! is_array($boot['bootstrap'] ?? null)) {
-            $minStart = SubscriptionCheckoutPayload::sanitizeApiMinimumStartDate(
-                (string) ($boot['min_start_date'] ?? '')
-            );
             $message = (string) ($boot['message'] ?? __('account.request_failed'));
+            $minStart = (string) ($boot['min_start_date'] ?? '');
+            if ($minStart === '') {
+                $minStart = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
+            }
+            if ($minStart !== '') {
+                $minStart = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($minStart);
+            }
             if (str_contains($message, 'PlanDuration')) {
                 $message = __('checkout.invalid_plan_duration');
             }

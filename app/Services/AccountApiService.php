@@ -438,14 +438,19 @@ class AccountApiService
 
         while (! ($result['ok'] ?? false) && $dateRetryCount < 3) {
             $message = $this->extractApiValidationMessage($result);
+            if (! SubscriptionCheckoutPayload::isStartDateValidationMessage($message)) {
+                break;
+            }
+
             $parsedMin = SubscriptionCheckoutPayload::extractMinStartDateFromApiResult($result);
             if ($parsedMin === '') {
                 $parsedMin = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
             }
-
             if ($parsedMin === '') {
                 break;
             }
+
+            $parsedMin = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($parsedMin);
 
             $currentDate = SubscriptionCheckoutPayload::normalizeStartDate(
                 (string) ($payload['date'] ?? $payload['start_date'] ?? '')
@@ -475,13 +480,10 @@ class AccountApiService
                 $minStartDate = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
             }
             if ($minStartDate !== null && $minStartDate !== '') {
-                $minStartDate = SubscriptionCheckoutPayload::sanitizeApiMinimumStartDate($minStartDate);
+                $minStartDate = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($minStartDate);
             }
-            $dateRelated = $minStartDate !== ''
-                && (
-                    SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message) !== ''
-                    || $dateRetryCount > 0
-                );
+            $dateRelated = SubscriptionCheckoutPayload::isStartDateValidationMessage($message)
+                || $dateRetryCount > 0;
 
             return [
                 'ok' => false,

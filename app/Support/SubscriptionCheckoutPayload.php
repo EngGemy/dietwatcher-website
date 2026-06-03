@@ -183,29 +183,55 @@ final class SubscriptionCheckoutPayload
     }
 
     /**
+     * Normalize a minimum date parsed from API validation (handles stale years like 2024 in d-m-Y messages).
+     */
+    public static function reconcileApiMinimumStartDate(string $candidate): string
+    {
+        $normalized = self::normalizeStartDate($candidate);
+        if ($normalized === '') {
+            return self::defaultCheckoutMinimumStartDate();
+        }
+
+        try {
+            $floor = \Illuminate\Support\Carbon::parse(self::defaultCheckoutMinimumStartDate())->startOfDay();
+            $date = \Illuminate\Support\Carbon::parse($normalized)->startOfDay();
+            $today = now(config('app.timezone', 'Asia/Riyadh'))->startOfDay();
+
+            if ($date->gte($today) && $date->gte($floor)) {
+                return $date->format('Y-m-d');
+            }
+
+            if ($date->lt($today)) {
+                $rolled = $date->copy()->year($floor->year);
+                if ($rolled->lt($floor)) {
+                    $rolled = $floor->copy();
+                }
+
+                return $rolled->format('Y-m-d');
+            }
+
+            return $floor->format('Y-m-d');
+        } catch (\Throwable) {
+            return self::defaultCheckoutMinimumStartDate();
+        }
+    }
+
+    /**
      * Reject parsed API minimums that are unreasonably far in the future (bad regex matches).
      */
     public static function sanitizeApiMinimumStartDate(string $candidate): string
     {
-        $normalized = self::normalizeStartDate($candidate);
-        if ($normalized === '') {
-            return '';
-        }
+        $reconciled = self::reconcileApiMinimumStartDate($candidate);
 
         try {
-            $date = \Illuminate\Support\Carbon::parse($normalized);
-            $floor = \Illuminate\Support\Carbon::parse(self::defaultCheckoutMinimumStartDate());
-            if ($date->lt($floor)) {
-                return $floor->format('Y-m-d');
+            if (\Illuminate\Support\Carbon::parse($reconciled)->gt(now()->addYears(3))) {
+                return self::defaultCheckoutMinimumStartDate();
             }
-            if ($date->gt(now()->addYears(3))) {
-                return '';
-            }
-
-            return $normalized;
         } catch (\Throwable) {
-            return '';
+            return self::defaultCheckoutMinimumStartDate();
         }
+
+        return $reconciled;
     }
 
     /**
@@ -274,11 +300,11 @@ final class SubscriptionCheckoutPayload
 
     public static function parseMinimumDateFromValidationMessage(string $message): string
     {
-        if (preg_match('#\b(20\d{2}-\d{2}-\d{2})\b#', $message, $matches)) {
+        if (preg_match('#(20\d{2}-\d{2}-\d{2})#', $message, $matches)) {
             return self::sanitizeApiMinimumStartDate($matches[1]);
         }
 
-        if (preg_match('#\b(\d{2}-\d{2}-20\d{2})\b#', $message, $matches)) {
+        if (preg_match('#(\d{2}-\d{2}-20\d{2})#', $message, $matches)) {
             try {
                 return self::sanitizeApiMinimumStartDate(
                     \Illuminate\Support\Carbon::createFromFormat('d-m-Y', $matches[1])->format('Y-m-d')
@@ -289,6 +315,23 @@ final class SubscriptionCheckoutPayload
         }
 
         return '';
+    }
+
+    public static function isStartDateValidationMessage(string $message): bool
+    {
+        $message = trim($message);
+        if ($message === '') {
+            return false;
+        }
+
+        if (self::parseMinimumDateFromValidationMessage($message) !== '') {
+            return true;
+        }
+
+        return (bool) preg_match(
+            '#(start_date|start date|تاريخ|التاريخ|date\b)#iu',
+            $message
+        );
     }
 
     public static function formatMinimumStartDateLabel(string $ymd): string
