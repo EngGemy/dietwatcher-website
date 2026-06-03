@@ -499,6 +499,7 @@ function googleMapPicker(opts) {
             this.inlineConfirmed = true;
             this.$dispatch('address-selected', {
                 ...this.form,
+                id: a.id ?? null,
                 building_notes,
                 location_label: this.locationTypeLabel(),
                 pickup_type: this.form.pickup_type || 'hand_it_to_me',

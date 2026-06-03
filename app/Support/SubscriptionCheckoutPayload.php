@@ -130,7 +130,7 @@ final class SubscriptionCheckoutPayload
         }
 
         if ($receiving === 'delivery') {
-            $addressId = (string) ($validated['selected_address_id'] ?? '');
+            $addressId = (string) ($validated['selected_address_id'] ?? $validated['address_id'] ?? '');
             if ($addressId !== '' && $addressId !== '0') {
                 $payload['address_id'] = $addressId;
             }

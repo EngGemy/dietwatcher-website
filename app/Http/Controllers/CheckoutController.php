@@ -1104,6 +1104,10 @@ class CheckoutController extends Controller
         }
 
         try {
+            $request->merge([
+                'selected_address_id' => $request->input('selected_address_id') ?: null,
+                'zone_id' => $request->input('zone_id') ?: null,
+            ]);
             $validated = Validator::make($request->all(), $rules)->validate();
         } catch (ValidationException $e) {
             return response()->json([

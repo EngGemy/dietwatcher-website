@@ -676,7 +676,12 @@ class AccountApiService
         }
 
         $addressId = trim((string) ($payload['address_id'] ?? ''));
+        if ($addressId === '' || $addressId === '0') {
+            $addressId = trim((string) ($payload['selected_address_id'] ?? ''));
+        }
         if ($addressId !== '' && $addressId !== '0') {
+            $payload['address_id'] = $addressId;
+
             return null;
         }
 
