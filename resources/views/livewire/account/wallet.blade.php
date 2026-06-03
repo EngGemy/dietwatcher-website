@@ -54,9 +54,19 @@
                         @php
                             $amt = (float) ($tx['amount'] ?? 0);
                             $txType = strtolower((string) ($tx['type'] ?? $tx['kind'] ?? ''));
+                            $txType = str_replace([' ', '-'], '_', $txType);
                             $isCharge = in_array($txType, ['charge','credit','in'], true) || $amt > 0;
-                            $desc = $tx['description'] ?? $tx['note'] ?? $tx['purpose'] ?? $txType ?: '—';
-                            if (is_array($desc)) $desc = $desc[app()->getLocale()] ?? $desc['en'] ?? '';
+                            $rawDesc = $tx['description'] ?? $tx['note'] ?? $tx['purpose'] ?? $txType ?: '—';
+                            if (is_array($rawDesc)) {
+                                $rawDesc = $rawDesc[app()->getLocale()] ?? $rawDesc['en'] ?? '';
+                            }
+                            $desc = trim((string) $rawDesc);
+                            $translatedType = __('account.tx_types.'.$txType);
+                            if ($desc === '' || strtolower($desc) === $txType) {
+                                $desc = $translatedType !== ('account.tx_types.'.$txType)
+                                    ? $translatedType
+                                    : ucfirst(str_replace('_', ' ', $txType));
+                            }
                             $when = $tx['created_at'] ?? $tx['date'] ?? '';
                         @endphp
                         <li class="flex items-center justify-between gap-3 px-5 py-3">
