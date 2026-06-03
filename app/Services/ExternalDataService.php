@@ -1180,9 +1180,30 @@ class ExternalDataService
      */
     public function getAuthoritativePlanDurations(int $planId): array
     {
-        return Cache::remember($this->cacheKey("plan_durations_auth_{$planId}"), 3600, function () use ($planId) {
-            return $this->fetchPlanDurationsFromEndpoint($planId);
-        });
+        $cacheKey = $this->cacheKey("plan_durations_auth_{$planId}");
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && $cached !== []) {
+            return $cached;
+        }
+
+        $rows = $this->fetchPlanDurationsFromEndpoint($planId);
+        if ($rows !== []) {
+            Cache::put($cacheKey, $rows, 3600);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Durations for checkout UI + payment resolution (endpoint first, profile fallback).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getCheckoutPlanDurations(int $planId): array
+    {
+        $rows = $this->getAuthoritativePlanDurations($planId);
+
+        return $rows !== [] ? $rows : $this->getPlanDurations($planId);
     }
 
     /**

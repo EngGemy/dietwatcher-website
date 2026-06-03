@@ -810,7 +810,7 @@
     "checkout.verify_phone_for_addresses": "Verify your phone number to see your saved delivery addresses.",
     "checkout.session_expired_reverify": "Your session expired. Verify your phone again to load saved addresses.",
     "checkout.reverify_phone": "Verify phone again",
-    "checkout.start_date_before_minimum": "Choose a start date at least 48 hours from now (:date or later).",
+    "checkout.start_date_before_minimum": "Choose a start date on or after :date (orders before 12:00 PM start in 2 days; after 12:00 PM in 3 days).",
     "checkout.confirm_saved_address_before_payment": "Confirm your delivery address on the map so it is saved to your account before paying.",
     "checkout.api_temporarily_unavailable": "The subscription service is temporarily unavailable. Please try again in a moment.",
     "checkout.subscription_payment_unavailable": "We could not start payment for this subscription. Please refresh the page and try again.",

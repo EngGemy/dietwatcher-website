@@ -94,7 +94,7 @@ class CheckoutController extends Controller
             $planTotalParam = (float) $request->get('plan_total', 0);
 
             // Resolve duration days + id from authoritative API list (not nested profile ids)
-            $apiDurations = $this->externalDataService->getAuthoritativePlanDurations($planId);
+            $apiDurations = $this->externalDataService->getCheckoutPlanDurations($planId);
             $resolvedDurationDays = (int) ($plan->duration_days ?? 28);
             $resolvedDurationId = $durationId;
             $resolvedDurationIdInt = SubscriptionCheckoutPayload::resolvePlanDurationId(
@@ -212,10 +212,7 @@ class CheckoutController extends Controller
             if ($firstPlanItem) {
                 $programId = (int) ($firstPlanItem['id'] ?? 0);
                 if ($programId > 0) {
-                    $rawDurations = $this->externalDataService->getAuthoritativePlanDurations($programId);
-                    if ($rawDurations === []) {
-                        $rawDurations = $this->externalDataService->getPlanDurations($programId);
-                    }
+                    $rawDurations = $this->externalDataService->getCheckoutPlanDurations($programId);
                     $planDurations = array_map(function (array $d): array {
                         $days = (int) ($d['days'] ?? 0);
                         $list = (float) ($d['price'] ?? 0);
@@ -447,9 +444,17 @@ class CheckoutController extends Controller
                 }
             }
             $programId = $firstKey !== null ? (int) ($cart[$firstKey]['id'] ?? 0) : 0;
-            $planDurationsFromApi = $programId > 0 ? $this->externalDataService->getAuthoritativePlanDurations($programId) : [];
+            $planDurationsFromApi = $programId > 0 ? $this->externalDataService->getCheckoutPlanDurations($programId) : [];
             $cartDurationDays = $firstKey !== null ? (int) ($cart[$firstKey]['options']['duration_days'] ?? 0) : 0;
             $requestedId = (int) $request->input('plan_duration_id', 0);
+            if ($requestedId > 0) {
+                $selectedRow = collect($planDurationsFromApi)->first(
+                    fn ($d) => (int) ($d['id'] ?? 0) === $requestedId
+                );
+                if ($selectedRow) {
+                    $cartDurationDays = (int) ($selectedRow['days'] ?? $cartDurationDays);
+                }
+            }
             $resolvedDurationId = SubscriptionCheckoutPayload::resolvePlanDurationId(
                 $programId,
                 $requestedId,
@@ -1197,9 +1202,17 @@ class CheckoutController extends Controller
                 }
             }
             $programId = $firstKey !== null ? (int) ($cart[$firstKey]['id'] ?? 0) : 0;
-            $planDurationsFromApi = $programId > 0 ? $this->externalDataService->getAuthoritativePlanDurations($programId) : [];
+            $planDurationsFromApi = $programId > 0 ? $this->externalDataService->getCheckoutPlanDurations($programId) : [];
             $cartDurationDays = $firstKey !== null ? (int) ($cart[$firstKey]['options']['duration_days'] ?? 0) : 0;
             $requestedId = (int) $request->input('plan_duration_id', 0);
+            if ($requestedId > 0) {
+                $selectedRow = collect($planDurationsFromApi)->first(
+                    fn ($d) => (int) ($d['id'] ?? 0) === $requestedId
+                );
+                if ($selectedRow) {
+                    $cartDurationDays = (int) ($selectedRow['days'] ?? $cartDurationDays);
+                }
+            }
             $resolvedDurationId = SubscriptionCheckoutPayload::resolvePlanDurationId(
                 $programId,
                 $requestedId,
@@ -1461,11 +1474,11 @@ class CheckoutController extends Controller
     {
         $normalized = SubscriptionCheckoutPayload::normalizeStartDate($startDate);
         $minDate = SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate();
-        if ($programId > 0) {
-            $durations = $this->externalDataService->getAuthoritativePlanDurations($programId);
+        if ($programId > 0 && $planDurationId > 0) {
+            $durations = $this->externalDataService->getCheckoutPlanDurations($programId);
             $minDate = SubscriptionCheckoutPayload::minimumStartDateForDurationId(
                 $durations,
-                $planDurationId > 0 ? $planDurationId : null,
+                $planDurationId,
             );
         }
 

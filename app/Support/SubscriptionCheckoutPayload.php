@@ -91,7 +91,7 @@ final class SubscriptionCheckoutPayload
         $deliveryType = (string) ($validated['delivery_type'] ?? 'home');
         $receiving = $deliveryType === 'pickup' ? 'pickup' : 'delivery';
 
-        $durations = $external->getAuthoritativePlanDurations($programId);
+        $durations = $external->getCheckoutPlanDurations($programId);
         $durationRow = null;
         foreach ($durations as $row) {
             if (is_array($row) && (int) ($row['id'] ?? 0) === $durationId) {
@@ -151,7 +151,11 @@ final class SubscriptionCheckoutPayload
 
     public static function defaultCheckoutMinimumStartDate(): string
     {
-        return now()->addHours(48)->format('Y-m-d');
+        $now = now(config('app.timezone', 'Asia/Riyadh'));
+        $noonCutoff = $now->copy()->startOfDay()->addHours(12);
+        $daysToAdd = $now->lt($noonCutoff) ? 2 : 3;
+
+        return $now->copy()->startOfDay()->addDays($daysToAdd)->format('Y-m-d');
     }
 
     public static function normalizeStartDate(string $value): string
@@ -169,38 +173,13 @@ final class SubscriptionCheckoutPayload
     }
 
     /**
-     * Earliest allowed subscription start: 48h from now, or the duration catalog start_date when later.
+     * Earliest subscription start: noon cutoff (+2 days before 12:00, +3 days after).
      *
      * @param  array<string, mixed>|null  $durationRow
      */
     public static function minimumStartDateForDuration(?array $durationRow): string
     {
-        $floor = self::defaultCheckoutMinimumStartDate();
-        if ($durationRow === null) {
-            return $floor;
-        }
-
-        $catalog = self::normalizeStartDate((string) ($durationRow['start_date'] ?? ''));
-        if ($catalog === '') {
-            return $floor;
-        }
-
-        try {
-            $catalogDate = \Illuminate\Support\Carbon::parse($catalog);
-            $floorDate = \Illuminate\Support\Carbon::parse($floor);
-            $ceiling = now()->addYears(3);
-
-            if ($catalogDate->lt($floorDate)) {
-                return $floor;
-            }
-            if ($catalogDate->gt($ceiling)) {
-                return $floor;
-            }
-
-            return $catalog;
-        } catch (\Throwable) {
-            return $floor;
-        }
+        return self::defaultCheckoutMinimumStartDate();
     }
 
     /**
@@ -362,7 +341,7 @@ final class SubscriptionCheckoutPayload
         }
 
         $durationRow = null;
-        foreach ($external->getAuthoritativePlanDurations($programId) as $row) {
+        foreach ($external->getCheckoutPlanDurations($programId) as $row) {
             if (is_array($row) && (int) ($row['id'] ?? 0) === $durationId) {
                 $durationRow = $row;
                 break;
@@ -424,35 +403,21 @@ final class SubscriptionCheckoutPayload
     }
 
     /**
-     * Map checkout duration selection to an id returned by GET /programs/{id}/durations.
-     * Stale cart or nested-plan ids (e.g. from meal-plan profile only) must not be sent to POST /subscriptions.
+     * @param  array<int, array<string, mixed>>  $durations
      */
-    public static function resolvePlanDurationId(
-        int $programId,
-        int $requestedId,
-        int $cartDurationDays,
-        ExternalDataService $external,
-    ): int {
-        if ($programId <= 0) {
-            return 0;
-        }
-
-        $durations = $external->getAuthoritativePlanDurations($programId);
+    private static function resolvePlanDurationIdFromList(array $durations, int $requestedId, int $cartDurationDays): int
+    {
         if ($durations === []) {
             return 0;
         }
 
-        $validIds = [];
         foreach ($durations as $row) {
             if (! is_array($row)) {
                 continue;
             }
             $id = (int) ($row['id'] ?? 0);
-            if ($id > 0) {
-                $validIds[] = $id;
-                if ($requestedId > 0 && $id === $requestedId) {
-                    return $requestedId;
-                }
+            if ($id > 0 && $requestedId > 0 && $id === $requestedId) {
+                return $requestedId;
             }
         }
 
@@ -474,6 +439,34 @@ final class SubscriptionCheckoutPayload
             ?? collect($durations)->first(fn ($d) => is_array($d) && (int) ($d['id'] ?? 0) > 0);
 
         return is_array($pick) ? (int) ($pick['id'] ?? 0) : 0;
+    }
+
+    /**
+     * Map checkout duration selection to an id returned by GET /programs/{id}/durations.
+     * Stale cart or nested-plan ids (e.g. from meal-plan profile only) must not be sent to POST /subscriptions.
+     */
+    public static function resolvePlanDurationId(
+        int $programId,
+        int $requestedId,
+        int $cartDurationDays,
+        ExternalDataService $external,
+    ): int {
+        if ($programId <= 0) {
+            return 0;
+        }
+
+        $authoritative = $external->getAuthoritativePlanDurations($programId);
+        $resolved = self::resolvePlanDurationIdFromList($authoritative, $requestedId, $cartDurationDays);
+        if ($resolved > 0) {
+            return $resolved;
+        }
+
+        $checkout = $external->getCheckoutPlanDurations($programId);
+        if ($checkout === [] || $checkout === $authoritative) {
+            return 0;
+        }
+
+        return self::resolvePlanDurationIdFromList($checkout, $requestedId, $cartDurationDays);
     }
 
     public static function resolvePlanCaloryId(

@@ -85,7 +85,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                             readonly
                                             placeholder="{{ __('Select day') }}"
                                             class="date-picker-input @error('start_date') date-picker-input--error @enderror"
-                                            value="{{ $defaultStartDate ?? old('start_date', now()->addHours(48)->format('Y-m-d')) }}"
+                                            value="{{ $defaultStartDate }}"
                                         />
                                         <div class="date-picker-icon">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -94,7 +94,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                         </div>
                                         <div class="date-picker-label" id="date_display">
                                             @php
-                                                $defaultDate = $defaultStartDate ?? old('start_date', now()->addHours(48)->format('Y-m-d'));
+                                                $defaultDate = $defaultStartDate;
                                                 $dateObj = \Carbon\Carbon::parse($defaultDate);
                                             @endphp
                                             <span class="date-picker-label__day">{{ $dateObj->format('d') }}</span>
@@ -1313,8 +1313,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             selectedSubscriptionPlanId: @json((int) data_get(collect($cart)->first(), 'options.subscription_plan_id', 0)),
             selectedPlanCaloryId: @json((int) data_get(collect($cart)->first(), 'options.calorie_id', 0)),
             hasCartItems: @json(!empty($cart)),
-            startDate: @json($defaultStartDate ?? now()->addHours(48)->format('Y-m-d')),
-            minStartDate: @json($minStartDate ?? now()->addHours(48)->format('Y-m-d')),
+            startDate: @json($defaultStartDate),
+            minStartDate: @json($minStartDate),
             _moyasarFingerprint: '',
             _moyasarRequestId: 0,
             _moyasarStartDateRetries: 0,
@@ -2604,28 +2604,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 });
             },
 
-            durationMinimumStartDate(durationId) {
-                const floor = String(this.minStartDate || '').trim();
-                const row = (this.planDurations || []).find((d) => String(d.id) === String(durationId));
-                if (! row || ! row.start_date) {
-                    return floor;
-                }
-                const catalog = String(row.start_date).trim().slice(0, 10);
-                if (! /^\d{4}-\d{2}-\d{2}$/.test(catalog)) {
-                    return floor;
-                }
-
-                return catalog > floor ? catalog : floor;
-            },
-
             applyDurationMinimumStartDate() {
-                if (! this.isPlanCheckout) {
+                if (! this.isPlanCheckout || ! this.minStartDate) {
                     return;
                 }
-                const min = this.durationMinimumStartDate(this.selectedPlanDurationId);
-                if (min) {
-                    this.applyMinimumStartDate(min, { silent: true });
-                }
+                this.applyMinimumStartDate(this.minStartDate, { silent: true });
             },
 
             applyMinimumStartDate(minDate, options = {}) {
@@ -2877,27 +2860,20 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
         }
 
         const startDateInput = document.getElementById('start_date_input');
-        const minDate48h = new Date(Date.now() + (48 * 60 * 60 * 1000));
-        let minDateStr = [
-            minDate48h.getFullYear(),
-            String(minDate48h.getMonth() + 1).padStart(2, '0'),
-            String(minDate48h.getDate()).padStart(2, '0'),
-        ].join('-');
-        const serverMinDate = @json($minStartDate ?? '');
-        if (serverMinDate && serverMinDate > minDateStr) {
-            minDateStr = serverMinDate;
-        }
+        const serverMinDate = @json($minStartDate);
+        let minDateStr = serverMinDate || startDateInput?.value || '';
 
-        // Enforce minimum start date: 48 hours from now (website rule).
         if (startDateInput) {
             const currentValue = String(startDateInput.value || '').trim();
-            if (! currentValue || currentValue < minDateStr) {
-                startDateInput.value = minDateStr;
-                updateDisplay(minDateStr);
+            if (! currentValue || (minDateStr && currentValue < minDateStr)) {
+                startDateInput.value = minDateStr || currentValue;
+                if (minDateStr) {
+                    updateDisplay(minDateStr);
+                }
             }
         }
 
-        if (startDateInput) {
+        if (startDateInput && minDateStr) {
             flatpickr('#start_date_input', {
                 dateFormat: 'Y-m-d',
                 minDate: minDateStr,
