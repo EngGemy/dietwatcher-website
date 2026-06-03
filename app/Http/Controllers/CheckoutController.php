@@ -386,16 +386,36 @@ class CheckoutController extends Controller
             if ($schedulePayload !== []) {
                 $calc = $this->accountApiService->calculateSubscription($schedulePayload, $customerToken);
                 if ($calc['ok'] ?? false) {
-                    $apiMin = SubscriptionCheckoutPayload::extractApiMinStartDate(
-                        is_array($calc['data'] ?? null) ? $calc['data'] : null
-                    );
+                    $calcData = is_array($calc['data'] ?? null) ? $calc['data'] : null;
+                    $apiMin = SubscriptionCheckoutPayload::extractApiMinStartDate($calcData);
                     if ($apiMin !== '') {
                         $minStartDate = $apiMin;
                         $defaultStartDate = $apiMin;
                         $scheduleReady = true;
+                    } elseif (is_array($calcData)) {
+                        foreach ([
+                            'first_available_date_for_subscription',
+                            'min_start_date',
+                            'first_available_date',
+                        ] as $key) {
+                            $raw = trim((string) ($calcData[$key] ?? ''));
+                            if ($raw !== '') {
+                                Log::warning('CheckoutController::index rejected API subscription start date', [
+                                    'raw' => $raw,
+                                    'field' => $key,
+                                ]);
+                                break;
+                            }
+                        }
                     }
                 }
             }
+        }
+
+        if ($hasPlanItems && $minStartDate === '') {
+            $withWeekendBool = $withWeekend === '1';
+            $minStartDate = SubscriptionCheckoutPayload::computeFallbackMinStartDate($withWeekendBool);
+            $defaultStartDate = $minStartDate;
         }
 
         if ($scheduleReady) {
@@ -1169,13 +1189,13 @@ class CheckoutController extends Controller
         $defaultDays = SubscriptionCheckoutPayload::defaultDeliveryWeekdays($withWeekend === '1');
         $storedDays = is_array($address['days'] ?? null) ? $address['days'] : [];
         $daysToSync = $storedDays !== [] ? $storedDays : $defaultDays;
-        $isActive = filter_var($address['is_active'] ?? $address['isActive'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
-        if ($isActive && $storedDays !== []) {
+        if ($storedDays !== []) {
             return response()->json([
                 'success' => true,
                 'data' => $address,
                 'already_active' => true,
+                'addresses' => $this->checkoutManageableAddresses($token),
             ]);
         }
 
@@ -1328,14 +1348,6 @@ class CheckoutController extends Controller
         $selectedAddressId = (int) $request->query('selected_address_id', 0);
         $branchId = (int) $request->query('branch_id', 0);
 
-        if ($deliveryType === 'home' && $selectedAddressId <= 0) {
-            return response()->json([
-                'success' => false,
-                'message' => __('checkout.confirm_saved_address_before_payment'),
-                'needs_address' => true,
-            ], 422);
-        }
-
         if ($deliveryType === 'pickup' && $branchId <= 0) {
             return response()->json([
                 'success' => false,
@@ -1348,8 +1360,8 @@ class CheckoutController extends Controller
             'plan_duration_id' => (int) $request->query('plan_duration_id', 0),
             'delivery_type' => $deliveryType,
             'with_weekend' => $request->query('with_weekend', $withWeekend),
-            'selected_address_id' => $selectedAddressId,
-            'branch_id' => $branchId,
+            'selected_address_id' => $selectedAddressId > 0 ? $selectedAddressId : null,
+            'branch_id' => $branchId > 0 ? $branchId : null,
             'zone_id' => (int) $request->query('zone_id', 0),
         ];
 
@@ -1382,10 +1394,7 @@ class CheckoutController extends Controller
         $minStartDate = SubscriptionCheckoutPayload::extractApiMinStartDate($data);
 
         if ($minStartDate === '') {
-            return response()->json([
-                'success' => false,
-                'message' => __('account.request_failed'),
-            ], 422);
+            $minStartDate = SubscriptionCheckoutPayload::computeFallbackMinStartDate($withWeekend === '1');
         }
 
         return response()->json([

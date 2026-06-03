@@ -3029,9 +3029,6 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     return;
                 }
                 const deliveryType = this.deliveryType === 'pickup' ? 'pickup' : 'home';
-                if (deliveryType === 'home' && ! this.selectedAddressId) {
-                    return;
-                }
                 if (deliveryType === 'pickup' && ! this.selectedBranchId) {
                     return;
                 }
@@ -3056,11 +3053,32 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     if (! res.ok || ! data.success) {
                         return;
                     }
-                    const apiMin = String(data.first_available_date_for_subscription || data.min_start_date || '').trim().slice(0, 10);
+                    const apiMin = this.sanitizeSubscriptionStartDate(
+                        String(data.first_available_date_for_subscription || data.min_start_date || '').trim().slice(0, 10)
+                    );
                     if (apiMin) {
                         this.applyApiMinStartDate(apiMin);
                     }
                 } catch (e) {}
+            },
+
+            sanitizeSubscriptionStartDate(candidate) {
+                const normalized = String(candidate || '').trim().slice(0, 10);
+                if (! /^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+                    return '';
+                }
+                const parts = normalized.split('-').map((v) => parseInt(v, 10));
+                const parsed = new Date(parts[0], parts[1] - 1, parts[2]);
+                parsed.setHours(0, 0, 0, 0);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const max = new Date(today);
+                max.setDate(max.getDate() + 180);
+                if (parsed < today || parsed > max) {
+                    return '';
+                }
+
+                return normalized;
             },
 
             applyApiMinStartDate(apiMin) {
@@ -3416,14 +3434,28 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             ? ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
             : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+        function parseLocalYmd(dateStr) {
+            const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr || '').trim());
+            if (! match) {
+                return null;
+            }
+
+            return {
+                day: parseInt(match[3], 10),
+                month: parseInt(match[2], 10) - 1,
+                year: parseInt(match[1], 10),
+            };
+        }
+
         function updateDisplay(dateStr) {
-            const d = new Date(dateStr);
+            const parsed = parseLocalYmd(dateStr);
             const dayEl = document.querySelector('.date-picker-label__day');
             const monthEl = document.querySelector('.date-picker-label__month');
-            if (dayEl && monthEl) {
-                dayEl.textContent = String(d.getDate()).padStart(2, '0');
-                monthEl.textContent = months[d.getMonth()] + ' ' + d.getFullYear();
+            if (! parsed || ! dayEl || ! monthEl) {
+                return;
             }
+            dayEl.textContent = String(parsed.day).padStart(2, '0');
+            monthEl.textContent = months[parsed.month] + ' ' + parsed.year;
         }
 
         const startDateInput = document.getElementById('start_date_input');

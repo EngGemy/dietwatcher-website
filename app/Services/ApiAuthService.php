@@ -360,33 +360,14 @@ class ApiAuthService
         }
 
         $rows = $this->getAddresses($token, true, false);
-        $otherActive = array_values(array_filter(
-            $rows,
-            static fn (array $row): bool => (int) ($row['id'] ?? 0) !== $addressId
-                && self::isAddressRowActive($row)
-        ));
-
-        if (count($otherActive) <= 1) {
-            return null;
-        }
-
-        foreach ($otherActive as $other) {
-            $otherId = (int) ($other['id'] ?? 0);
-            if ($otherId <= 0) {
+        foreach ($rows as $row) {
+            $otherId = (int) ($row['id'] ?? 0);
+            if ($otherId <= 0 || $otherId === $addressId) {
                 continue;
             }
-            $this->deactivateAddress($token, $otherId);
-        }
-
-        $rows = $this->getAddresses($token, true, false);
-        $stillBlocked = array_values(array_filter(
-            $rows,
-            static fn (array $row): bool => (int) ($row['id'] ?? 0) !== $addressId
-                && self::isAddressRowActive($row)
-        ));
-
-        if (count($stillBlocked) > 1) {
-            return __('checkout.address_max_active_delivery');
+            if (self::isAddressRowActive($row)) {
+                $this->deactivateAddress($token, $otherId);
+            }
         }
 
         return null;

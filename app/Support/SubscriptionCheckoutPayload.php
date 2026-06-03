@@ -223,13 +223,59 @@ final class SubscriptionCheckoutPayload
             'minimum_start_date',
             'available_from',
         ] as $key) {
-            $normalized = self::normalizeStartDate((string) ($data[$key] ?? ''));
-            if ($normalized !== '') {
-                return $normalized;
+            $sanitized = self::sanitizeSubscriptionStartDate((string) ($data[$key] ?? ''));
+            if ($sanitized !== '') {
+                return $sanitized;
             }
         }
 
         return '';
+    }
+
+    /**
+     * Reject start dates in the past or unreasonably far in the future (bad API / stale subscription data).
+     */
+    public static function sanitizeSubscriptionStartDate(string $candidate): string
+    {
+        $normalized = self::normalizeStartDate($candidate);
+        if ($normalized === '') {
+            return '';
+        }
+
+        try {
+            $parsed = \Illuminate\Support\Carbon::parse($normalized)->startOfDay();
+            if ($parsed->lt(now()->startOfDay())) {
+                return '';
+            }
+            if ($parsed->gt(now()->addDays(180))) {
+                return '';
+            }
+        } catch (\Throwable) {
+            return '';
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Client-side fallback when API min start date is missing or invalid (~twoDaysAfterNoon).
+     */
+    public static function computeFallbackMinStartDate(bool $withWeekend = true): string
+    {
+        $date = now();
+        if ($date->hour >= 12) {
+            $date = $date->copy()->addDays(2);
+        } else {
+            $date = $date->copy()->addDay();
+        }
+
+        if (! $withWeekend) {
+            while ($date->isFriday() || $date->isSaturday()) {
+                $date = $date->addDay();
+            }
+        }
+
+        return $date->format('Y-m-d');
     }
 
     protected static function planWeekEndStatus(ExternalDataService $external, int $programId, int $planId): ?string
@@ -328,7 +374,7 @@ final class SubscriptionCheckoutPayload
         foreach (['min_start_date', 'minimum_start_date', 'available_from', 'first_available_date_for_subscription'] as $key) {
             $value = $raw[$key] ?? null;
             if (is_string($value) && trim($value) !== '') {
-                $sanitized = self::sanitizeApiMinimumStartDate($value);
+                $sanitized = self::sanitizeSubscriptionStartDate($value);
                 if ($sanitized !== '') {
                     return $sanitized;
                 }
@@ -359,7 +405,7 @@ final class SubscriptionCheckoutPayload
             }
         }
 
-        return self::sanitizeApiMinimumStartDate(
+        return self::sanitizeSubscriptionStartDate(
             self::parseMinimumDateFromValidationMessage((string) ($apiResult['message'] ?? ''))
         );
     }
@@ -367,12 +413,12 @@ final class SubscriptionCheckoutPayload
     public static function parseMinimumDateFromValidationMessage(string $message): string
     {
         if (preg_match('#(20\d{2}-\d{2}-\d{2})#', $message, $matches)) {
-            return self::sanitizeApiMinimumStartDate($matches[1]);
+            return self::sanitizeSubscriptionStartDate($matches[1]);
         }
 
         if (preg_match('#(\d{2}-\d{2}-20\d{2})#', $message, $matches)) {
             try {
-                return self::sanitizeApiMinimumStartDate(
+                return self::sanitizeSubscriptionStartDate(
                     \Illuminate\Support\Carbon::createFromFormat('d-m-Y', $matches[1])->format('Y-m-d')
                 );
             } catch (\Throwable) {
