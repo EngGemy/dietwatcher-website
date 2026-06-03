@@ -1142,6 +1142,13 @@ class CheckoutController extends Controller
 
         $addressId = (int) $data['address_id'];
         $auth = app(ApiAuthService::class);
+        $address = $auth->loadAddressForSubscription($token, $addressId);
+        if (! is_array($address)) {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.confirm_saved_address_before_payment'),
+            ], 422);
+        }
 
         $cart = session()->get(CartManager::SESSION_SUBSCRIPTION)
             ?? session()->get(CartManager::SESSION_MARKET, []);
@@ -1318,10 +1325,15 @@ class CheckoutController extends Controller
                 $rawMin = SubscriptionCheckoutPayload::parseRawMinimumDateFromValidationMessage($message);
             }
             if ($rawMin !== '') {
+                $displayMin = SubscriptionCheckoutPayload::extractApiMinStartDate(['first_available_date_for_subscription' => $rawMin]);
+                if ($displayMin === '') {
+                    $displayMin = SubscriptionCheckoutPayload::computeFallbackMinStartDate($withWeekend === '1');
+                }
+
                 return response()->json([
                     'success' => true,
-                    'first_available_date_for_subscription' => $rawMin,
-                    'min_start_date' => $rawMin,
+                    'first_available_date_for_subscription' => $displayMin,
+                    'min_start_date' => $displayMin,
                     'api_min_start_date' => $rawMin,
                     'with_weekend' => $withWeekend,
                 ]);
@@ -1336,21 +1348,21 @@ class CheckoutController extends Controller
 
         $data = is_array($calc['data'] ?? null) ? $calc['data'] : [];
         $rawMin = SubscriptionCheckoutPayload::extractRawApiMinStartDate($data);
-        $minStartDate = SubscriptionCheckoutPayload::extractApiMinStartDate($data);
+        $displayMin = SubscriptionCheckoutPayload::extractApiMinStartDate($data);
 
-        if ($minStartDate === '' && $rawMin !== '') {
-            $minStartDate = $rawMin;
+        if ($displayMin === '' && $rawMin !== '') {
+            $displayMin = $rawMin;
         }
 
-        if ($minStartDate === '') {
-            $minStartDate = SubscriptionCheckoutPayload::computeFallbackMinStartDate($withWeekend === '1');
+        if ($displayMin === '') {
+            $displayMin = SubscriptionCheckoutPayload::computeFallbackMinStartDate($withWeekend === '1');
         }
 
         return response()->json([
             'success' => true,
-            'first_available_date_for_subscription' => $minStartDate,
-            'min_start_date' => $minStartDate,
-            'api_min_start_date' => $rawMin !== '' ? $rawMin : $minStartDate,
+            'first_available_date_for_subscription' => $displayMin,
+            'min_start_date' => $displayMin,
+            'api_min_start_date' => $rawMin !== '' ? $rawMin : null,
             'with_weekend' => $withWeekend,
         ]);
     }

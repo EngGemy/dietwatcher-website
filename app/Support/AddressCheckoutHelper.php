@@ -112,8 +112,14 @@ final class AddressCheckoutHelper
         }
 
         $raw = data_get($address, 'district.durations', []);
+        if ($raw instanceof \stdClass) {
+            $raw = json_decode(json_encode($raw), true);
+        }
         if (! is_array($raw)) {
             return [];
+        }
+        if (! array_is_list($raw)) {
+            $raw = array_values(array_filter($raw, static fn ($row): bool => is_array($row)));
         }
 
         return array_values(array_filter($raw, static fn ($row): bool => is_array($row) && (int) ($row['id'] ?? 0) > 0));

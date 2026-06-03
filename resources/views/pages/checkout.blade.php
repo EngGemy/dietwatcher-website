@@ -3049,7 +3049,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         return;
                     }
                     const apiMin = String(
-                        data.api_min_start_date || data.first_available_date_for_subscription || data.min_start_date || ''
+                        data.first_available_date_for_subscription || data.min_start_date || ''
                     ).trim().slice(0, 10);
                     if (apiMin) {
                         this.applyApiMinStartDate(apiMin);

@@ -8,6 +8,7 @@ use App\Enums\PaymentKind;
 use App\Enums\PaymentStatus;
 use App\Models\Payment;
 use App\Services\Payment\MoyasarPaymentService;
+use App\Support\AddressCheckoutHelper;
 use App\Support\SubscriptionCheckoutPayload;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -473,7 +474,7 @@ class AccountApiService
         $payload['address_id'] = (string) $addressId;
 
         $auth = app(ApiAuthService::class);
-        $address = $auth->findAddressById($token, $addressId, false);
+        $address = $auth->loadAddressForSubscription($token, $addressId);
         if (! is_array($address)) {
             return __('checkout.confirm_saved_address_before_payment');
         }
@@ -510,10 +511,13 @@ class AccountApiService
         );
 
         if (! isset($payload['addresses[0][region_duration_id]'])) {
-            Log::info('AccountApiService subscription payload missing region_duration_id; deferring to API', [
+            Log::warning('AccountApiService subscription payload missing region_duration_id', [
                 'address_id' => $addressId,
-                'district_id' => $address['district']['id'] ?? $address['district_id'] ?? null,
+                'district_id' => AddressCheckoutHelper::districtId($address),
+                'district_durations' => AddressCheckoutHelper::districtDurations($address),
             ]);
+
+            return __('checkout.address_region_duration_missing');
         }
 
         return null;

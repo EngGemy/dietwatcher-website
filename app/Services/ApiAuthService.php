@@ -481,6 +481,91 @@ class ApiAuthService
     }
 
     /**
+     * Load address with district delivery windows (region durations) for subscription checkout.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function loadAddressForSubscription(string $token, int $addressId): ?array
+    {
+        if ($addressId <= 0) {
+            return null;
+        }
+
+        $rows = $this->getAddresses($token, true, false);
+        $address = AddressCheckoutHelper::findById($rows, $addressId);
+        if (! is_array($address)) {
+            return null;
+        }
+
+        $address = AddressCheckoutHelper::enrichAddressDistrictDurations($address, $rows);
+        if (AddressCheckoutHelper::firstRegionDurationId($address) > 0) {
+            return $address;
+        }
+
+        $refreshed = $this->refreshAddressCard($token, $addressId, $address);
+        if (is_array($refreshed)) {
+            $address = AddressCheckoutHelper::enrichAddressDistrictDurations($refreshed, $rows);
+            if (AddressCheckoutHelper::firstRegionDurationId($address) > 0) {
+                return $address;
+            }
+        }
+
+        return $address;
+    }
+
+    /**
+     * POST /addresses/{id} — re-fetch full address card (includes district.durations).
+     *
+     * @param  array<string, mixed>  $address
+     * @return array<string, mixed>|null
+     */
+    public function refreshAddressCard(string $token, int $addressId, array $address): ?array
+    {
+        $districtId = AddressCheckoutHelper::districtId($address);
+        if ($districtId <= 0) {
+            return null;
+        }
+
+        $pickupType = 'hand_it_to_me';
+        $pickup = $address['pickupType'] ?? $address['pickup_type'] ?? null;
+        if (is_array($pickup) && ! empty($pickup['id'])) {
+            $pickupType = (string) $pickup['id'];
+        } elseif (is_string($pickup) && $pickup !== '') {
+            $pickupType = $pickup;
+        }
+
+        $payload = [
+            'title' => (string) ($address['title'] ?? 'Home'),
+            'latitude' => (string) ($address['latitude'] ?? ''),
+            'longitude' => (string) ($address['longitude'] ?? ''),
+            'description' => (string) ($address['description'] ?? ''),
+            'type' => (string) ($address['type'] ?? 'residential'),
+            'district_id' => (string) $districtId,
+            'pickup_type' => $pickupType,
+        ];
+
+        try {
+            $response = $this->httpWithToken($token)->asForm()->post(
+                $this->url("addresses/{$addressId}"),
+                $payload
+            );
+            if (! $response->successful()) {
+                return null;
+            }
+            $json = $response->json() ?? [];
+
+            return AddressCheckoutHelper::unwrapStoredAddress($json['data'] ?? $json);
+        } catch (\Exception $e) {
+            Log::warning('ApiAuthService::refreshAddressCard failed', [
+                'address_id' => $addressId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
      * DELETE /addresses/{id}  (requires Sanctum token)
      */
     public function deleteAddress(string $token, int $id): array

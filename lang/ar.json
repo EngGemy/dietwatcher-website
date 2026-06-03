@@ -758,6 +758,7 @@
     "address.deleted": "تم حذف العنوان.",
     "checkout.delete_saved_address_confirm": "حذف هذا العنوان المحفوظ؟",
     "checkout.address_max_active_delivery": "الحد الأقصى للتوصيل هو عنوانين فقط. احذف عنواناً غير مستخدم أو اختر عنواناً موجوداً للمتابعة.",
+    "checkout.address_region_duration_missing": "لا يوجد وقت توصيل متاح لهذا العنوان. اختر عنواناً آخر أو أضف عنواناً جديداً من الخريطة.",
     "checkout.saved_addresses_title": "عناوينك المحفوظة",
     "checkout.saved_addresses_hint": "اضغط على عنوان لملء التوصيل لهذا الطلب، أو حدد موقعاً جديداً على الخريطة أدناه.",
     "checkout.verify_phone_to_save_address": "تحقق من رقم الجوال لحفظ عناوين التوصيل وعرضها.",
