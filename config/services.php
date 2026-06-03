@@ -48,6 +48,8 @@ return [
         'publishable_key' => env('MOYASAR_PUBLISHABLE_KEY'),
         'secret_key' => env('MOYASAR_SECRET_KEY'),
         'api_url' => env('MOYASAR_API_URL', 'https://api.moyasar.com/v1'),
+        /** Same value as MOYASAR_SECRET_TOKEN on the external API — used to forward paid webhooks. */
+        'webhook_secret_token' => env('MOYASAR_SECRET_TOKEN', env('MOYASAR_WEBHOOK_SECRET_TOKEN')),
     ],
 
     'google_maps' => [

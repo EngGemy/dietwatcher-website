@@ -265,6 +265,7 @@ class PaymentController extends Controller
             'subscription' => $subscriptionId,
             'moyasar_id' => $moyasarId,
             'status' => $status,
+            'payment_id' => $externalPaymentId > 0 ? $externalPaymentId : null,
         ], static fn ($value) => $value !== null && $value !== ''));
     }
 

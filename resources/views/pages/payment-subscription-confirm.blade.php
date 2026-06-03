@@ -63,8 +63,10 @@
         const query = { id: String(subscriptionId) };
         const moyasarId = params.get('moyasar_id');
         const status = params.get('status');
+        const paymentId = params.get('payment_id');
         if (moyasarId) query.moyasar_id = moyasarId;
         if (status) query.status = status;
+        if (paymentId) query.payment_id = paymentId;
         return query;
     })()).toString();
 

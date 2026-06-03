@@ -1390,6 +1390,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             deliveryDoor: '',
             addressConfirmedForSync: false,
             _syncExtTimer: null,
+            _customerStateGeneration: 0,
 
             // Zone state
             selectedZoneId: @json(old('zone_id', '')),
@@ -2368,6 +2369,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         return;
                     }
 
+                    this._customerStateGeneration++;
                     if (Array.isArray(data.addresses)) {
                         this.applyCheckoutAddresses(data.addresses);
                     }
@@ -2392,15 +2394,19 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             async refreshCustomerFromServer() {
+                const generation = ++this._customerStateGeneration;
                 try {
                     const res = await fetch('{{ route('checkout.customer-state') }}', {
                         headers: { 'Accept': 'application/json' },
                     });
                     const d = await res.json().catch(() => ({}));
+                    if (generation !== this._customerStateGeneration) {
+                        return;
+                    }
                     if (! d.success) {
                         return;
                     }
-                    this.savedAddresses = Array.isArray(d.addresses) ? d.addresses : [];
+                    this.applyCheckoutAddresses(d.addresses || []);
                     if (d.profile && d.profile.name && ! (this.customerName || '').trim()) {
                         this.customerName = String(d.profile.name);
                     }

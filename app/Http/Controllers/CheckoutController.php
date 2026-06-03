@@ -47,8 +47,36 @@ class CheckoutController extends Controller
     private function checkoutActiveAddresses(string $token): array
     {
         $addresses = app(ApiAuthService::class)->getAddresses($token, true, true);
+        if (! is_array($addresses)) {
+            $addresses = [];
+        }
 
-        return AddressCheckoutHelper::markDeliverability(is_array($addresses) ? $addresses : []);
+        $blocked = session('checkout_deleted_address_ids', []);
+        if (is_array($blocked) && $blocked !== []) {
+            $blockedLookup = array_fill_keys(array_map('intval', $blocked), true);
+            $addresses = array_values(array_filter(
+                $addresses,
+                static fn (array $row): bool => ! isset($blockedLookup[(int) ($row['id'] ?? 0)])
+            ));
+        }
+
+        return AddressCheckoutHelper::markDeliverability($addresses);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function rememberDeletedCheckoutAddress(int $addressId): array
+    {
+        $blocked = session('checkout_deleted_address_ids', []);
+        if (! is_array($blocked)) {
+            $blocked = [];
+        }
+        $blocked[] = $addressId;
+        $blocked = array_values(array_unique(array_filter(array_map('intval', $blocked), static fn (int $id): bool => $id > 0)));
+        session(['checkout_deleted_address_ids' => $blocked]);
+
+        return $blocked;
     }
 
     public function __construct(
@@ -1186,6 +1214,8 @@ class CheckoutController extends Controller
             ], 422);
         }
 
+        $this->rememberDeletedCheckoutAddress($addressId);
+
         return response()->json([
             'success' => true,
             'message' => __('address.deleted'),
@@ -1364,6 +1394,10 @@ class CheckoutController extends Controller
             $moyasarId = trim((string) $request->query('moyasar_id', ''));
             if ($moyasarId !== '') {
                 $pending['moyasar_id'] = $moyasarId;
+            }
+            $paymentId = (int) $request->query('payment_id', 0);
+            if ($paymentId > 0) {
+                $pending['external_payment_id'] = $paymentId;
             }
             if ($request->query('status')) {
                 $pending['status'] = (string) $request->query('status');

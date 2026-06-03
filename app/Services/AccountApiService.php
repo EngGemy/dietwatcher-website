@@ -819,37 +819,148 @@ class AccountApiService
         $query['device_id'] = $query['device_id'] ?? $this->deviceId();
 
         $last = $this->empty(__('account.request_failed'));
+        $variants = $this->buildMoyasarNotifyQueryVariants($query);
 
         foreach (['payments/callback', 'payments/confirm', 'payments/verify'] as $path) {
-            try {
-                $result = $this->decode(
-                    $this->authedWithToken($token)->acceptJson()->get(
-                        $this->url($path),
-                        $query,
-                    )
-                );
-                $last = $result;
+            foreach ($variants as $variant) {
+                foreach (['get', 'post'] as $method) {
+                    try {
+                        $request = $this->authedWithToken($token)->acceptJson();
+                        $response = $method === 'post'
+                            ? $request->asForm()->post($this->url($path), $variant)
+                            : $request->get($this->url($path), $variant);
+                        $result = $this->decode($response);
+                        $last = $result;
 
-                Log::info('AccountApiService::notifySubscriptionMoyasarPayment attempt', [
-                    'path' => $path,
-                    'ok' => $result['ok'] ?? false,
-                    'status' => $result['status'] ?? null,
-                    'message' => $result['message'] ?? '',
-                    'query_keys' => array_keys($query),
-                ]);
+                        Log::info('AccountApiService::notifySubscriptionMoyasarPayment attempt', [
+                            'path' => $path,
+                            'method' => strtoupper($method),
+                            'ok' => $result['ok'] ?? false,
+                            'status' => $result['status'] ?? null,
+                            'message' => $result['message'] ?? '',
+                            'query_keys' => array_keys($variant),
+                        ]);
 
-                if ($this->paymentNotifyResponseSucceeded($result)) {
-                    return $result;
+                        if ($this->paymentNotifyResponseSucceeded($result)) {
+                            return $result;
+                        }
+                    } catch (\Throwable $e) {
+                        Log::warning('AccountApiService::notifySubscriptionMoyasarPayment failed', [
+                            'path' => $path,
+                            'method' => strtoupper($method),
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
                 }
-            } catch (\Throwable $e) {
-                Log::warning('AccountApiService::notifySubscriptionMoyasarPayment failed', [
-                    'path' => $path,
-                    'error' => $e->getMessage(),
-                ]);
             }
         }
 
+        $moyasarId = trim((string) ($query['id'] ?? $query['moyasar_id'] ?? ''));
+        if ($moyasarId !== '') {
+            $webhookResult = $this->forwardVerifiedMoyasarWebhookToApi($moyasarId, $query);
+            if ($this->paymentNotifyResponseSucceeded($webhookResult)) {
+                return $webhookResult;
+            }
+            $last = $webhookResult['ok'] ?? false ? $webhookResult : $last;
+        }
+
         return $last;
+    }
+
+    /**
+     * @param  array<string, scalar|null>  $query
+     * @return array<int, array<string, string>>
+     */
+    protected function buildMoyasarNotifyQueryVariants(array $query): array
+    {
+        $base = array_map(static fn ($value) => (string) $value, $query);
+        $variants = [$base];
+
+        $moyasarId = trim((string) ($base['id'] ?? ''));
+        $paymentId = trim((string) ($base['payment_id'] ?? ''));
+        $subscriptionId = trim((string) ($base['subscription_id'] ?? ''));
+
+        if ($paymentId !== '' && $paymentId !== $moyasarId) {
+            $variants[] = array_merge($base, ['id' => $paymentId]);
+        }
+
+        if ($moyasarId !== '') {
+            $variants[] = array_merge($base, [
+                'moyasar_id' => $moyasarId,
+                'pay_id' => $moyasarId,
+            ]);
+        }
+
+        if ($paymentId !== '' && $subscriptionId !== '') {
+            $variants[] = [
+                'payment_id' => $paymentId,
+                'subscription_id' => $subscriptionId,
+                'status' => (string) ($base['status'] ?? 'paid'),
+                'device_id' => (string) ($base['device_id'] ?? $this->deviceId()),
+            ];
+        }
+
+        return array_values(array_unique($variants, SORT_REGULAR));
+    }
+
+    /**
+     * Mirror the mobile app Moyasar webhook so the external API marks the payment paid.
+     *
+     * @param  array<string, scalar|null>  $context
+     */
+    public function forwardVerifiedMoyasarWebhookToApi(string $moyasarId, array $context = []): array
+    {
+        $secretToken = trim((string) config('services.moyasar.webhook_secret_token', ''));
+        if ($secretToken === '') {
+            Log::warning('AccountApiService::forwardVerifiedMoyasarWebhookToApi missing MOYASAR_SECRET_TOKEN');
+
+            return $this->empty('missing_webhook_secret');
+        }
+
+        $verified = app(MoyasarPaymentService::class)->verify($moyasarId);
+        if (! is_array($verified) || strtolower((string) ($verified['status'] ?? '')) !== 'paid') {
+            return $this->empty('moyasar_not_paid');
+        }
+
+        $metadata = is_array($verified['metadata'] ?? null) ? $verified['metadata'] : [];
+        $paymentId = trim((string) (
+            $context['payment_id']
+            ?? $context['external_payment_id']
+            ?? $metadata['payment_id']
+            ?? ''
+        ));
+        if ($paymentId !== '') {
+            $metadata['payment_id'] = $paymentId;
+        }
+
+        $payload = [
+            'secret_token' => $secretToken,
+            'data' => array_merge($verified, [
+                'metadata' => $metadata,
+            ]),
+        ];
+
+        try {
+            $result = $this->decode(
+                $this->http()->acceptJson()->post($this->url('webhook/payment'), $payload)
+            );
+
+            Log::info('AccountApiService::forwardVerifiedMoyasarWebhookToApi', [
+                'moyasar_id' => $moyasarId,
+                'payment_id' => $paymentId !== '' ? $paymentId : null,
+                'ok' => $result['ok'] ?? false,
+                'message' => $result['message'] ?? '',
+            ]);
+
+            return $result;
+        } catch (\Throwable $e) {
+            Log::warning('AccountApiService::forwardVerifiedMoyasarWebhookToApi failed', [
+                'moyasar_id' => $moyasarId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $this->empty($e->getMessage());
+        }
     }
 
     /**
@@ -863,6 +974,11 @@ class AccountApiService
 
         $raw = is_array($result['raw'] ?? null) ? $result['raw'] : [];
         if (filter_var($raw['success'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return true;
+        }
+
+        // Empty JSON body from webhook/payment means success in the mobile API.
+        if (($result['status'] ?? 0) >= 200 && ($result['status'] ?? 0) < 300 && $raw === []) {
             return true;
         }
 

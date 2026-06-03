@@ -180,6 +180,14 @@ class ApiAuthService
                 $params['isActive'] = '1';
             }
             $response = $this->httpWithToken($token)->get($this->url('addresses'), $params);
+            if (! $response->successful()) {
+                Log::warning('ApiAuthService::getAddresses non-success HTTP', [
+                    'status' => $response->status(),
+                ]);
+
+                return [];
+            }
+
             $body = $response->json();
 
             $rows = [];
@@ -204,11 +212,11 @@ class ApiAuthService
 
             if ($activeOnly) {
                 $rows = array_values(array_filter($rows, static function ($addr): bool {
-                    if (! is_array($addr)) {
-                        return false;
-                    }
-
-                    return (bool) ($addr['is_active'] ?? $addr['isActive'] ?? true) === true;
+                    return is_array($addr) && self::isAddressRowActive($addr);
+                }));
+            } else {
+                $rows = array_values(array_filter($rows, static function ($addr): bool {
+                    return is_array($addr) && ! self::isAddressRowDeleted($addr);
                 }));
             }
 
@@ -221,6 +229,34 @@ class ApiAuthService
 
             return [];
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $addr
+     */
+    public static function isAddressRowDeleted(array $addr): bool
+    {
+        if (isset($addr['deleted_at']) && $addr['deleted_at'] !== null && $addr['deleted_at'] !== '') {
+            return true;
+        }
+
+        return filter_var($addr['deleted'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * @param  array<string, mixed>  $addr
+     */
+    public static function isAddressRowActive(array $addr): bool
+    {
+        if (self::isAddressRowDeleted($addr)) {
+            return false;
+        }
+
+        if (array_key_exists('is_active', $addr) || array_key_exists('isActive', $addr)) {
+            return filter_var($addr['is_active'] ?? $addr['isActive'], FILTER_VALIDATE_BOOLEAN);
+        }
+
+        return true;
     }
 
     /**
@@ -364,13 +400,25 @@ class ApiAuthService
             return false;
         }
 
-        $httpOk = filter_var($json['_http_ok'] ?? false, FILTER_VALIDATE_BOOLEAN);
-        $explicitSuccess = filter_var($json['success'] ?? false, FILTER_VALIDATE_BOOLEAN);
-        if (! $httpOk && ! $explicitSuccess) {
+        if (! filter_var($json['_http_ok'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             return false;
         }
 
-        return $this->findAddressById($token, $id, true) === null;
+        try {
+            $response = $this->httpWithToken($token)->get($this->url('addresses'));
+            if (! $response->successful()) {
+                return false;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('ApiAuthService::addressDeleteVerified list fetch failed', [
+                'id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+
+        return $this->findAddressById($token, $id, false) === null;
     }
 
     /**
@@ -380,8 +428,10 @@ class ApiAuthService
     {
         return [
             fn (string $token) => $this->httpWithToken($token)->asForm()->post($this->url("addresses/{$id}"), ['_method' => 'DELETE']),
-            fn (string $token) => $this->httpWithToken($token)->asForm()->patch($this->url("addresses/{$id}"), ['is_active' => '0']),
-            fn (string $token) => $this->httpWithToken($token)->put($this->url("addresses/{$id}"), ['is_active' => false]),
+            fn (string $token) => $this->httpWithToken($token)->asForm()->post($this->url("addresses/{$id}"), [
+                'is_active' => '0',
+                'isActive' => '0',
+            ]),
         ];
     }
 
