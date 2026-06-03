@@ -141,6 +141,10 @@ Route::post('/checkout/sync-address', [\App\Http\Controllers\CheckoutController:
     ->middleware('throttle:30,1')
     ->name('checkout.sync-address');
 
+Route::post('/checkout/select-address', [\App\Http\Controllers\CheckoutController::class, 'selectCheckoutAddress'])
+    ->middleware('throttle:30,1')
+    ->name('checkout.select-address');
+
 Route::get('/checkout/customer-state', [\App\Http\Controllers\CheckoutController::class, 'customerState'])
     ->middleware('throttle:60,1')
     ->name('checkout.customer-state');

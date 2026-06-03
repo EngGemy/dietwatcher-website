@@ -1063,6 +1063,69 @@ class CheckoutController extends Controller
     }
 
     /**
+     * POST /checkout/select-address — mark a saved address active for subscription checkout.
+     */
+    public function selectCheckoutAddress(Request $request): JsonResponse
+    {
+        $token = session('external_api_token');
+        if (! is_string($token) || $token === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('payment.verify_phone_to_pay'),
+            ], 403);
+        }
+
+        try {
+            $data = Validator::make($request->all(), [
+                'address_id' => 'required|integer|min:1',
+            ])->validate();
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.confirm_saved_address_before_payment'),
+                'errors' => $e->errors(),
+            ], 422);
+        }
+
+        $addressId = (int) $data['address_id'];
+        $auth = app(ApiAuthService::class);
+        $address = $auth->findAddressById($token, $addressId, false);
+        if (! is_array($address)) {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.confirm_saved_address_before_payment'),
+            ], 422);
+        }
+
+        $cart = session()->get(CartManager::SESSION_SUBSCRIPTION)
+            ?? session()->get(CartManager::SESSION_MARKET, []);
+        $withWeekend = SubscriptionCheckoutPayload::resolveWithWeekend($cart, $this->externalDataService);
+        $defaultDays = SubscriptionCheckoutPayload::defaultDeliveryWeekdays($withWeekend === '1');
+        $storedDays = is_array($address['days'] ?? null) ? $address['days'] : [];
+        $daysToSync = $storedDays !== [] ? $storedDays : $defaultDays;
+
+        $daysSync = $auth->updateAddressDeliveryDays($token, $addressId, $daysToSync);
+        if (! ($daysSync['_http_ok'] ?? false)) {
+            Log::warning('CheckoutController::selectCheckoutAddress days sync failed', [
+                'address_id' => $addressId,
+                'body' => $daysSync,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => (string) ($daysSync['message'] ?? __('address.save_failed')),
+            ], 422);
+        }
+
+        $refreshed = $auth->findAddressById($token, $addressId, false);
+
+        return response()->json([
+            'success' => true,
+            'data' => $refreshed ?? $address,
+        ]);
+    }
+
+    /**
      * Hydrate saved addresses + profile after page reload (session token from external login).
      */
     public function customerState(): JsonResponse
@@ -1128,10 +1191,33 @@ class CheckoutController extends Controller
         }
 
         $withWeekend = SubscriptionCheckoutPayload::resolveWithWeekend($cart, $this->externalDataService);
+        $deliveryType = (string) $request->query('delivery_type', 'home');
+        $selectedAddressId = (int) $request->query('selected_address_id', 0);
+        $branchId = (int) $request->query('branch_id', 0);
+
+        if ($deliveryType === 'home' && $selectedAddressId <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.confirm_saved_address_before_payment'),
+                'needs_address' => true,
+            ], 422);
+        }
+
+        if ($deliveryType === 'pickup' && $branchId <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.payment_blocker_pickup'),
+                'needs_branch' => true,
+            ], 422);
+        }
+
         $validated = [
             'plan_duration_id' => (int) $request->query('plan_duration_id', 0),
-            'delivery_type' => (string) $request->query('delivery_type', 'home'),
+            'delivery_type' => $deliveryType,
             'with_weekend' => $request->query('with_weekend', $withWeekend),
+            'selected_address_id' => $selectedAddressId,
+            'branch_id' => $branchId,
+            'zone_id' => (int) $request->query('zone_id', 0),
         ];
 
         $payload = SubscriptionCheckoutPayload::buildMinimalSchedulePayload(
@@ -1412,13 +1498,29 @@ class CheckoutController extends Controller
                 ], 403);
             }
 
-            $saved = app(ApiAuthService::class)->findAddressById($token, $addressId, true);
+            $auth = app(ApiAuthService::class);
+            $saved = $auth->findAddressById($token, $addressId, false);
             if (! is_array($saved)) {
                 return response()->json([
                     'success' => false,
                     'message' => __('checkout.confirm_saved_address_before_payment'),
                     'errors' => ['selected_address_id' => [__('checkout.confirm_saved_address_before_payment')]],
                 ], 422);
+            }
+
+            $withWeekend = SubscriptionCheckoutPayload::resolveWithWeekend($cart, $this->externalDataService);
+            $defaultDays = SubscriptionCheckoutPayload::defaultDeliveryWeekdays($withWeekend === '1');
+            $storedDays = is_array($saved['days'] ?? null) ? $saved['days'] : [];
+            $daysToSync = $storedDays !== [] ? $storedDays : $defaultDays;
+            $isActive = filter_var($saved['is_active'] ?? $saved['isActive'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            if (! $isActive || $storedDays === []) {
+                $daysSync = $auth->updateAddressDeliveryDays($token, $addressId, $daysToSync);
+                if (! ($daysSync['_http_ok'] ?? false)) {
+                    Log::warning('CheckoutController::moyasarSession address activation failed', [
+                        'address_id' => $addressId,
+                        'body' => $daysSync,
+                    ]);
+                }
             }
         }
 

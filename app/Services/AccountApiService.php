@@ -469,7 +469,7 @@ class AccountApiService
         $payload['address_id'] = (string) $addressId;
 
         $auth = app(ApiAuthService::class);
-        $address = $auth->findAddressById($token, $addressId, true);
+        $address = $auth->findAddressById($token, $addressId, false);
         if (! is_array($address)) {
             return __('checkout.confirm_saved_address_before_payment');
         }
