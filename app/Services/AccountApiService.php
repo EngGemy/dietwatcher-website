@@ -497,6 +497,23 @@ class AccountApiService
         $daysResult = $this->getAddressDeliveryDays($addressId, $token);
         $daysData = is_array($daysResult['data'] ?? null) ? $daysResult['data'] : null;
 
+        $sessionOverride = (int) data_get(session('checkout_region_duration_by_address', []), (string) $addressId, 0);
+        $requestOverride = (int) ($payload['region_duration_id'] ?? 0);
+        $regionOverride = $requestOverride > 0 ? $requestOverride : $sessionOverride;
+        if ($regionOverride > 0) {
+            $slots = AddressCheckoutHelper::normalizeRegionDurations(AddressCheckoutHelper::districtDurations($address));
+            if ($slots === []) {
+                $slots = app(ApiAuthService::class)->findDistrictRegionDurations(
+                    $token,
+                    AddressCheckoutHelper::districtId($address),
+                    $addressId,
+                );
+            }
+            if ($slots === [] || AddressCheckoutHelper::isValidRegionDurationId($regionOverride, $slots)) {
+                $payload['region_duration_id'] = (string) $regionOverride;
+            }
+        }
+
         $programId = (int) ($payload['program_id'] ?? 0);
         $durationRows = $programId > 0
             ? app(ExternalDataService::class)->getCheckoutPlanDurations($programId)

@@ -162,6 +162,10 @@ Route::post('/checkout/select-address', [CheckoutController::class, 'selectCheck
     ->middleware('throttle:30,1')
     ->name('checkout.select-address');
 
+Route::get('/checkout/district-durations', [CheckoutController::class, 'districtDeliveryTimes'])
+    ->middleware('throttle:60,1')
+    ->name('checkout.district-durations');
+
 Route::delete('/checkout/addresses/{addressId}', [CheckoutController::class, 'deleteCheckoutAddress'])
     ->middleware('throttle:20,1')
     ->whereNumber('addressId')

@@ -130,6 +130,10 @@ final class SubscriptionCheckoutPayload
             if ($addressId !== '' && $addressId !== '0') {
                 $payload['address_id'] = $addressId;
             }
+            $regionDurationId = (int) ($validated['region_duration_id'] ?? 0);
+            if ($regionDurationId > 0) {
+                $payload['region_duration_id'] = (string) $regionDurationId;
+            }
         } else {
             $branchId = (string) ($validated['branch_id'] ?? '');
             if ($branchId !== '' && $branchId !== '0') {
@@ -736,13 +740,16 @@ final class SubscriptionCheckoutPayload
         $zoneId = (int) ($payload['zone_id'] ?? $address['city_id'] ?? $address['city']['id'] ?? $address['zone_id'] ?? 0);
         $planDurationId = (int) ($payload['plan_duration_id'] ?? 0);
         $withWeekend = filter_var($payload['with_weekend'] ?? '0', FILTER_VALIDATE_BOOLEAN);
-        $regionDurationId = self::resolveRegionDurationId(
-            $address,
-            $daysData,
-            $zoneId,
-            $planDurationId,
-            $durationRows,
-        );
+        $overrideRegionDurationId = (int) ($payload['region_duration_id'] ?? 0);
+        $regionDurationId = $overrideRegionDurationId > 0
+            ? $overrideRegionDurationId
+            : self::resolveRegionDurationId(
+                $address,
+                $daysData,
+                $zoneId,
+                $planDurationId,
+                $durationRows,
+            );
         $days = self::extractDeliveryDays($address, $daysData, $withWeekend);
 
         $payload['addresses[0][address_id]'] = (string) $addressId;

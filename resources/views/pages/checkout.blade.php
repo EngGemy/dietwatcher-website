@@ -254,6 +254,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     {{-- Delivery address: map (home) or branch (pickup) ? toggles live in Select Options --}}
                     <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-ref="paymentCard">
                         <input type="hidden" name="selected_address_id" :value="selectedAddressId || ''" :disabled="deliveryType !== 'home'" />
+                        <input type="hidden" name="region_duration_id" :value="selectedRegionDurationId || ''" :disabled="deliveryType !== 'home'" />
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Delivery Address') }}</h3>
 
                         {{-- Delivery preference (under heading ? matches reference layout) --}}
@@ -313,6 +314,31 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                                 <div class="min-w-0 flex-1">
                                                     <span class="line-clamp-2 block text-left" x-text="addr.description || addr.title || ''"></span>
                                                     <span class="mt-1 block text-xs text-gray-500 text-left" x-text="savedAddressDistrict(addr)"></span>
+                                                    <div class="mt-2 space-y-2" x-show="addressDeliveryTimes(addr).length > 0" x-cloak>
+                                                        <div class="flex flex-wrap items-center gap-2 text-xs text-gray-700">
+                                                            <span class="font-medium text-gray-800">{{ __('checkout.delivery_time') }}:</span>
+                                                            <span x-text="deliveryTimeLabelForAddress(addr)"></span>
+                                                            <button type="button"
+                                                                    class="rounded border border-blue-300 px-2 py-0.5 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-50"
+                                                                    x-show="String(addr.id) !== String(editingDeliveryTimeAddressId)"
+                                                                    @click.stop="startEditingDeliveryTime(addr)">
+                                                                {{ __('checkout.edit_delivery_time') }}
+                                                            </button>
+                                                        </div>
+                                                        <div x-show="String(addr.id) === String(editingDeliveryTimeAddressId) || String(addr.id) === String(selectedAddressId)" x-cloak>
+                                                            <select class="form-control form-control--sm w-full text-xs"
+                                                                    :value="selectedRegionDurationId"
+                                                                    @change="onSavedAddressDeliveryTimeChange(addr, $event.target.value)">
+                                                                <option value="">{{ __('checkout.select_delivery_time') }}</option>
+                                                                <template x-for="slot in addressDeliveryTimes(addr)" :key="slot.id">
+                                                                    <option :value="String(slot.id)" x-text="slot.label || slot.time || slot.durationText || slot.id"></option>
+                                                                </template>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <p x-show="addressDeliveryTimes(addr).length === 0 && String(addr.id) === String(selectedAddressId)" x-cloak class="mt-2 text-xs text-amber-800">
+                                                        {{ __('checkout.no_delivery_time_slots') }}
+                                                    </p>
                                                 </div>
                                                 <div class="flex shrink-0 flex-col gap-1.5 sm:flex-row">
                                                 <button type="button"
@@ -480,6 +506,23 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                     </div>
 
                                     <input type="hidden" name="building" :value="buildingNotes" :disabled="deliveryType === 'pickup'" />
+
+                                    <div x-show="deliveryType === 'home' && (loadingDistrictTimes || districtDeliveryTimes.length > 0 || (inlineMapDistrictId && !loadingDistrictTimes))" x-cloak class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                        <label class="mb-1 block text-sm font-medium text-gray-800">{{ __('checkout.delivery_time') }}</label>
+                                        <p class="mb-2 text-xs text-gray-600">{{ __('checkout.delivery_time_hint') }}</p>
+                                        <p x-show="loadingDistrictTimes" class="text-xs text-gray-500">{{ __('Loading...') }}</p>
+                                        <select x-show="!loadingDistrictTimes && districtDeliveryTimes.length > 0"
+                                                class="form-control w-full"
+                                                x-model="selectedRegionDurationId">
+                                            <option value="">{{ __('checkout.select_delivery_time') }}</option>
+                                            <template x-for="slot in districtDeliveryTimes" :key="slot.id">
+                                                <option :value="String(slot.id)" x-text="slot.label || slot.time || slot.durationText || slot.id"></option>
+                                            </template>
+                                        </select>
+                                        <p x-show="!loadingDistrictTimes && districtDeliveryTimes.length === 0 && inlineMapDistrictId" class="text-xs text-amber-800">
+                                            {{ __('checkout.no_delivery_time_slots') }}
+                                        </p>
+                                    </div>
 
                                     <div x-show="deliveryType === 'home'" x-cloak class="space-y-2 pt-1">
                                         <button
@@ -1364,6 +1407,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             savingNewAddress: false,
             newAddressError: '',
             deletingAddressId: null,
+            districtDeliveryTimes: [],
+            loadingDistrictTimes: false,
+            selectedRegionDurationId: '',
+            editingDeliveryTimeAddressId: null,
+            _districtTimesRequestId: 0,
             sarSymbol: '\u20C1',
             uiLabels: {
                 cancel: @json(__('Cancel')),
@@ -1758,6 +1806,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (phoneForAddress) {
                     payload.set('phone', phoneForAddress);
                 }
+                if (this.selectedRegionDurationId) {
+                    payload.set('region_duration_id', String(this.selectedRegionDurationId));
+                }
 
                 return payload;
             },
@@ -1880,7 +1931,145 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (! d.ok) {
                     this.addressConfirmedForSync = false;
                     this.selectedAddressId = null;
+                    this.districtDeliveryTimes = [];
+                    this.selectedRegionDurationId = '';
+                } else if (d.districtId) {
+                    this.loadDistrictDeliveryTimes(String(d.districtId));
                 }
+            },
+
+            regionDurationLabel(row) {
+                if (! row || typeof row !== 'object') {
+                    return '';
+                }
+                const time = String(row.time || '').trim();
+                const durationText = String(row.durationText || row.duration_text || '').trim();
+                if (time && durationText) {
+                    return durationText + ' — ' + time;
+                }
+
+                return time || durationText || String(row.duration || row.id || '');
+            },
+
+            parseAddressDurations(addr) {
+                const raw = addr?.district?.durations;
+                if (! Array.isArray(raw) || raw.length === 0) {
+                    return [];
+                }
+
+                return raw.map((row) => ({
+                    id: Number(row.id || 0),
+                    label: row.label || this.regionDurationLabel(row),
+                    time: row.time || '',
+                    durationText: row.durationText || row.duration_text || '',
+                })).filter((slot) => slot.id > 0);
+            },
+
+            addressDeliveryTimes(addr) {
+                const fromAddress = this.parseAddressDurations(addr);
+                if (fromAddress.length > 0) {
+                    return fromAddress;
+                }
+                if (addr && String(addr.id) === String(this.selectedAddressId) && this.districtDeliveryTimes.length > 0) {
+                    return this.districtDeliveryTimes;
+                }
+
+                return [];
+            },
+
+            deliveryTimeLabelForAddress(addr) {
+                const slots = this.addressDeliveryTimes(addr);
+                const selected = slots.find((slot) => String(slot.id) === String(this.selectedRegionDurationId));
+
+                return selected?.label || selected?.time || selected?.durationText || @json(__('checkout.select_delivery_time'));
+            },
+
+            syncSelectedRegionDurationFromAddress(addr) {
+                const slots = this.addressDeliveryTimes(addr);
+                if (slots.length === 1) {
+                    this.selectedRegionDurationId = String(slots[0].id);
+
+                    return;
+                }
+                if (this.selectedRegionDurationId && slots.some((slot) => String(slot.id) === String(this.selectedRegionDurationId))) {
+                    return;
+                }
+                this.selectedRegionDurationId = slots.length > 0 ? String(slots[0].id) : '';
+            },
+
+            async loadDistrictDeliveryTimes(districtId, addressId = null) {
+                const normalizedDistrictId = String(districtId || '').trim();
+                if (! normalizedDistrictId) {
+                    this.districtDeliveryTimes = [];
+                    this.selectedRegionDurationId = '';
+
+                    return;
+                }
+                const requestId = ++this._districtTimesRequestId;
+                this.loadingDistrictTimes = true;
+                try {
+                    let url = '{{ route('checkout.district-durations') }}?district_id=' + encodeURIComponent(normalizedDistrictId);
+                    if (addressId) {
+                        url += '&address_id=' + encodeURIComponent(String(addressId));
+                    }
+                    const res = await fetch(url, {
+                        headers: { 'Accept': 'application/json' },
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (requestId !== this._districtTimesRequestId) {
+                        return;
+                    }
+                    this.districtDeliveryTimes = Array.isArray(data.durations) ? data.durations : [];
+                    if (this.districtDeliveryTimes.length === 1) {
+                        this.selectedRegionDurationId = String(this.districtDeliveryTimes[0].id);
+                    } else if (! this.districtDeliveryTimes.some((slot) => String(slot.id) === String(this.selectedRegionDurationId))) {
+                        this.selectedRegionDurationId = this.districtDeliveryTimes.length > 0
+                            ? String(this.districtDeliveryTimes[0].id)
+                            : '';
+                    }
+                } catch (e) {
+                    if (requestId === this._districtTimesRequestId) {
+                        this.districtDeliveryTimes = [];
+                    }
+                } finally {
+                    if (requestId === this._districtTimesRequestId) {
+                        this.loadingDistrictTimes = false;
+                    }
+                }
+            },
+
+            startEditingDeliveryTime(addr) {
+                if (! addr || ! addr.id) {
+                    return;
+                }
+                this.editingDeliveryTimeAddressId = String(addr.id);
+                this.syncSelectedRegionDurationFromAddress(addr);
+            },
+
+            async onSavedAddressDeliveryTimeChange(addr, value) {
+                this.selectedRegionDurationId = String(value || '').trim();
+                if (! addr || ! addr.id || ! this.selectedRegionDurationId) {
+                    return;
+                }
+                this.editingDeliveryTimeAddressId = String(addr.id);
+                this.resetPaymentSession();
+                const activated = await this.activateCheckoutAddress(addr.id, addr);
+                if (activated) {
+                    this.queueMoyasarBootstrap();
+                }
+            },
+
+            deliveryTimeReady() {
+                if (this.deliveryType !== 'home' || ! this.isPlanCheckout) {
+                    return true;
+                }
+                const addr = this.savedAddresses.find((row) => String(row.id) === String(this.selectedAddressId));
+                const slots = addr ? this.addressDeliveryTimes(addr) : this.districtDeliveryTimes;
+                if (slots.length === 0) {
+                    return true;
+                }
+
+                return String(this.selectedRegionDurationId || '').trim() !== '';
             },
 
             savedAddressDistrict(addr) {
@@ -1933,6 +2122,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     this.deliveryFloor = '';
                     this.deliveryDoor = '';
                     this.buildingNotes = '';
+                    this.districtDeliveryTimes = [];
+                    this.selectedRegionDurationId = '';
+                    this.editingDeliveryTimeAddressId = null;
                     this.deliveryType = 'home';
                     if (! (this.addressPhoneLocal || '').trim()) {
                         this.addressPhoneLocal = this.phoneLocal || '';
@@ -1983,6 +2175,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     if (this.selectedZoneId) {
                         payload.set('zone_id', String(this.selectedZoneId));
                     }
+                    if (this.selectedRegionDurationId) {
+                        payload.set('region_duration_id', String(this.selectedRegionDurationId));
+                    }
                     const res = await fetch('{{ route('checkout.sync-address') }}', {
                         method: 'POST',
                         body: payload,
@@ -2015,6 +2210,12 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             this.savedAddresses = [data.data, ...this.savedAddresses];
                         }
                         this.applySavedAddress(data.data);
+                        const districtId = data.data?.district?.id ?? data.data?.district_id ?? this.inlineMapDistrictId;
+                        await this.loadDistrictDeliveryTimes(districtId, data.data.id);
+                        this.syncSelectedRegionDurationFromAddress(data.data);
+                        if (this.selectedRegionDurationId && data.data?.id) {
+                            await this.activateCheckoutAddress(data.data.id, data.data);
+                        }
                     } else if (! Array.isArray(data.addresses)) {
                         await this.refreshCustomerFromServer();
                     }
@@ -2047,6 +2248,22 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 this.addressConfirmedForSync = true;
                 this.moyasarError = '';
                 const districtId = addr.district?.id ?? addr.district_id;
+                const inlineTimes = this.parseAddressDurations(addr);
+                if (inlineTimes.length > 0) {
+                    this.districtDeliveryTimes = inlineTimes;
+                    this.syncSelectedRegionDurationFromAddress(addr);
+                } else if (districtId) {
+                    this.inlineMapDistrictId = String(districtId);
+                    this.loadDistrictDeliveryTimes(districtId, addr.id).then(() => {
+                        this.syncSelectedRegionDurationFromAddress(addr);
+                    });
+                } else {
+                    this.districtDeliveryTimes = [];
+                    this.selectedRegionDurationId = '';
+                }
+                if (districtId) {
+                    this.inlineMapDistrictId = String(districtId);
+                }
                 // Resolve zone/city id across every known field shape the external
                 // API might return, then fall back to matching the district against
                 // the locally known zones list. Without a valid zone the server
@@ -2232,9 +2449,13 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     return false;
                 }
                 try {
+                    const params = { address_id: String(addressId) };
+                    if (this.selectedRegionDurationId) {
+                        params.region_duration_id = String(this.selectedRegionDurationId);
+                    }
                     const res = await fetch('{{ route('checkout.select-address') }}', {
                         method: 'POST',
-                        body: new URLSearchParams({ address_id: String(addressId) }),
+                        body: new URLSearchParams(params),
                         headers: {
                             'Accept': 'application/json',
                             'Content-Type': 'application/x-www-form-urlencoded',
@@ -2289,6 +2510,10 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 }
                 this.resetPaymentSession();
                 this.applySavedAddress(addr);
+                const districtId = addr.district?.id ?? addr.district_id;
+                await this.loadDistrictDeliveryTimes(districtId, addr.id);
+                this.syncSelectedRegionDurationFromAddress(addr);
+                this.editingDeliveryTimeAddressId = null;
                 const activated = await this.activateCheckoutAddress(addr.id, addr);
                 if (! activated) {
                     this.syncAddressError = this.syncAddressError || @json(__('checkout.confirm_saved_address_before_payment'));
@@ -2511,8 +2736,10 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 const lat = String(this.inlineMapLat || (form.querySelector('input[name="delivery_lat"]')?.value ?? '')).trim();
                 const lng = String(this.inlineMapLng || (form.querySelector('input[name="delivery_lng"]')?.value ?? '')).trim();
                 const district = String(this.inlineMapDistrictId || (form.querySelector('input[name="delivery_district_id"]')?.value ?? '')).trim();
+                const timesOk = this.districtDeliveryTimes.length === 0
+                    || String(this.selectedRegionDurationId || '').trim() !== '';
 
-                return lat !== '' && lng !== '' && district !== '' && this.coverageOk !== false;
+                return lat !== '' && lng !== '' && district !== '' && this.coverageOk !== false && timesOk;
             },
 
             /** Home delivery: map pin confirmed + city + district (no saved-address id required). */
@@ -2596,7 +2823,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     && hasSelectedPlan
                     && hasSelectedDuration
                     && this.startDateValid()
-                    && this.coverageReady();
+                    && this.coverageReady()
+                    && this.deliveryTimeReady();
             },
 
             paymentBlockerMessage() {
@@ -2930,7 +3158,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             buildMoyasarFingerprint(fd) {
                 const keys = [
                     'phone', 'start_date', 'plan_duration_id', 'delivery_type',
-                    'zone_id', 'selected_address_id', 'branch_id', 'coupon', 'promocode_name',
+                    'zone_id', 'selected_address_id', 'region_duration_id', 'branch_id', 'coupon', 'promocode_name',
                 ];
 
                 return keys.map((k) => k + '=' + String(fd.get(k) || '')).join('&');

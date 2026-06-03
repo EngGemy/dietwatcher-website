@@ -481,6 +481,49 @@ class ApiAuthService
     }
 
     /**
+     * Delivery time slots (region durations) for a district from saved addresses or a probe address.
+     *
+     * @return array<int, array{id: int, duration: string, durationText: string, time: string, label: string}>
+     */
+    public function findDistrictRegionDurations(string $token, int $districtId, ?int $probeAddressId = null): array
+    {
+        if ($districtId <= 0) {
+            return [];
+        }
+
+        $rows = $this->getAddresses($token, true, false);
+        if (! is_array($rows)) {
+            $rows = [];
+        }
+
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            if (AddressCheckoutHelper::districtId($row) !== $districtId) {
+                continue;
+            }
+            $enriched = AddressCheckoutHelper::enrichAddressDistrictDurations($row, $rows);
+            $durations = AddressCheckoutHelper::districtDurations($enriched);
+            if ($durations !== []) {
+                return AddressCheckoutHelper::normalizeRegionDurations($durations);
+            }
+        }
+
+        if ($probeAddressId !== null && $probeAddressId > 0) {
+            $address = $this->loadAddressForSubscription($token, $probeAddressId);
+            if (is_array($address) && AddressCheckoutHelper::districtId($address) === $districtId) {
+                $durations = AddressCheckoutHelper::districtDurations($address);
+                if ($durations !== []) {
+                    return AddressCheckoutHelper::normalizeRegionDurations($durations);
+                }
+            }
+        }
+
+        return [];
+    }
+
+    /**
      * Load address with district delivery windows (region durations) for subscription checkout.
      *
      * @return array<string, mixed>|null

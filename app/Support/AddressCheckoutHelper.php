@@ -138,6 +138,83 @@ final class AddressCheckoutHelper
     }
 
     /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array{id: int, duration: string, durationText: string, time: string, label: string}>
+     */
+    public static function normalizeRegionDurations(array $rows): array
+    {
+        $locale = app()->getLocale();
+        $normalized = [];
+
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $id = (int) ($row['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $duration = trim((string) ($row['duration'] ?? ''));
+            $durationText = trim((string) ($row['durationText'] ?? $row['duration_text'] ?? ''));
+            $time = trim((string) ($row['time'] ?? ''));
+            $normalized[] = [
+                'id' => $id,
+                'duration' => $duration,
+                'durationText' => $durationText,
+                'time' => $time,
+                'label' => self::regionDurationLabel($row, $locale),
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    public static function regionDurationLabel(array $row, string $locale = 'en'): string
+    {
+        $time = trim((string) ($row['time'] ?? ''));
+        $durationText = trim((string) ($row['durationText'] ?? $row['duration_text'] ?? ''));
+        if ($time !== '' && $durationText !== '') {
+            return $durationText.' — '.$time;
+        }
+        if ($time !== '') {
+            return $time;
+        }
+        if ($durationText !== '') {
+            return $durationText;
+        }
+
+        $duration = trim((string) ($row['duration'] ?? ''));
+        if ($duration !== '') {
+            return $duration;
+        }
+
+        $id = (int) ($row['id'] ?? 0);
+
+        return $id > 0 ? (string) $id : '';
+    }
+
+    /**
+     * @param  array<int, array{id: int, duration: string, durationText: string, time: string, label: string}>  $slots
+     */
+    public static function isValidRegionDurationId(int $regionDurationId, array $slots): bool
+    {
+        if ($regionDurationId <= 0) {
+            return false;
+        }
+
+        foreach ($slots as $slot) {
+            if ((int) ($slot['id'] ?? 0) === $regionDurationId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param  array<int, array<string, mixed>>  $allAddresses
      */
     public static function enrichAddressDistrictDurations(array $address, array $allAddresses): array

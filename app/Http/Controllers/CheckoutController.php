@@ -34,6 +34,8 @@ class CheckoutController extends Controller
         '3months' => 3,
     ];
 
+    private const CHECKOUT_REGION_DURATION_SESSION = 'checkout_region_duration_by_address';
+
     private static function normalizePhoneForMatch(?string $phone): string
     {
         return SaudiPhone::matchKey($phone);
@@ -67,6 +69,67 @@ class CheckoutController extends Controller
         ));
 
         return AddressCheckoutHelper::markDeliverability($addresses);
+    }
+
+    private function rememberCheckoutRegionDuration(int $addressId, int $regionDurationId): void
+    {
+        if ($addressId <= 0 || $regionDurationId <= 0) {
+            return;
+        }
+
+        $map = session(self::CHECKOUT_REGION_DURATION_SESSION, []);
+        if (! is_array($map)) {
+            $map = [];
+        }
+        $map[(string) $addressId] = $regionDurationId;
+        session([self::CHECKOUT_REGION_DURATION_SESSION => $map]);
+    }
+
+    private function checkoutRegionDurationId(int $addressId): int
+    {
+        if ($addressId <= 0) {
+            return 0;
+        }
+
+        $map = session(self::CHECKOUT_REGION_DURATION_SESSION, []);
+        if (! is_array($map)) {
+            return 0;
+        }
+
+        return (int) ($map[(string) $addressId] ?? 0);
+    }
+
+    /**
+     * GET /checkout/district-durations — delivery time slots for a district (same data as mobile app).
+     */
+    public function districtDeliveryTimes(Request $request): JsonResponse
+    {
+        $token = session('external_api_token');
+        if (! is_string($token) || $token === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('payment.verify_phone_to_pay'),
+                'durations' => [],
+            ], 403);
+        }
+
+        $districtId = (int) $request->query('district_id', 0);
+        $addressId = (int) $request->query('address_id', 0);
+        if ($districtId <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.select_delivery_time'),
+                'durations' => [],
+            ], 422);
+        }
+
+        $auth = app(ApiAuthService::class);
+        $durations = $auth->findDistrictRegionDurations($token, $districtId, $addressId > 0 ? $addressId : null);
+
+        return response()->json([
+            'success' => true,
+            'durations' => $durations,
+        ]);
     }
 
     public function __construct(
@@ -993,6 +1056,7 @@ class CheckoutController extends Controller
                 'delivery_pickup_type' => 'nullable|string|max:50',
                 'delivery_title' => 'nullable|string|max:120',
                 'building' => 'nullable|string|max:500',
+                'region_duration_id' => 'nullable|integer|min:1',
             ])->validate();
         } catch (ValidationException $e) {
             return response()->json([
@@ -1073,6 +1137,18 @@ class CheckoutController extends Controller
         ]);
         $duplicate = AddressCheckoutHelper::findDuplicate($existing, $candidate);
         if ($duplicate !== null) {
+            $duplicateId = (int) ($duplicate['id'] ?? 0);
+            $regionDurationId = (int) ($data['region_duration_id'] ?? 0);
+            if ($duplicateId > 0 && $regionDurationId > 0) {
+                $this->rememberCheckoutRegionDuration($duplicateId, $regionDurationId);
+            }
+            if ($duplicateId > 0) {
+                $enriched = $auth->loadAddressForSubscription($userToken, $duplicateId);
+                if (is_array($enriched)) {
+                    $duplicate = $enriched;
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'already_saved' => true,
@@ -1094,7 +1170,17 @@ class CheckoutController extends Controller
 
         if ($httpOk && ($apiStatus === 200 || $hasData)) {
             $stored = AddressCheckoutHelper::unwrapStoredAddress($result['data'] ?? null);
+            $regionDurationId = (int) ($data['region_duration_id'] ?? 0);
             if (is_array($stored) && (int) ($stored['id'] ?? 0) > 0) {
+                $storedId = (int) $stored['id'];
+                $enriched = $auth->loadAddressForSubscription($userToken, $storedId);
+                if (is_array($enriched)) {
+                    $stored = $enriched;
+                }
+                if ($regionDurationId > 0) {
+                    $this->rememberCheckoutRegionDuration($storedId, $regionDurationId);
+                }
+
                 return response()->json([
                     'success' => true,
                     'data' => $stored,
@@ -1131,6 +1217,7 @@ class CheckoutController extends Controller
         try {
             $data = Validator::make($request->all(), [
                 'address_id' => 'required|integer|min:1',
+                'region_duration_id' => 'nullable|integer|min:1',
             ])->validate();
         } catch (ValidationException $e) {
             return response()->json([
@@ -1141,6 +1228,7 @@ class CheckoutController extends Controller
         }
 
         $addressId = (int) $data['address_id'];
+        $regionDurationId = (int) ($data['region_duration_id'] ?? 0);
         $auth = app(ApiAuthService::class);
         $address = $auth->loadAddressForSubscription($token, $addressId);
         if (! is_array($address)) {
@@ -1148,6 +1236,29 @@ class CheckoutController extends Controller
                 'success' => false,
                 'message' => __('checkout.confirm_saved_address_before_payment'),
             ], 422);
+        }
+
+        if ($regionDurationId > 0) {
+            $slots = AddressCheckoutHelper::normalizeRegionDurations(AddressCheckoutHelper::districtDurations($address));
+            if ($slots === []) {
+                $slots = $auth->findDistrictRegionDurations(
+                    $token,
+                    AddressCheckoutHelper::districtId($address),
+                    $addressId,
+                );
+            }
+            if ($slots !== [] && ! AddressCheckoutHelper::isValidRegionDurationId($regionDurationId, $slots)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('checkout.select_delivery_time'),
+                ], 422);
+            }
+            $this->rememberCheckoutRegionDuration($addressId, $regionDurationId);
+        } elseif ($this->checkoutRegionDurationId($addressId) <= 0) {
+            $autoId = AddressCheckoutHelper::firstRegionDurationId($address);
+            if ($autoId > 0) {
+                $this->rememberCheckoutRegionDuration($addressId, $autoId);
+            }
         }
 
         $cart = session()->get(CartManager::SESSION_SUBSCRIPTION)
@@ -1515,6 +1626,7 @@ class CheckoutController extends Controller
             // resolve zone_id server-side below.
             'zone_id' => 'nullable|integer',
             'selected_address_id' => 'nullable|integer',
+            'region_duration_id' => 'nullable|integer|min:1',
         ];
         if ($hasPlanItems) {
             $rules['plan_duration_id'] = 'required|integer';
@@ -1653,6 +1765,22 @@ class CheckoutController extends Controller
                     'message' => $message,
                     'errors' => ['selected_address_id' => [$message]],
                 ], 422);
+            }
+
+            $regionDurationId = (int) ($validated['region_duration_id'] ?? 0);
+            if ($regionDurationId > 0) {
+                $this->rememberCheckoutRegionDuration($addressId, $regionDurationId);
+            } elseif ($this->checkoutRegionDurationId($addressId) <= 0) {
+                $address = $auth->loadAddressForSubscription($token, $addressId);
+                if (is_array($address)) {
+                    $autoId = AddressCheckoutHelper::firstRegionDurationId($address);
+                    if ($autoId > 0) {
+                        $this->rememberCheckoutRegionDuration($addressId, $autoId);
+                        $validated['region_duration_id'] = $autoId;
+                    }
+                }
+            } else {
+                $validated['region_duration_id'] = $this->checkoutRegionDurationId($addressId);
             }
         }
 
