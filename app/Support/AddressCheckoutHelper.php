@@ -86,4 +86,128 @@ final class AddressCheckoutHelper
 
         return null;
     }
+
+    public static function districtId(?array $address): int
+    {
+        if (! is_array($address)) {
+            return 0;
+        }
+
+        return (int) (
+            $address['district_id']
+            ?? $address['district']['id']
+            ?? 0
+        );
+    }
+
+    /**
+     * RegionDuration rows attached to the address district (subscription delivery slots).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function districtDurations(?array $address): array
+    {
+        if (! is_array($address)) {
+            return [];
+        }
+
+        $raw = data_get($address, 'district.durations', []);
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        return array_values(array_filter($raw, static fn ($row): bool => is_array($row) && (int) ($row['id'] ?? 0) > 0));
+    }
+
+    public static function firstRegionDurationId(?array $address): int
+    {
+        foreach (self::districtDurations($address) as $row) {
+            $id = (int) ($row['id'] ?? 0);
+            if ($id > 0) {
+                return $id;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $allAddresses
+     */
+    public static function enrichAddressDistrictDurations(array $address, array $allAddresses): array
+    {
+        if (self::districtDurations($address) !== []) {
+            return $address;
+        }
+
+        $districtId = self::districtId($address);
+        if ($districtId <= 0) {
+            return $address;
+        }
+
+        foreach ($allAddresses as $peer) {
+            if (! is_array($peer)) {
+                continue;
+            }
+            if (self::districtId($peer) !== $districtId) {
+                continue;
+            }
+            $durations = self::districtDurations($peer);
+            if ($durations === []) {
+                continue;
+            }
+            $district = is_array($address['district'] ?? null) ? $address['district'] : ['id' => $districtId];
+            $district['durations'] = $durations;
+            $address['district'] = $district;
+
+            return $address;
+        }
+
+        return $address;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $allAddresses
+     */
+    public static function isDeliverableForSubscription(array $address, array $allAddresses = []): bool
+    {
+        $enriched = $allAddresses !== [] ? self::enrichAddressDistrictDurations($address, $allAddresses) : $address;
+
+        return self::firstRegionDurationId($enriched) > 0;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    public static function markDeliverability(array $rows): array
+    {
+        return array_values(array_map(static function (array $row) use ($rows): array {
+            $row['is_deliverable'] = self::isDeliverableForSubscription($row, $rows);
+
+            return $row;
+        }, array_filter($rows, 'is_array')));
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    public static function findById(array $rows, int $addressId): ?array
+    {
+        if ($addressId <= 0) {
+            return null;
+        }
+
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            if ((int) ($row['id'] ?? 0) === $addressId) {
+                return $row;
+            }
+        }
+
+        return null;
+    }
 }

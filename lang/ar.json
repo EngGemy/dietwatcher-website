@@ -771,6 +771,7 @@
     "checkout.payment_blocker_home": "اختر المدة، المدينة، والعنوان على الخريطة حتى يتطابق المبلغ قبل الدفع",
     "checkout.invalid_plan_duration": "مدة الاشتراك المختارة لم تعد متاحة. يرجى اختيار المدة مرة أخرى.",
     "checkout.subscription_delivery_config_missing": "تعذّر تحديد إعدادات التوصيل لهذا العنوان. يرجى إعادة اختيار العنوان المحفوظ أو المدينة.",
+    "checkout.address_not_in_delivery_zone": "هذا العنوان خارج نطاق توصيل الاشتراك. يرجى اختيار موقع داخل حي مدعوم أو عنوان محفوظ آخر.",
     "checkout.fill_address_fields": "يرجى إكمال الموقع على الخريطة والحي والمدينة وعنوان الشارع قبل التأكيد.",
     "admin.payments.navigation_label": "المدفوعات",
     "admin.payments.title": "المدفوعات",

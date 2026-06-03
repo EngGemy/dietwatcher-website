@@ -243,6 +243,59 @@ class ApiAuthService
     }
 
     /**
+     * POST /addresses/{id}/days — assign weekday delivery slots (Sat=1 … Fri=7).
+     *
+     * @param  array<int, int>  $days
+     */
+    public function updateAddressDeliveryDays(string $token, int $addressId, array $days): array
+    {
+        if ($addressId <= 0 || $days === []) {
+            return ['success' => false, 'message' => __('address.save_failed'), '_http_ok' => false];
+        }
+
+        $payload = [];
+        foreach (array_values($days) as $index => $day) {
+            $payload["days[{$index}]"] = (string) $day;
+        }
+
+        try {
+            $response = $this->httpWithToken($token)->asForm()->post(
+                $this->url("addresses/{$addressId}/days"),
+                $payload
+            );
+            $json = $response->json() ?? [];
+            $json['_http_ok'] = $response->successful();
+
+            return $json;
+        } catch (\Exception $e) {
+            Log::error('ApiAuthService::updateAddressDeliveryDays failed', [
+                'address_id' => $addressId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ['success' => false, 'message' => __('address.save_failed'), '_http_ok' => false];
+        }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function findAddressById(string $token, int $addressId, bool $activeOnly = false): ?array
+    {
+        if ($addressId <= 0) {
+            return null;
+        }
+
+        $rows = $this->getAddresses($token, true, $activeOnly);
+        $address = AddressCheckoutHelper::findById($rows, $addressId);
+        if (! is_array($address)) {
+            return null;
+        }
+
+        return AddressCheckoutHelper::enrichAddressDistrictDurations($address, $rows);
+    }
+
+    /**
      * DELETE /addresses/{id}  (requires Sanctum token)
      */
     public function deleteAddress(string $token, int $id): array

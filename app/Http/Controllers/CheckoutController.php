@@ -1009,6 +1009,18 @@ class CheckoutController extends Controller
 
         if ($httpOk && ($apiStatus === 200 || $hasData)) {
             $stored = AddressCheckoutHelper::unwrapStoredAddress($result['data'] ?? null);
+            $refreshed = $auth->findAddressById($userToken, (int) ($stored['id'] ?? 0), false);
+            if (is_array($refreshed)) {
+                $stored = $refreshed;
+            }
+            $allAddresses = $auth->getAddresses($userToken, true, false);
+            if (is_array($stored) && ! AddressCheckoutHelper::isDeliverableForSubscription($stored, $allAddresses)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('checkout.address_not_in_delivery_zone'),
+                    'errors' => ['delivery_district_id' => [__('checkout.address_not_in_delivery_zone')]],
+                ], 422);
+            }
 
             return response()->json([
                 'success' => true,
@@ -1040,6 +1052,7 @@ class CheckoutController extends Controller
         if (! is_array($addresses)) {
             $addresses = [];
         }
+        $addresses = AddressCheckoutHelper::markDeliverability($addresses);
 
         $profile = session('external_api_profile', []);
         if (! is_array($profile)) {

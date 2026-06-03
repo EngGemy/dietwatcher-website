@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Services\ApiAuthService;
 use App\Services\ExternalDataService;
 use App\Services\Payment\MoyasarPaymentService;
+use App\Support\AddressCheckoutHelper;
 use App\Support\SubscriptionCheckoutPayload;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
@@ -472,12 +473,30 @@ class AccountApiService
 
         $payload['address_id'] = (string) $addressId;
 
-        $addresses = app(ApiAuthService::class)->getAddresses($token, true, false);
-        $address = collect($addresses)->first(
-            fn (array $row): bool => (int) ($row['id'] ?? 0) === $addressId
-        );
+        $auth = app(ApiAuthService::class);
+        $allAddresses = $auth->getAddresses($token, true, false);
+        $address = $auth->findAddressById($token, $addressId, false);
         if (! is_array($address)) {
-            $address = null;
+            return __('checkout.address_not_in_delivery_zone');
+        }
+
+        if (! AddressCheckoutHelper::isDeliverableForSubscription($address, $allAddresses)) {
+            return __('checkout.address_not_in_delivery_zone');
+        }
+
+        $withWeekend = filter_var($payload['with_weekend'] ?? '0', FILTER_VALIDATE_BOOLEAN);
+        $defaultDays = SubscriptionCheckoutPayload::defaultDeliveryWeekdays($withWeekend);
+        $storedDays = is_array($address['days'] ?? null) ? $address['days'] : [];
+        if ($storedDays === []) {
+            $daysSync = $auth->updateAddressDeliveryDays($token, $addressId, $defaultDays);
+            if (! ($daysSync['_http_ok'] ?? false)) {
+                Log::warning('AccountApiService::updateAddressDeliveryDays failed', [
+                    'address_id' => $addressId,
+                    'body' => $daysSync,
+                ]);
+            } else {
+                $address['days'] = $defaultDays;
+            }
         }
 
         $daysResult = $this->getAddressDeliveryDays($addressId, $token);
@@ -497,7 +516,7 @@ class AccountApiService
         );
 
         if (! isset($payload['addresses[0][region_duration_id]'])) {
-            return __('checkout.subscription_delivery_config_missing');
+            return __('checkout.address_not_in_delivery_zone');
         }
 
         return null;
@@ -604,7 +623,7 @@ class AccountApiService
         if (($payload['receiving'] ?? '') === 'delivery' && ! isset($payload['addresses[0][region_duration_id]'])) {
             return [
                 'ok' => false,
-                'message' => $enrichError ?: __('checkout.subscription_delivery_config_missing'),
+                'message' => $enrichError ?: __('checkout.address_not_in_delivery_zone'),
                 'min_start_date' => null,
                 'adjusted_start_date' => null,
                 'subscription_id' => null,

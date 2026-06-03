@@ -487,6 +487,11 @@ final class SubscriptionCheckoutPayload
             }
         }
 
+        $helperId = \App\Support\AddressCheckoutHelper::firstRegionDurationId($address);
+        if ($helperId > 0) {
+            return $helperId;
+        }
+
         foreach (['region_duration_id', 'regionDurationId'] as $key) {
             $fromDays = is_array($daysData) ? data_get($daysData, $key) : null;
             if (is_numeric($fromDays) && (int) $fromDays > 0) {

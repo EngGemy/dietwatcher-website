@@ -292,8 +292,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                 </button>
                             </div>
                             <p class="mb-3 text-xs text-gray-600">{{ __('checkout.saved_addresses_hint') }}</p>
-                            <ul class="max-h-64 space-y-2 overflow-y-auto" x-show="!addingNewAddress">
-                                <template x-for="addr in savedAddresses" :key="addr.id">
+                            <p x-show="savedAddresses.length > 0 && deliverableSavedAddresses().length === 0" x-cloak class="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                {{ __('checkout.address_not_in_delivery_zone') }}
+                            </p>
+                            <ul class="max-h-64 space-y-2 overflow-y-auto" x-show="!addingNewAddress && deliverableSavedAddresses().length > 0">
+                                <template x-for="addr in deliverableSavedAddresses()" :key="addr.id">
                                     <li>
                                         <div class="w-full rounded-lg border px-3 py-2.5 text-sm text-gray-800 transition hover:border-blue-400 hover:bg-blue-50/50"
                                              :class="String(addr.id) === String(selectedAddressId) ? 'border-blue-500 bg-white shadow-sm ring-1 ring-blue-200' : 'border-gray-200 bg-white'">
@@ -1824,6 +1827,27 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 return '';
             },
 
+            addressIsDeliverable(addr) {
+                if (! addr) {
+                    return false;
+                }
+                if (addr.is_deliverable === false) {
+                    return false;
+                }
+                if (addr.is_deliverable === true) {
+                    return true;
+                }
+                const durations = addr?.district?.durations;
+
+                return Array.isArray(durations)
+                    && durations.length > 0
+                    && !!(durations[0]?.id || durations[0]);
+            },
+
+            deliverableSavedAddresses() {
+                return (this.savedAddresses || []).filter((addr) => this.addressIsDeliverable(addr));
+            },
+
             startAddingAddress() {
                 this.addingNewAddress = !this.addingNewAddress;
                 this.newAddressError = '';
@@ -1923,6 +1947,12 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
             applySavedAddress(addr) {
                 if (! addr || this.deliveryType !== 'home') {
+                    return;
+                }
+                if (! this.addressIsDeliverable(addr)) {
+                    this.moyasarError = @json(__('checkout.address_not_in_delivery_zone'));
+                    this.syncAddressError = this.moyasarError;
+
                     return;
                 }
                 this.syncAddressError = '';
@@ -2052,6 +2082,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             selectSavedAddress(addr) {
+                if (! this.addressIsDeliverable(addr)) {
+                    this.moyasarError = @json(__('checkout.address_not_in_delivery_zone'));
+
+                    return;
+                }
                 this.applySavedAddress(addr);
                 this.$nextTick(() => {
                     this.$refs.paymentCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
