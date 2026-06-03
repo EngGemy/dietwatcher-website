@@ -221,10 +221,37 @@ class PaymentController extends Controller
             ])->with('payment_error', $userMessage);
         }
 
+        $checkoutSession = session('checkout_api_subscription_checkout');
+        $externalPaymentId = is_array($checkoutSession)
+            ? (int) data_get($checkoutSession, 'bootstrap.external_payment_id', 0)
+            : 0;
+
+        $forwardQuery = array_filter([
+            'id' => $moyasarId,
+            'status' => $status,
+            'message' => $message,
+            'subscription_id' => $subscriptionId > 0 ? (string) $subscriptionId : null,
+            'payment_id' => $externalPaymentId > 0 ? (string) $externalPaymentId : null,
+        ], static fn ($value) => $value !== null && $value !== '');
+
+        $apiForward = $this->accountApiService->forwardMoyasarPaymentCallback($forwardQuery);
+        Log::info('Forwarded Moyasar subscription callback to external API', [
+            'subscription_id' => $subscriptionId,
+            'moyasar_id' => $moyasarId,
+            'external_payment_id' => $externalPaymentId > 0 ? $externalPaymentId : null,
+            'api_ok' => $apiForward['ok'] ?? false,
+            'api_message' => $apiForward['message'] ?? '',
+        ]);
+
         session([
             'pending_subscription_confirm' => [
                 'subscription_id' => $subscriptionId,
                 'moyasar_id' => $moyasarId,
+                'external_payment_id' => $externalPaymentId > 0 ? $externalPaymentId : null,
+                'status' => $status,
+                'message' => $message,
+                'last_forward_at' => time(),
+                'last_forward_ok' => (bool) ($apiForward['ok'] ?? false),
             ],
         ]);
         session()->forget('checkout_api_subscription_checkout');
@@ -288,11 +315,11 @@ class PaymentController extends Controller
             'payment' => $payment,
         ])->render();
 
-        $file = 'invoice-' . strtolower($payment->order_number) . '.html';
+        $file = 'invoice-'.strtolower($payment->order_number).'.html';
 
         return response($html, 200, [
             'Content-Type' => 'text/html; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $file . '"',
+            'Content-Disposition' => 'attachment; filename="'.$file.'"',
         ]);
     }
 }

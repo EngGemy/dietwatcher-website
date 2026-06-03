@@ -49,7 +49,7 @@
                         {{ __('Chef-made, calorie-smart meals delivered in Saudi Arabia. Plans online, managed via our app.') }}
                     </p>
 
-                    <a href="{{ route('meal-plans.index') }}" class="hero-btn-anim btn btn--primary mb-8 text-lg" data-magnetic="1">
+                    <a href="{{ route('meal-plans.index') }}" class="hero-btn-anim btn btn--primary mb-8 text-lg">
                         {{ __('Choose Meal Plans') }}
                     </a>
 
@@ -932,26 +932,41 @@
     }
 }
 .hero-desc-anim {
-    opacity: 0;
-    transform: translateY(20px);
-    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.9s forwards;
+    opacity: 1;
+    transform: none;
+    animation: heroDescEnter 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.9s both;
 }
 .hero-btn-anim {
-    opacity: 0;
-    transform: translateY(20px);
-    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.05s forwards;
     position: relative;
-    animation-fill-mode: forwards;
-    will-change: transform, opacity;
+    display: inline-flex;
+    opacity: 1;
+    transform: translateY(0);
+    animation: heroBtnEnter 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.05s both;
+    transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+    z-index: 2;
 }
-.hero-btn-anim:active {
-    transform: none !important;
+@media (hover: hover) and (pointer: fine) {
+    .hero-btn-anim:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 28px rgba(23, 125, 201, 0.32);
+    }
+}
+.hero-btn-anim:active,
+.hero-btn-anim.hero-btn-anim--ready:active {
+    transform: scale(0.98) translateY(0) !important;
+    filter: brightness(0.96);
     opacity: 1 !important;
+    box-shadow: 0 8px 18px rgba(23, 125, 201, 0.28) !important;
+}
+.hero-btn-anim--ready {
+    opacity: 1 !important;
+    transform: translateY(0) !important;
+    animation: none !important;
 }
 .hero-apps-anim {
-    opacity: 0;
-    transform: translateY(20px);
-    animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.2s forwards;
+    opacity: 1;
+    transform: none;
+    animation: heroAppsEnter 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.2s both;
 }
 .hero-img-anim {
     opacity: 0;
@@ -999,6 +1014,18 @@
 
 @keyframes heroSlideUp {
     to { opacity: 1; transform: none; }
+}
+@keyframes heroDescEnter {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes heroBtnEnter {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes heroAppsEnter {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 @keyframes heroImgIn {
     to { opacity: 1; transform: none; }
@@ -1394,6 +1421,19 @@
     .products-rail__track {
         animation: none !important;
     }
+    .hero-desc-anim,
+    .hero-btn-anim,
+    .hero-apps-anim {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+    }
+    .hero-btn-anim:hover,
+    .hero-btn-anim:active {
+        transform: none !important;
+        box-shadow: none !important;
+        filter: none !important;
+    }
     .products-rail__card,
     .products-rail__card .meal-card__thumbnail img,
     .products-rail__btn {
@@ -1554,33 +1594,26 @@
             els.forEach(function(el) { observer.observe(el); });
         })();
 
-        /* ─── Hero magnetic CTA + image parallax ─── */
+        /* ─── Hero CTA: lock visible state after entrance animation ─── */
         (function() {
-            if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-                document.querySelectorAll('[data-magnetic="1"]').forEach(function(cta) {
-                    cta.addEventListener('pointermove', function(e) {
-                        var r = cta.getBoundingClientRect();
-                        var x = e.clientX - r.left;
-                        var y = e.clientY - r.top;
-                        cta.style.setProperty('--mx', x + 'px');
-                        cta.style.setProperty('--my', y + 'px');
-                        var dx = (x - r.width / 2) / r.width;
-                        var dy = (y - r.height / 2) / r.height;
-                        cta.style.transform = 'translate(' + (dx * 8) + 'px,' + (dy * 6) + 'px)';
-                    });
-                    cta.addEventListener('pointerleave', function() {
-                        cta.style.transform = '';
-                    });
-                    cta.addEventListener('pointerdown', function() {
-                        cta.style.transform = '';
-                    });
-                });
-            }
+            document.querySelectorAll('.hero-btn-anim').forEach(function(btn) {
+                function markReady() {
+                    btn.classList.add('hero-btn-anim--ready');
+                }
+                btn.addEventListener('animationend', markReady, { once: true });
+                if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                    markReady();
+                }
+            });
+        })();
 
+        /* ─── Hero image parallax (desktop only) ─── */
+        (function() {
             var heroImg = document.querySelector('.hero-parallax');
-            if (heroImg && window.matchMedia('(hover: hover)').matches) {
+            if (heroImg && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
                 document.addEventListener('pointermove', function(e) {
-                    var w = window.innerWidth, h = window.innerHeight;
+                    var w = window.innerWidth;
+                    var h = window.innerHeight;
                     var dx = (e.clientX / w - 0.5) * 14;
                     var dy = (e.clientY / h - 0.5) * 10;
                     heroImg.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';

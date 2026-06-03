@@ -7,12 +7,10 @@ namespace App\Services;
 use App\Enums\PaymentKind;
 use App\Enums\PaymentStatus;
 use App\Models\Payment;
-use App\Services\ApiAuthService;
-use App\Services\ExternalDataService;
 use App\Services\Payment\MoyasarPaymentService;
-use App\Support\AddressCheckoutHelper;
 use App\Support\SubscriptionCheckoutPayload;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -61,7 +59,7 @@ class AccountApiService
 
     protected function deviceId(): string
     {
-        return 'web-account-' . substr(hash('sha256', session()->getId()), 0, 40);
+        return 'web-account-'.substr(hash('sha256', session()->getId()), 0, 40);
     }
 
     protected function hasToken(): bool
@@ -71,7 +69,7 @@ class AccountApiService
 
     protected function url(string $path): string
     {
-        return $this->baseUrl . '/' . ltrim($path, '/');
+        return $this->baseUrl.'/'.ltrim($path, '/');
     }
 
     /**
@@ -80,7 +78,7 @@ class AccountApiService
      *
      * @return array{ok: bool, status: int, data: mixed, message: string, raw: array}
      */
-    protected function decode(\Illuminate\Http\Client\Response $response): array
+    protected function decode(Response $response): array
     {
         $body = $response->json();
         if (! is_array($body)) {
@@ -228,7 +226,7 @@ class AccountApiService
             return $this->decode(
                 $this->authed()
                     ->asForm()
-                    ->post($this->url('subscriptions/skipDay?date_from=' . urlencode($dateFrom) . '&date_to=' . urlencode($dateTo)), [
+                    ->post($this->url('subscriptions/skipDay?date_from='.urlencode($dateFrom).'&date_to='.urlencode($dateTo)), [
                         'diet_id' => (string) $dietId,
                     ])
             );
@@ -245,7 +243,7 @@ class AccountApiService
             return $this->decode(
                 $this->authed()
                     ->asForm()
-                    ->post($this->url('subscriptions/restoreDay?date=' . urlencode($date)), [
+                    ->post($this->url('subscriptions/restoreDay?date='.urlencode($date)), [
                         'diet_id' => (string) $dietId,
                     ])
             );
@@ -320,7 +318,7 @@ class AccountApiService
     {
         try {
             return $this->decode(
-                $this->authed()->asForm()->post($this->url('subscriptions/replaceMeal?date=' . urlencode($date)), [
+                $this->authed()->asForm()->post($this->url('subscriptions/replaceMeal?date='.urlencode($date)), [
                     'diet_id' => (string) $dietId,
                     'meal_id' => (string) $mealId,
                     'replaced_diet_id' => (string) $replacedDietId,
@@ -779,6 +777,8 @@ class AccountApiService
             $subscriptionId = $this->extractExternalSubscriptionId($data);
         }
 
+        $externalPaymentId = $payment['id'] ?? $payment['payment_id'] ?? null;
+
         return [
             'amount_halalas' => $amountHalalas,
             'publishable_key' => $publishableKey,
@@ -786,7 +786,108 @@ class AccountApiService
             'description' => (string) ($payment['description'] ?? ''),
             'metadata' => $metadata,
             'subscription_id' => $subscriptionId,
+            'external_payment_id' => is_numeric($externalPaymentId) ? (int) $externalPaymentId : null,
         ];
+    }
+
+    /**
+     * Forward Moyasar redirect query params to the external API so it can mark the subscription paid.
+     *
+     * @param  array<string, scalar|null>  $query
+     */
+    public function forwardMoyasarPaymentCallback(array $query, ?string $token = null): array
+    {
+        $token = (string) ($token ?: session('external_api_token', ''));
+        if ($token === '') {
+            return $this->empty(__('account.login_required'));
+        }
+
+        $query = array_filter(
+            $query,
+            static fn ($value) => $value !== null && $value !== '',
+        );
+
+        try {
+            return $this->decode(
+                $this->authedWithToken($token)->acceptJson()->get(
+                    $this->url('payments/callback'),
+                    $query,
+                )
+            );
+        } catch (\Throwable $e) {
+            Log::warning('AccountApiService::forwardMoyasarPaymentCallback failed', [
+                'error' => $e->getMessage(),
+                'query_keys' => array_keys($query),
+            ]);
+
+            return $this->empty(__('account.request_failed'));
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $subscription
+     */
+    public function isSubscriptionPaymentConfirmed(array $subscription): bool
+    {
+        $status = strtolower((string) ($subscription['status'] ?? ''));
+        $paymentStatus = strtolower((string) (
+            $subscription['payment_status']
+            ?? data_get($subscription, 'payment.status', '')
+        ));
+
+        if (in_array($status, ['active', 'paid', 'confirmed', 'accepted'], true)) {
+            return true;
+        }
+
+        if (in_array($paymentStatus, ['paid', 'success', 'completed', 'confirmed'], true)) {
+            return true;
+        }
+
+        if (filter_var($subscription['is_paid'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return true;
+        }
+
+        return filter_var(data_get($subscription, 'payment.is_paid', false), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Retry forwarding a pending Moyasar callback while the confirm page polls the API.
+     *
+     * @param  array<string, mixed>  $pending
+     */
+    public function maybeForwardPendingMoyasarCallback(array $pending, ?string $token = null): array
+    {
+        $moyasarId = trim((string) ($pending['moyasar_id'] ?? ''));
+        if ($moyasarId === '') {
+            return $this->empty('missing_moyasar_id');
+        }
+
+        $lastForwardAt = (int) ($pending['last_forward_at'] ?? 0);
+        if ($lastForwardAt > 0 && (time() - $lastForwardAt) < 3) {
+            return $this->empty('forward_rate_limited');
+        }
+
+        $subscriptionId = (int) ($pending['subscription_id'] ?? 0);
+        $externalPaymentId = (int) ($pending['external_payment_id'] ?? 0);
+
+        $query = array_filter([
+            'id' => $moyasarId,
+            'status' => (string) ($pending['status'] ?? 'paid'),
+            'message' => $pending['message'] ?? null,
+            'subscription_id' => $subscriptionId > 0 ? (string) $subscriptionId : null,
+            'payment_id' => $externalPaymentId > 0 ? (string) $externalPaymentId : null,
+        ], static fn ($value) => $value !== null && $value !== '');
+
+        $result = $this->forwardMoyasarPaymentCallback($query, $token);
+
+        session([
+            'pending_subscription_confirm' => array_merge($pending, [
+                'last_forward_at' => time(),
+                'last_forward_ok' => (bool) ($result['ok'] ?? false),
+            ]),
+        ]);
+
+        return $result;
     }
 
     /**
@@ -1113,7 +1214,7 @@ class AccountApiService
     {
         try {
             return $this->decode(
-                $this->authed()->get($this->url('orders/' . $orderId))
+                $this->authed()->get($this->url('orders/'.$orderId))
             );
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::showOrder failed', ['error' => $e->getMessage()]);
@@ -1232,7 +1333,7 @@ class AccountApiService
     {
         try {
             return $this->decode(
-                $this->authed()->get($this->url('orders/' . $orderId . '/orderTrackings'))
+                $this->authed()->get($this->url('orders/'.$orderId.'/orderTrackings'))
             );
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::orderTrackings failed', ['error' => $e->getMessage()]);
@@ -1243,7 +1344,7 @@ class AccountApiService
 
     public function orderInvoicePdfUrl(int $orderId): string
     {
-        return $this->url('orders/' . $orderId . '/pdf');
+        return $this->url('orders/'.$orderId.'/pdf');
     }
 
     /**
@@ -1272,7 +1373,7 @@ class AccountApiService
 
     /**
      * Sync a paid local payment to external /orders endpoint.
-         *
+     *
      * @return array{ok: bool, message: string, external_order_id: int|null, external_order_number: string|null}
      */
     public function syncPaidPaymentToExternalOrder(Payment $payment, ?string $token = null): array

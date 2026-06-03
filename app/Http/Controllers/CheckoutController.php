@@ -13,10 +13,10 @@ use App\Models\Settings\Setting;
 use App\Services\AccountApiService;
 use App\Services\ApiAuthService;
 use App\Services\ExternalDataService;
-use App\Support\AddressCheckoutHelper;
-use App\Support\SubscriptionCheckoutPayload;
 use App\Services\Payment\MoyasarPaymentService;
+use App\Support\AddressCheckoutHelper;
 use App\Support\SaudiPhone;
+use App\Support\SubscriptionCheckoutPayload;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -1342,10 +1342,27 @@ class CheckoutController extends Controller
         }
 
         $sub = $this->extractSubscriptionRow($result['data'] ?? null, $subscriptionId);
+        $pending = session('pending_subscription_confirm');
+        if (
+            is_array($pending)
+            && (int) ($pending['subscription_id'] ?? 0) === $subscriptionId
+            && ! $this->accountApiService->isSubscriptionPaymentConfirmed($sub)
+        ) {
+            $this->accountApiService->maybeForwardPendingMoyasarCallback($pending, $token);
+            $retry = $this->accountApiService->showSubscription($subscriptionId);
+            if ($retry['ok'] ?? false) {
+                $sub = $this->extractSubscriptionRow($retry['data'] ?? null, $subscriptionId);
+            }
+        }
+
         $status = strtolower((string) ($sub['status'] ?? ''));
         $paymentStatus = strtolower((string) ($sub['payment_status'] ?? data_get($sub, 'payment.status', '')));
-        $confirmed = in_array($status, ['active', 'paid'], true)
-            || in_array($paymentStatus, ['paid', 'success', 'completed'], true);
+        $confirmed = $this->accountApiService->isSubscriptionPaymentConfirmed($sub);
+
+        if ($confirmed) {
+            session()->forget('pending_subscription_confirm');
+            session()->forget('checkout_api_subscription_checkout');
+        }
 
         return response()->json([
             'success' => true,
