@@ -2701,6 +2701,24 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 }
             },
 
+            addDaysToIsoDate(isoDate, days) {
+                const parts = String(isoDate || '').trim().slice(0, 10).split('-');
+                if (parts.length !== 3) {
+                    return isoDate;
+                }
+                const dt = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+                if (Number.isNaN(dt.getTime())) {
+                    return isoDate;
+                }
+                dt.setDate(dt.getDate() + days);
+
+                return dt.getFullYear()
+                    + '-'
+                    + String(dt.getMonth() + 1).padStart(2, '0')
+                    + '-'
+                    + String(dt.getDate()).padStart(2, '0');
+            },
+
             async bootstrapMoyasar() {
                 if (! this.phoneVerified) {
                     return;
@@ -2756,13 +2774,17 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             this.moyasarError = data.message || @json(__('payment.fill_delivery_first'));
                         }
                         const apiMin = String(data.min_start_date || '').trim().slice(0, 10);
-                        const canAutoFixDate = apiMin
-                            && apiMin !== this.lastAppliedMinStartDate
-                            && this._moyasarStartDateRetries < 1;
+                        let retryDate = apiMin;
+                        if (retryDate && retryDate === String(this.startDate || '').trim().slice(0, 10)) {
+                            retryDate = this.addDaysToIsoDate(retryDate, 1);
+                        }
+                        const canAutoFixDate = retryDate
+                            && retryDate !== this.lastAppliedMinStartDate
+                            && this._moyasarStartDateRetries < 2;
                         if (canAutoFixDate) {
                             this._moyasarStartDateRetries += 1;
-                            this.lastAppliedMinStartDate = apiMin;
-                            this.applyMinimumStartDate(apiMin, { silent: true });
+                            this.lastAppliedMinStartDate = retryDate;
+                            this.applyMinimumStartDate(retryDate, { silent: true });
                             this._moyasarFingerprint = '';
                             await this.$nextTick();
 

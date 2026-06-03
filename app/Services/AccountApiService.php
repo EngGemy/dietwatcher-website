@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Enums\PaymentKind;
 use App\Enums\PaymentStatus;
 use App\Models\Payment;
+use App\Services\ApiAuthService;
 use App\Services\ExternalDataService;
 use App\Services\Payment\MoyasarPaymentService;
 use App\Support\SubscriptionCheckoutPayload;
@@ -335,9 +336,14 @@ class AccountApiService
             return $this->empty(__('account.login_required'));
         }
 
+        $payload = $this->prepareSubscriptionApiPayload($payload, $token);
+
         try {
             return $this->decode(
-                $this->authedWithToken($token)->asForm()->post($this->url('subscriptions/calculate'), $payload)
+                $this->authedWithToken($token)->asForm()->post(
+                    $this->subscriptionRequestUrl('subscriptions/calculate', $payload),
+                    $payload
+                )
             );
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::calculateSubscription failed', ['error' => $e->getMessage()]);
@@ -356,8 +362,13 @@ class AccountApiService
             return $this->empty(__('account.login_required'));
         }
 
+        $payload = $this->prepareSubscriptionApiPayload($payload, $token);
+
         try {
-            $response = $this->authedWithToken($token)->asForm()->post($this->url('subscriptions'), $payload);
+            $response = $this->authedWithToken($token)->asForm()->post(
+                $this->subscriptionRequestUrl('subscriptions', $payload),
+                $payload
+            );
             $result = $this->decode($response);
             if (! ($result['ok'] ?? false)) {
                 Log::warning('AccountApiService::createSubscription rejected', [
@@ -373,6 +384,123 @@ class AccountApiService
 
             return $this->empty(__('account.request_failed'));
         }
+    }
+
+    /**
+     * GET /addresses/{id}/days — delivery weekdays + region duration metadata.
+     */
+    public function getAddressDeliveryDays(int $addressId, ?string $token = null): array
+    {
+        $token = (string) ($token ?: session('external_api_token', ''));
+        if ($token === '' || $addressId <= 0) {
+            return $this->empty(__('account.login_required'));
+        }
+
+        try {
+            return $this->decode(
+                $this->authedWithToken($token)->get($this->url("addresses/{$addressId}/days"))
+            );
+        } catch (\Throwable $e) {
+            Log::warning('AccountApiService::getAddressDeliveryDays failed', [
+                'address_id' => $addressId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $this->empty();
+        }
+    }
+
+    /**
+     * @param  array<string, string>  $payload
+     * @return array<string, string>
+     */
+    protected function prepareSubscriptionApiPayload(array $payload, string $token): array
+    {
+        $payload = SubscriptionCheckoutPayload::clampPayloadStartDate(
+            $payload,
+            app(ExternalDataService::class),
+        );
+
+        $enrichError = $this->enrichSubscriptionDeliveryPayload($payload, $token);
+        if ($enrichError !== null) {
+            Log::warning('AccountApiService subscription payload enrichment issue', [
+                'message' => $enrichError,
+                'receiving' => $payload['receiving'] ?? null,
+            ]);
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @param  array<string, string>  $payload
+     */
+    protected function subscriptionRequestUrl(string $path, array $payload): string
+    {
+        $query = [
+            'device_id' => $this->deviceId(),
+        ];
+        $date = SubscriptionCheckoutPayload::normalizeStartDate(
+            (string) ($payload['date'] ?? $payload['start_date'] ?? '')
+        );
+        if ($date !== '') {
+            $query['date'] = $date;
+        }
+
+        return $this->url($path.'?'.http_build_query($query));
+    }
+
+    /**
+     * Align delivery subscriptions with POST /subscriptions/calculate address matrix.
+     *
+     * @param  array<string, string>  $payload
+     */
+    protected function enrichSubscriptionDeliveryPayload(array &$payload, string $token): ?string
+    {
+        $receiving = (string) ($payload['receiving'] ?? '');
+        $payload['with_pickup'] = $receiving === 'pickup' ? '1' : '0';
+        $payload['with_service'] = $payload['with_service'] ?? '0';
+
+        if ($receiving !== 'delivery') {
+            return null;
+        }
+
+        $addressId = (int) ($payload['address_id'] ?? $payload['selected_address_id'] ?? 0);
+        if ($addressId <= 0) {
+            return null;
+        }
+
+        $payload['address_id'] = (string) $addressId;
+
+        $addresses = app(ApiAuthService::class)->getAddresses($token, true, false);
+        $address = collect($addresses)->first(
+            fn (array $row): bool => (int) ($row['id'] ?? 0) === $addressId
+        );
+        if (! is_array($address)) {
+            $address = null;
+        }
+
+        $daysResult = $this->getAddressDeliveryDays($addressId, $token);
+        $daysData = is_array($daysResult['data'] ?? null) ? $daysResult['data'] : null;
+
+        $programId = (int) ($payload['program_id'] ?? 0);
+        $durationRows = $programId > 0
+            ? app(ExternalDataService::class)->getCheckoutPlanDurations($programId)
+            : [];
+
+        $payload = SubscriptionCheckoutPayload::appendDeliveryAddressFields(
+            $payload,
+            $addressId,
+            $address,
+            $daysData,
+            $durationRows,
+        );
+
+        if (! isset($payload['addresses[0][region_duration_id]'])) {
+            return __('checkout.subscription_delivery_config_missing');
+        }
+
+        return null;
     }
 
     /**
@@ -412,6 +540,18 @@ class AccountApiService
             app(ExternalDataService::class),
         );
 
+        $enrichError = $this->enrichSubscriptionDeliveryPayload($payload, $token);
+        if (($payload['receiving'] ?? '') === 'delivery' && ! isset($payload['addresses[0][region_duration_id]'])) {
+            return [
+                'ok' => false,
+                'message' => $enrichError ?: __('checkout.subscription_delivery_config_missing'),
+                'min_start_date' => null,
+                'adjusted_start_date' => null,
+                'subscription_id' => null,
+                'bootstrap' => null,
+            ];
+        }
+
         $payloadHash = $this->hashSubscriptionPayload($payload);
         $adjustedStartDate = null;
         $minStartDate = null;
@@ -450,22 +590,22 @@ class AccountApiService
                 break;
             }
 
-            $parsedMin = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($parsedMin);
-
             $currentDate = SubscriptionCheckoutPayload::normalizeStartDate(
                 (string) ($payload['date'] ?? $payload['start_date'] ?? '')
             );
+            $nextDate = SubscriptionCheckoutPayload::nextStartDateAfterApiRejection($currentDate, $parsedMin);
+            $parsedMin = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($parsedMin);
 
-            if ($currentDate !== '' && $currentDate >= $parsedMin) {
+            if ($currentDate !== '' && $nextDate === $currentDate) {
                 $minStartDate = $parsedMin;
                 break;
             }
 
             session()->forget('checkout_api_subscription_checkout');
-            $payload['date'] = $parsedMin;
-            $payload['start_date'] = $parsedMin;
-            $minStartDate = $parsedMin;
-            $adjustedStartDate = $parsedMin;
+            $payload['date'] = $nextDate;
+            $payload['start_date'] = $nextDate;
+            $minStartDate = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($nextDate);
+            $adjustedStartDate = $nextDate;
             $payloadHash = $this->hashSubscriptionPayload($payload);
             $dateRetryCount++;
             $result = $this->createSubscription($payload, $token);

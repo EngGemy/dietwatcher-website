@@ -770,6 +770,7 @@
     "checkout.payment_blocker_pickup": "اختر المدة وتاريخ البداية والفرع حتى يتطابق المبلغ قبل الدفع",
     "checkout.payment_blocker_home": "اختر المدة، المدينة، والعنوان على الخريطة حتى يتطابق المبلغ قبل الدفع",
     "checkout.invalid_plan_duration": "مدة الاشتراك المختارة لم تعد متاحة. يرجى اختيار المدة مرة أخرى.",
+    "checkout.subscription_delivery_config_missing": "تعذّر تحديد إعدادات التوصيل لهذا العنوان. يرجى إعادة اختيار العنوان المحفوظ أو المدينة.",
     "checkout.fill_address_fields": "يرجى إكمال الموقع على الخريطة والحي والمدينة وعنوان الشارع قبل التأكيد.",
     "admin.payments.navigation_label": "المدفوعات",
     "admin.payments.title": "المدفوعات",

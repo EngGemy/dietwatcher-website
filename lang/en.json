@@ -823,6 +823,7 @@
     "checkout.payment_blocker_pickup": "Choose duration, start date, and branch so the amount matches before you pay.",
     "checkout.payment_blocker_home": "Choose duration, city, and map address so the amount matches before you pay.",
     "checkout.invalid_plan_duration": "The selected plan duration is no longer available. Please choose a duration again.",
+    "checkout.subscription_delivery_config_missing": "Could not resolve delivery settings for this address. Please re-select your saved address or choose the city again.",
     "checkout.fill_address_fields": "Please complete the map location, district, city, and street address before confirming.",
     "e.g. 05XXXXXXXX": "e.g. 05XXXXXXXX",
     "Used for delivery coordination on this address.": "Used for delivery coordination on this address.",

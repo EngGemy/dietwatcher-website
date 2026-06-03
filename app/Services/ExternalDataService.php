@@ -1279,6 +1279,10 @@ class ExternalDataService
             'delivery_price' => (float) ($d['delivery_price']['amount'] ?? $d['delivery_price'] ?? $d['deliveryPrice'] ?? 0),
             'is_default' => $d['is_default'] ?? $d['isDefault'] ?? false,
             'label' => $d['label'] ?? ($d['days'] ?? 0).' '.__('Days'),
+            'region_duration_id' => (int) ($d['region_duration_id'] ?? $d['regionDurationId'] ?? 0),
+            'region_durations' => is_array($d['region_durations'] ?? null)
+                ? $d['region_durations']
+                : (is_array($d['regionDurations'] ?? null) ? $d['regionDurations'] : []),
             'start_date' => \App\Support\SubscriptionCheckoutPayload::normalizeStartDate(
                 (string) ($d['start_date'] ?? $d['startDate'] ?? $d['starts_at'] ?? $d['available_from'] ?? '')
             ) ?: null,

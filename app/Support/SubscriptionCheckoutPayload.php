@@ -100,10 +100,13 @@ final class SubscriptionCheckoutPayload
             }
         }
         $minStart = self::minimumStartDateForDuration($durationRow);
-        $startDate = self::normalizeStartDate((string) ($validated['start_date'] ?? ''));
+        $startDate = self::effectiveStartDateForPayload((string) ($validated['start_date'] ?? ''));
         if ($startDate === '' || $startDate < $minStart) {
             $startDate = $minStart;
         }
+
+        $withWeekend = (string) ($validated['with_weekend'] ?? '0');
+        $withPickup = $receiving === 'pickup' ? '1' : '0';
 
         $payload = [
             'program_id' => (string) $programId,
@@ -111,13 +114,20 @@ final class SubscriptionCheckoutPayload
             'plan_duration_id' => (string) max(0, $durationId),
             'plan_calory_id' => (string) max(0, $caloryId),
             'receiving' => $receiving,
+            'with_pickup' => $withPickup,
             'with_support' => '0',
-            'with_weekend' => '0',
+            'with_weekend' => $withWeekend,
+            'with_service' => '0',
             'start_date' => $startDate,
             'date' => $startDate,
             'payment_option' => 'credit_card',
             'useWallet' => (string) ($validated['useWallet'] ?? $validated['use_wallet'] ?? '0'),
         ];
+
+        $zoneId = (int) ($validated['zone_id'] ?? 0);
+        if ($zoneId > 0) {
+            $payload['zone_id'] = (string) $zoneId;
+        }
 
         $promo = (string) ($validated['promocode_name'] ?? $validated['coupon'] ?? '');
         if ($promo !== '') {
@@ -156,6 +166,46 @@ final class SubscriptionCheckoutPayload
         $daysToAdd = $now->lt($noonCutoff) ? 2 : 3;
 
         return $now->copy()->startOfDay()->addDays($daysToAdd)->format('Y-m-d');
+    }
+
+    public static function effectiveStartDateForPayload(string $candidate): string
+    {
+        $normalized = self::normalizeStartDate($candidate);
+        $floor = self::defaultCheckoutMinimumStartDate();
+        if ($normalized === '' || $normalized < $floor) {
+            return $floor;
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Next start date to try when the API rejects the current date (handles stale years and equal-date rejections).
+     */
+    public static function nextStartDateAfterApiRejection(string $currentDate, string $parsedMinimum): string
+    {
+        $floor = self::defaultCheckoutMinimumStartDate();
+        $parsedMinimum = self::reconcileApiMinimumStartDate($parsedMinimum);
+        $currentDate = self::normalizeStartDate($currentDate);
+
+        try {
+            $target = \Illuminate\Support\Carbon::parse($parsedMinimum)->startOfDay();
+            $floorDate = \Illuminate\Support\Carbon::parse($floor)->startOfDay();
+            if ($target->lt($floorDate)) {
+                $target = $floorDate->copy();
+            }
+
+            if ($currentDate !== '') {
+                $current = \Illuminate\Support\Carbon::parse($currentDate)->startOfDay();
+                if ($current->gte($target)) {
+                    $target = $current->copy()->addDay();
+                }
+            }
+
+            return $target->format('Y-m-d');
+        } catch (\Throwable) {
+            return $floor;
+        }
     }
 
     public static function normalizeStartDate(string $value): string
@@ -336,9 +386,185 @@ final class SubscriptionCheckoutPayload
 
     public static function formatMinimumStartDateLabel(string $ymd): string
     {
+        $ymd = self::reconcileApiMinimumStartDate($ymd);
+
         return \Illuminate\Support\Carbon::parse($ymd)
             ->locale(app()->getLocale())
             ->translatedFormat('d M Y');
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public static function defaultDeliveryWeekdays(bool $withWeekend): array
+    {
+        return $withWeekend ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $daysData
+     * @return array<int, int>
+     */
+    public static function extractDeliveryDaysFromApi(?array $daysData, bool $withWeekend): array
+    {
+        $days = [];
+        if (is_array($daysData)) {
+            $list = $daysData['days'] ?? null;
+            if (is_array($list)) {
+                foreach ($list as $entry) {
+                    if (is_numeric($entry)) {
+                        $days[] = (int) $entry;
+                    } elseif (is_array($entry)) {
+                        $day = (int) ($entry['day'] ?? $entry['id'] ?? $entry['value'] ?? 0);
+                        if ($day > 0) {
+                            $days[] = $day;
+                        }
+                    }
+                }
+            }
+            for ($i = 0; $i < 7; $i++) {
+                $value = $daysData["days[{$i}]"] ?? null;
+                if (is_numeric($value)) {
+                    $days[] = (int) $value;
+                }
+            }
+        }
+
+        $days = array_values(array_unique(array_filter($days, static fn (int $d): bool => $d >= 1 && $d <= 7)));
+
+        return $days !== [] ? $days : self::defaultDeliveryWeekdays($withWeekend);
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $address
+     * @param  array<string, mixed>|null  $daysData
+     * @param  array<int, array<string, mixed>>  $durationRows
+     */
+    public static function resolveRegionDurationId(
+        ?array $address,
+        ?array $daysData,
+        int $zoneId,
+        int $planDurationId,
+        array $durationRows,
+    ): int {
+        foreach (['region_duration_id', 'regionDurationId'] as $key) {
+            $fromDays = is_array($daysData) ? data_get($daysData, $key) : null;
+            if (is_numeric($fromDays) && (int) $fromDays > 0) {
+                return (int) $fromDays;
+            }
+            $fromAddress = is_array($address) ? data_get($address, $key) : null;
+            if (is_numeric($fromAddress) && (int) $fromAddress > 0) {
+                return (int) $fromAddress;
+            }
+        }
+
+        foreach ([$daysData, $address] as $source) {
+            if (! is_array($source)) {
+                continue;
+            }
+            $nested = $source['region_duration'] ?? $source['regionDuration'] ?? null;
+            if (is_array($nested)) {
+                $id = (int) ($nested['id'] ?? $nested['region_duration_id'] ?? 0);
+                if ($id > 0) {
+                    return $id;
+                }
+            }
+        }
+
+        foreach ($durationRows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            if ($planDurationId > 0 && (int) ($row['id'] ?? 0) !== $planDurationId) {
+                continue;
+            }
+            $direct = (int) ($row['region_duration_id'] ?? 0);
+            if ($direct > 0) {
+                return $direct;
+            }
+            $regions = $row['region_durations'] ?? $row['regionDurations'] ?? [];
+            if (! is_array($regions)) {
+                continue;
+            }
+            foreach ($regions as $regionRow) {
+                if (! is_array($regionRow)) {
+                    continue;
+                }
+                $regionZoneId = (int) (
+                    $regionRow['zone_id']
+                    ?? $regionRow['city_id']
+                    ?? $regionRow['region_id']
+                    ?? 0
+                );
+                if ($zoneId > 0 && $regionZoneId > 0 && $regionZoneId !== $zoneId) {
+                    continue;
+                }
+                $id = (int) ($regionRow['id'] ?? $regionRow['region_duration_id'] ?? 0);
+                if ($id > 0) {
+                    return $id;
+                }
+            }
+            if ($planDurationId > 0 && (int) ($row['id'] ?? 0) === $planDurationId) {
+                foreach ($regions as $regionRow) {
+                    if (! is_array($regionRow)) {
+                        continue;
+                    }
+                    $id = (int) ($regionRow['id'] ?? $regionRow['region_duration_id'] ?? 0);
+                    if ($id > 0) {
+                        return $id;
+                    }
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * Merge API doc delivery address matrix into a subscription payload.
+     *
+     * @param  array<string, string>  $payload
+     * @param  array<string, mixed>|null  $address
+     * @param  array<string, mixed>|null  $daysData
+     * @param  array<int, array<string, mixed>>  $durationRows
+     * @return array<string, string>
+     */
+    public static function appendDeliveryAddressFields(
+        array $payload,
+        int $addressId,
+        ?array $address,
+        ?array $daysData,
+        array $durationRows,
+    ): array {
+        if ($addressId <= 0) {
+            return $payload;
+        }
+
+        $zoneId = (int) ($payload['zone_id'] ?? $address['city_id'] ?? $address['city']['id'] ?? $address['zone_id'] ?? 0);
+        $planDurationId = (int) ($payload['plan_duration_id'] ?? 0);
+        $withWeekend = filter_var($payload['with_weekend'] ?? '0', FILTER_VALIDATE_BOOLEAN);
+        $regionDurationId = self::resolveRegionDurationId(
+            $address,
+            $daysData,
+            $zoneId,
+            $planDurationId,
+            $durationRows,
+        );
+        $days = self::extractDeliveryDaysFromApi($daysData, $withWeekend);
+
+        $payload['addresses[0][address_id]'] = (string) $addressId;
+        $companyId = (string) ($address['company_id'] ?? $address['company']['id'] ?? '');
+        if ($companyId !== '' && $companyId !== '0') {
+            $payload['addresses[0][company_id]'] = $companyId;
+        }
+        if ($regionDurationId > 0) {
+            $payload['addresses[0][region_duration_id]'] = (string) $regionDurationId;
+        }
+        foreach ($days as $index => $day) {
+            $payload["addresses[0][days][{$index}]"] = (string) $day;
+        }
+
+        return $payload;
     }
 
     public static function startDateBeforeMinimumMessage(string $minDateYmd): string
@@ -392,10 +618,13 @@ final class SubscriptionCheckoutPayload
         }
 
         $min = self::minimumStartDateForDuration($durationRow);
-        $current = self::normalizeStartDate((string) ($payload['date'] ?? $payload['start_date'] ?? ''));
+        $current = self::effectiveStartDateForPayload((string) ($payload['date'] ?? $payload['start_date'] ?? ''));
         if ($current === '' || $current < $min) {
             $payload['date'] = $min;
             $payload['start_date'] = $min;
+        } else {
+            $payload['date'] = $current;
+            $payload['start_date'] = $current;
         }
 
         return $payload;
