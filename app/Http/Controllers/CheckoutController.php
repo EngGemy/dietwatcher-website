@@ -1103,6 +1103,15 @@ class CheckoutController extends Controller
         $defaultDays = SubscriptionCheckoutPayload::defaultDeliveryWeekdays($withWeekend === '1');
         $storedDays = is_array($address['days'] ?? null) ? $address['days'] : [];
         $daysToSync = $storedDays !== [] ? $storedDays : $defaultDays;
+        $isActive = filter_var($address['is_active'] ?? $address['isActive'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        if ($isActive && $storedDays !== []) {
+            return response()->json([
+                'success' => true,
+                'data' => $address,
+                'already_active' => true,
+            ]);
+        }
 
         $daysSync = $auth->updateAddressDeliveryDays($token, $addressId, $daysToSync);
         if (! ($daysSync['_http_ok'] ?? false)) {
@@ -1521,6 +1530,20 @@ class CheckoutController extends Controller
                         'body' => $daysSync,
                     ]);
                 }
+            }
+        }
+
+        if (
+            $isSubscriptionCheckout
+            && ($validated['delivery_type'] ?? '') === 'pickup'
+        ) {
+            $branchId = (int) ($validated['branch_id'] ?? 0);
+            if ($branchId <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('checkout.payment_blocker_pickup'),
+                    'errors' => ['branch_id' => [__('checkout.payment_blocker_pickup')]],
+                ], 422);
             }
         }
 

@@ -518,7 +518,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         </div>
 
                         <div x-show="moyasarError" x-cloak class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" x-text="moyasarError"></div>
-                        <div x-show="syncAddressError" x-cloak class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="syncAddressError"></div>
+                        <div x-show="syncAddressError && deliveryType === 'home'" x-cloak class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="syncAddressError"></div>
 
                         <div class="relative min-h-[160px] rounded-xl border border-gray-200 bg-gray-50 p-4">
                             <div
@@ -2192,9 +2192,25 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 }
             },
 
-            async activateCheckoutAddress(addressId) {
+            addressIsCheckoutReady(addr) {
+                if (! addr) {
+                    return false;
+                }
+                const active = addr.is_active === true || addr.isActive === true;
+                const days = Array.isArray(addr.days) ? addr.days : [];
+
+                return active && days.length > 0;
+            },
+
+            async activateCheckoutAddress(addressId, addr = null) {
                 if (! addressId) {
                     return false;
+                }
+                const row = addr || this.savedAddresses.find((a) => String(a.id) === String(addressId));
+                if (row && this.addressIsCheckoutReady(row)) {
+                    this.syncAddressError = '';
+
+                    return true;
                 }
                 try {
                     const res = await fetch('{{ route('checkout.select-address') }}', {
@@ -2222,15 +2238,32 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 }
             },
 
+            async autoSelectSavedAddressIfNeeded() {
+                if (this.deliveryType !== 'home' || this.selectedAddressId) {
+                    return false;
+                }
+                const saved = this.deliverableSavedAddresses();
+                if (saved.length === 0) {
+                    return false;
+                }
+                const preferred = saved.find((a) => this.addressIsCheckoutReady(a));
+                if (! preferred) {
+                    return false;
+                }
+                await this.selectSavedAddress(preferred);
+
+                return true;
+            },
+
             async selectSavedAddress(addr) {
                 if (! addr || this.deliveryType !== 'home') {
                     return;
                 }
                 this.resetPaymentSession();
                 this.applySavedAddress(addr);
-                const activated = await this.activateCheckoutAddress(addr.id);
+                const activated = await this.activateCheckoutAddress(addr.id, addr);
                 if (! activated) {
-                    this.moyasarError = this.syncAddressError || @json(__('checkout.confirm_saved_address_before_payment'));
+                    this.syncAddressError = this.syncAddressError || @json(__('checkout.confirm_saved_address_before_payment'));
                     this.clearMoyasarWidget();
 
                     return;
@@ -2295,7 +2328,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             selectBranch(id) {
-                this.resetPaymentSession();
+                this.resetPaymentSession(true);
+                this.syncAddressError = '';
                 this.selectedBranchId = String(id);
                 this.pickupPhase = 'done';
                 this.queueMoyasarBootstrap();
@@ -3135,10 +3169,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     }
                     this.showNameField = this.isContinueUser || ! (this.customerName || '').trim();
                     if (this.deliveryType === 'home' && ! this.selectedAddressId) {
-                        const saved = this.deliverableSavedAddresses();
-                        if (saved.length > 0) {
-                            await this.selectSavedAddress(saved[0]);
-
+                        const autoSelected = await this.autoSelectSavedAddressIfNeeded();
+                        if (autoSelected) {
                             return;
                         }
                     }
@@ -3188,11 +3220,12 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     }
                 });
                 this.$watch('deliveryType', (v) => {
-                    this.resetPaymentSession(false);
+                    this.resetPaymentSession(true);
                     if (v === 'pickup') {
                         this.syncPickupPhase();
                         this.coverageOk = true;
                         this.coverageMessage = '';
+                        this.syncAddressError = '';
                     } else {
                         this.coverageOk = !!this.selectedAddressId;
                         setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 300);
@@ -3229,11 +3262,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (this.phoneVerified) {
                     await this.refreshCustomerFromServer();
                     if (this.deliveryType === 'home' && ! this.selectedAddressId) {
-                        const saved = this.deliverableSavedAddresses();
-                        if (saved.length > 0) {
-                            await this.selectSavedAddress(saved[0]);
-                            bootstrappedViaAddress = true;
-                        }
+                        bootstrappedViaAddress = await this.autoSelectSavedAddressIfNeeded();
                     }
                     if (this.isPlanCheckout && ! bootstrappedViaAddress) {
                         await this.refreshMinStartDateFromApi();
