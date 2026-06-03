@@ -744,6 +744,27 @@ function googleMapPicker(opts) {
                     }
                     const inferredDistrictId = this.inferDistrictIdFromGeocode(results[0]);
                     this.form.district_id = inferredDistrictId || '';
+                    if (typeof console !== 'undefined' && console.debug) {
+                        const components = Array.isArray(results[0].address_components) ? results[0].address_components : [];
+                        const geoNames = components
+                            .filter((c) => Array.isArray(c.types) && c.types.some((t) => [
+                                'sublocality_level_1', 'sublocality_level_2', 'sublocality',
+                                'neighborhood', 'administrative_area_level_2', 'locality',
+                            ].includes(t)))
+                            .flatMap((c) => [c.long_name, c.short_name].filter(Boolean));
+                        const matched = (this.districts || []).find((d) => String(d?.id) === String(inferredDistrictId || ''));
+                        console.debug('[checkout-map] district match', {
+                            formatted_address: results[0].formatted_address,
+                            geo_names: geoNames,
+                            inferred_district_id: inferredDistrictId || null,
+                            matched_district: matched ? {
+                                id: matched.id,
+                                name: matched.name,
+                                district_identifier: matched.district_identifier,
+                            } : null,
+                            districts_count: (this.districts || []).length,
+                        });
+                    }
                     this.notifyCoverage(inferredDistrictId);
                     this.dispatchAddressDraft();
                     return;

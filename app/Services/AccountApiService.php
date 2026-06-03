@@ -469,14 +469,9 @@ class AccountApiService
         $payload['address_id'] = (string) $addressId;
 
         $auth = app(ApiAuthService::class);
-        $allAddresses = $auth->getAddresses($token, true, false);
-        $address = $auth->findAddressById($token, $addressId, false);
+        $address = $auth->findAddressById($token, $addressId, true);
         if (! is_array($address)) {
-            return __('checkout.address_not_in_delivery_zone');
-        }
-
-        if (! AddressCheckoutHelper::isDeliverableForSubscription($address, $allAddresses)) {
-            return __('checkout.address_not_in_delivery_zone');
+            return __('checkout.confirm_saved_address_before_payment');
         }
 
         $withWeekend = filter_var($payload['with_weekend'] ?? '0', FILTER_VALIDATE_BOOLEAN);
@@ -511,7 +506,10 @@ class AccountApiService
         );
 
         if (! isset($payload['addresses[0][region_duration_id]'])) {
-            return __('checkout.address_not_in_delivery_zone');
+            Log::info('AccountApiService subscription payload missing region_duration_id; deferring to API', [
+                'address_id' => $addressId,
+                'district_id' => $address['district']['id'] ?? $address['district_id'] ?? null,
+            ]);
         }
 
         return null;
@@ -626,10 +624,10 @@ class AccountApiService
         }
 
         $enrichError = $this->enrichSubscriptionDeliveryPayload($payload, $token);
-        if (($payload['receiving'] ?? '') === 'delivery' && ! isset($payload['addresses[0][region_duration_id]'])) {
+        if ($enrichError !== null) {
             return [
                 'ok' => false,
-                'message' => $enrichError ?: __('checkout.address_not_in_delivery_zone'),
+                'message' => $enrichError,
                 'min_start_date' => null,
                 'adjusted_start_date' => null,
                 'subscription_id' => null,
