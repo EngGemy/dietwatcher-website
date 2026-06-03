@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\SubscriptionCheckoutPayload;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -90,7 +91,7 @@ class ExternalDataService
     }
 
     /**
-     * @return array<string, mixed>|null  null = HTTP/transport failure (do not long-cache)
+     * @return array<string, mixed>|null null = HTTP/transport failure (do not long-cache)
      */
     protected function fetchCatalogGet(string $path, array $query = []): ?array
     {
@@ -140,6 +141,7 @@ class ExternalDataService
      * Cache successful catalog reads; never long-cache transport/HTTP failures.
      *
      * @template T
+     *
      * @param  callable(): T  $fetch
      * @return T
      */
@@ -517,7 +519,7 @@ class ExternalDataService
                 'delivery_price' => (float) (is_array($del) ? ($del['amount'] ?? 0) : $del),
                 'is_default' => (bool) ($d['is_default'] ?? false),
                 'label' => ($d['days'] ?? 0).' '.__('Days'),
-                'start_date' => \App\Support\SubscriptionCheckoutPayload::normalizeStartDate(
+                'start_date' => SubscriptionCheckoutPayload::normalizeStartDate(
                     (string) ($d['start_date'] ?? $d['startDate'] ?? $d['starts_at'] ?? $d['available_from'] ?? '')
                 ) ?: null,
             ];
@@ -579,6 +581,7 @@ class ExternalDataService
                 $label = trim((string) $m[1]);
                 $count = (int) ($m[2] ?? 1);
                 $out[] = $count > 1 ? ($label.' x'.$count) : $label;
+
                 continue;
             }
             if (preg_match('/^(.+?)\s+[Xx]\s*(\d+)\s*-\s*(\d+)\s*$/u', $line, $m)) {
@@ -590,6 +593,7 @@ class ExternalDataService
                 } else {
                     $out[] = $label.' x'.$min.'-x'.$max;
                 }
+
                 continue;
             }
             $out[] = $line;
@@ -786,6 +790,28 @@ class ExternalDataService
         $result = $this->getMeals(['group_id' => $groupId, 'page' => $page]);
 
         return $result['data'];
+    }
+
+    /**
+     * Homepage instant-order strip: preferred API group, then any published meals.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getInstantMealsForHome(int $limit = 4, int $preferredGroupId = 29): array
+    {
+        $limit = max(1, $limit);
+        $groupMeals = $preferredGroupId > 0 ? $this->getMealsByGroup($preferredGroupId) : [];
+        if ($groupMeals !== []) {
+            return array_slice($groupMeals, 0, $limit);
+        }
+
+        try {
+            $all = $this->getAllMeals(null);
+        } catch (\Throwable) {
+            $all = [];
+        }
+
+        return array_slice($all, 0, $limit);
     }
 
     /**
@@ -1386,7 +1412,7 @@ class ExternalDataService
             'region_durations' => is_array($d['region_durations'] ?? null)
                 ? $d['region_durations']
                 : (is_array($d['regionDurations'] ?? null) ? $d['regionDurations'] : []),
-            'start_date' => \App\Support\SubscriptionCheckoutPayload::normalizeStartDate(
+            'start_date' => SubscriptionCheckoutPayload::normalizeStartDate(
                 (string) ($d['start_date'] ?? $d['startDate'] ?? $d['starts_at'] ?? $d['available_from'] ?? '')
             ) ?: null,
         ];

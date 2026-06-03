@@ -226,15 +226,18 @@ class PaymentController extends Controller
             ? (int) data_get($checkoutSession, 'bootstrap.external_payment_id', 0)
             : 0;
 
-        $forwardQuery = array_filter([
-            'id' => $moyasarId,
-            'status' => $status,
-            'message' => $message,
-            'subscription_id' => $subscriptionId > 0 ? (string) $subscriptionId : null,
-            'payment_id' => $externalPaymentId > 0 ? (string) $externalPaymentId : null,
-        ], static fn ($value) => $value !== null && $value !== '');
+        $forwardQuery = array_filter(array_merge(
+            $request->query(),
+            [
+                'id' => $moyasarId,
+                'status' => $status,
+                'message' => $message,
+                'subscription_id' => $subscriptionId > 0 ? (string) $subscriptionId : null,
+                'payment_id' => $externalPaymentId > 0 ? (string) $externalPaymentId : null,
+            ],
+        ), static fn ($value) => $value !== null && $value !== '');
 
-        $apiForward = $this->accountApiService->forwardMoyasarPaymentCallback($forwardQuery);
+        $apiForward = $this->accountApiService->notifySubscriptionMoyasarPayment($forwardQuery);
         Log::info('Forwarded Moyasar subscription callback to external API', [
             'subscription_id' => $subscriptionId,
             'moyasar_id' => $moyasarId,
@@ -251,16 +254,18 @@ class PaymentController extends Controller
                 'status' => $status,
                 'message' => $message,
                 'last_forward_at' => time(),
-                'last_forward_ok' => (bool) ($apiForward['ok'] ?? false),
+                'last_forward_ok' => $this->accountApiService->paymentNotifyResponseSucceeded($apiForward),
             ],
         ]);
         session()->forget('checkout_api_subscription_checkout');
         session()->forget(CartManager::SESSION_SUBSCRIPTION);
         session()->forget(CartManager::SESSION_MARKET);
 
-        return redirect()->route('payment.subscription-confirm', [
+        return redirect()->route('payment.subscription-confirm', array_filter([
             'subscription' => $subscriptionId,
-        ]);
+            'moyasar_id' => $moyasarId,
+            'status' => $status,
+        ], static fn ($value) => $value !== null && $value !== ''));
     }
 
     /**

@@ -302,12 +302,20 @@ class ApiAuthService
     {
         try {
             $response = $this->httpWithToken($token)->delete($this->url("addresses/{$id}"));
+            $json = $response->json() ?? [];
+            if (! is_array($json)) {
+                $json = [];
+            }
+            $json['_http_ok'] = $response->successful();
+            if ($response->successful() && ! isset($json['success'])) {
+                $json['success'] = true;
+            }
 
-            return $response->json() ?? [];
+            return $json;
         } catch (\Exception $e) {
             Log::error('ApiAuthService::deleteAddress failed', ['id' => $id, 'error' => $e->getMessage()]);
 
-            return ['success' => false, 'message' => __('address.delete_failed')];
+            return ['success' => false, 'message' => __('address.delete_failed'), '_http_ok' => false];
         }
     }
 

@@ -797,6 +797,16 @@ class AccountApiService
      */
     public function forwardMoyasarPaymentCallback(array $query, ?string $token = null): array
     {
+        return $this->notifySubscriptionMoyasarPayment($query, $token);
+    }
+
+    /**
+     * Notify the external API that Moyasar payment succeeded (callback / confirm / verify).
+     *
+     * @param  array<string, scalar|null>  $query
+     */
+    public function notifySubscriptionMoyasarPayment(array $query, ?string $token = null): array
+    {
         $token = (string) ($token ?: session('external_api_token', ''));
         if ($token === '') {
             return $this->empty(__('account.login_required'));
@@ -806,22 +816,98 @@ class AccountApiService
             $query,
             static fn ($value) => $value !== null && $value !== '',
         );
+        $query['device_id'] = $query['device_id'] ?? $this->deviceId();
 
-        try {
-            return $this->decode(
-                $this->authedWithToken($token)->acceptJson()->get(
-                    $this->url('payments/callback'),
-                    $query,
-                )
-            );
-        } catch (\Throwable $e) {
-            Log::warning('AccountApiService::forwardMoyasarPaymentCallback failed', [
-                'error' => $e->getMessage(),
-                'query_keys' => array_keys($query),
-            ]);
+        $last = $this->empty(__('account.request_failed'));
 
-            return $this->empty(__('account.request_failed'));
+        foreach (['payments/callback', 'payments/confirm', 'payments/verify'] as $path) {
+            try {
+                $result = $this->decode(
+                    $this->authedWithToken($token)->acceptJson()->get(
+                        $this->url($path),
+                        $query,
+                    )
+                );
+                $last = $result;
+
+                Log::info('AccountApiService::notifySubscriptionMoyasarPayment attempt', [
+                    'path' => $path,
+                    'ok' => $result['ok'] ?? false,
+                    'status' => $result['status'] ?? null,
+                    'message' => $result['message'] ?? '',
+                    'query_keys' => array_keys($query),
+                ]);
+
+                if ($this->paymentNotifyResponseSucceeded($result)) {
+                    return $result;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('AccountApiService::notifySubscriptionMoyasarPayment failed', [
+                    'path' => $path,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
+
+        return $last;
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     */
+    public function paymentNotifyResponseSucceeded(array $result): bool
+    {
+        if ($result['ok'] ?? false) {
+            return true;
+        }
+
+        $raw = is_array($result['raw'] ?? null) ? $result['raw'] : [];
+        if (filter_var($raw['success'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return true;
+        }
+
+        $data = $result['data'] ?? null;
+        if (is_array($data)) {
+            $paymentStatus = strtolower((string) (
+                $data['status']
+                ?? data_get($data, 'payment.status', '')
+            ));
+            if (in_array($paymentStatus, ['paid', 'success', 'completed', 'confirmed'], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Build Moyasar notify query from subscription row + optional redirect params.
+     *
+     * @param  array<string, mixed>  $subscription
+     * @param  array<string, mixed>  $extras
+     * @return array<string, string>
+     */
+    public function buildMoyasarNotifyQuery(array $subscription, array $extras = []): array
+    {
+        $subscriptionId = (int) ($subscription['id'] ?? ($extras['subscription_id'] ?? 0));
+        $externalPaymentId = (int) (
+            $extras['external_payment_id']
+            ?? $extras['payment_id']
+            ?? data_get($subscription, 'payment.id', 0)
+        );
+        $moyasarId = trim((string) (
+            $extras['moyasar_id']
+            ?? $extras['id']
+            ?? ''
+        ));
+
+        return array_filter([
+            'id' => $moyasarId !== '' ? $moyasarId : null,
+            'status' => (string) ($extras['status'] ?? 'paid'),
+            'message' => isset($extras['message']) ? (string) $extras['message'] : null,
+            'subscription_id' => $subscriptionId > 0 ? (string) $subscriptionId : null,
+            'payment_id' => $externalPaymentId > 0 ? (string) $externalPaymentId : null,
+        ], static fn ($value) => $value !== null && $value !== '');
     }
 
     /**
@@ -855,10 +941,14 @@ class AccountApiService
      *
      * @param  array<string, mixed>  $pending
      */
-    public function maybeForwardPendingMoyasarCallback(array $pending, ?string $token = null): array
+    public function maybeForwardPendingMoyasarCallback(array $pending, ?string $token = null, ?array $subscription = null): array
     {
         $moyasarId = trim((string) ($pending['moyasar_id'] ?? ''));
-        if ($moyasarId === '') {
+        $externalPaymentId = (int) ($pending['external_payment_id'] ?? 0);
+        if ($moyasarId === '' && $externalPaymentId <= 0 && is_array($subscription)) {
+            $externalPaymentId = (int) data_get($subscription, 'payment.id', 0);
+        }
+        if ($moyasarId === '' && $externalPaymentId <= 0) {
             return $this->empty('missing_moyasar_id');
         }
 
@@ -868,22 +958,17 @@ class AccountApiService
         }
 
         $subscriptionId = (int) ($pending['subscription_id'] ?? 0);
-        $externalPaymentId = (int) ($pending['external_payment_id'] ?? 0);
+        $query = $this->buildMoyasarNotifyQuery(
+            is_array($subscription) ? $subscription : ['id' => $subscriptionId],
+            $pending,
+        );
 
-        $query = array_filter([
-            'id' => $moyasarId,
-            'status' => (string) ($pending['status'] ?? 'paid'),
-            'message' => $pending['message'] ?? null,
-            'subscription_id' => $subscriptionId > 0 ? (string) $subscriptionId : null,
-            'payment_id' => $externalPaymentId > 0 ? (string) $externalPaymentId : null,
-        ], static fn ($value) => $value !== null && $value !== '');
-
-        $result = $this->forwardMoyasarPaymentCallback($query, $token);
+        $result = $this->notifySubscriptionMoyasarPayment($query, $token);
 
         session([
             'pending_subscription_confirm' => array_merge($pending, [
                 'last_forward_at' => time(),
-                'last_forward_ok' => (bool) ($result['ok'] ?? false),
+                'last_forward_ok' => $this->paymentNotifyResponseSucceeded($result),
             ]),
         ]);
 

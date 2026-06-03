@@ -58,7 +58,15 @@
     const successMessage = @json(__('payment.subscription_confirmed_subtitle'));
     const pendingTitle = @json(__('payment.pending_title'));
     const pendingMessage = @json(__('payment.confirming_check_later'));
-    const statusUrl = @json(route('checkout.subscription-status')) + '?id=' + encodeURIComponent(String(subscriptionId));
+    const statusUrl = @json(route('checkout.subscription-status')) + '?' + new URLSearchParams((() => {
+        const params = new URLSearchParams(window.location.search);
+        const query = { id: String(subscriptionId) };
+        const moyasarId = params.get('moyasar_id');
+        const status = params.get('status');
+        if (moyasarId) query.moyasar_id = moyasarId;
+        if (status) query.status = status;
+        return query;
+    })()).toString();
 
     let attempt = 0;
     const maxAttempts = 18;

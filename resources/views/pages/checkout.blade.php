@@ -1289,6 +1289,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 @endpush
 
 @push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdn.jsdelivr.net/npm/moyasar-payment-form/dist/moyasar.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 @if($locale === 'ar')
@@ -1801,13 +1802,13 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             : '';
                         if (data.data && data.data.id) {
                             this.selectedAddressId = String(data.data.id);
-                            await this.refreshCustomerFromServer();
-                            const fresh = this.savedAddresses.find(a => String(a.id) === String(data.data.id));
-                            if (fresh) {
-                                this.applySavedAddress(fresh);
+                            const existingIdx = this.savedAddresses.findIndex(a => String(a.id) === String(data.data.id));
+                            if (existingIdx >= 0) {
+                                this.savedAddresses.splice(existingIdx, 1, data.data);
                             } else {
-                                this.applySavedAddress(data.data);
+                                this.savedAddresses = [data.data, ...this.savedAddresses];
                             }
+                            this.applySavedAddress(data.data);
                         } else {
                             await this.refreshCustomerFromServer();
                         }
@@ -1994,14 +1995,16 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     this.syncAddressError = '';
                     this._moyasarSessionFailed = false;
                     this._moyasarFingerprint = '';
-                    await this.refreshCustomerFromServer();
                     if (data.data && data.data.id) {
-                        let fresh = this.savedAddresses.find(a => String(a.id) === String(data.data.id));
-                        if (! fresh) {
-                            fresh = data.data;
-                            this.savedAddresses = [fresh, ...this.savedAddresses];
+                        const existingIdx = this.savedAddresses.findIndex(a => String(a.id) === String(data.data.id));
+                        if (existingIdx >= 0) {
+                            this.savedAddresses.splice(existingIdx, 1, data.data);
+                        } else {
+                            this.savedAddresses = [data.data, ...this.savedAddresses];
                         }
-                        this.applySavedAddress(fresh);
+                        this.applySavedAddress(data.data);
+                    } else {
+                        await this.refreshCustomerFromServer();
                     }
                     this.addingNewAddress = false;
                     this.addressConfirmedForSync = true;
@@ -2288,13 +2291,38 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (! addr || ! addr.id) {
                     return;
                 }
-                if (! window.confirm(@json(__('checkout.delete_saved_address_confirm')))) {
+
+                const confirmResult = typeof Swal !== 'undefined'
+                    ? await Swal.fire({
+                        title: @json(__('checkout.delete_saved_address_confirm')),
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: @json(__('Delete')),
+                        cancelButtonText: @json(__('Cancel')),
+                        reverseButtons: true,
+                        focusCancel: true,
+                    })
+                    : { isConfirmed: window.confirm(@json(__('checkout.delete_saved_address_confirm'))) };
+
+                if (! confirmResult.isConfirmed) {
                     return;
                 }
-                this.deletingAddressId = String(addr.id);
+
+                const addressId = String(addr.id);
+                const previousAddresses = [...this.savedAddresses];
+                this.savedAddresses = this.savedAddresses.filter(a => String(a.id) !== addressId);
+                this.deletingAddressId = addressId;
                 this.syncAddressError = '';
+
+                if (String(this.selectedAddressId) === addressId) {
+                    this.selectedAddressId = null;
+                    this.addressConfirmedForSync = false;
+                    this.resetPaymentSession(true);
+                    this.clearMoyasarWidget();
+                }
+
                 try {
-                    const deleteUrl = '{{ url('/checkout/addresses') }}/' + encodeURIComponent(String(addr.id));
+                    const deleteUrl = '{{ url('/checkout/addresses') }}/' + encodeURIComponent(addressId);
                     const res = await fetch(deleteUrl, {
                         method: 'DELETE',
                         headers: {
@@ -2304,19 +2332,30 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     });
                     const data = await res.json().catch(() => ({}));
                     if (! res.ok || ! data.success) {
-                        this.syncAddressError = data.message || @json(__('address.delete_failed'));
+                        this.savedAddresses = previousAddresses;
+                        const message = data.message || @json(__('address.delete_failed'));
+                        this.syncAddressError = message;
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({ icon: 'error', title: message, confirmButtonText: 'OK' });
+                        }
 
                         return;
                     }
-                    if (String(this.selectedAddressId) === String(addr.id)) {
-                        this.selectedAddressId = null;
-                        this.addressConfirmedForSync = false;
-                        this.resetPaymentSession(true);
-                        this.clearMoyasarWidget();
+
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: data.message || @json(__('address.deleted')),
+                            timer: 1800,
+                            showConfirmButton: false,
+                        });
                     }
-                    await this.refreshCustomerFromServer();
                 } catch (e) {
+                    this.savedAddresses = previousAddresses;
                     this.syncAddressError = @json(__('address.delete_failed'));
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({ icon: 'error', title: @json(__('address.delete_failed')), confirmButtonText: 'OK' });
+                    }
                 } finally {
                     this.deletingAddressId = null;
                 }

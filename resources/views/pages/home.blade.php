@@ -301,7 +301,7 @@
     {{-- Instant Orders Section --}}
     <section class="bg-gray-200 py-20">
         <div class="container">
-            <header class="section-header">
+            <header class="section-header section-header--center">
                 <h4 class="section-header__subtitle">{{ __('Instant Orders') }}</h4>
                 <h2 class="section-header__title">{{ __('Order Individual Meals Anytime') }}</h2>
                 <p class="section-header__desc">
@@ -309,10 +309,11 @@
                 </p>
             </header>
 
+            @if(count($instantMeals) > 0)
             <div class="products-rail" data-products-rail data-anim="fade-up">
                 <div class="products-rail__viewport">
                     <div class="products-rail__track" data-products-track>
-                @forelse($instantMeals as $meal)
+                @foreach($instantMeals as $meal)
                     @php
                         $mealImage = $meal['image_url'] ?? '';
                         $mealImageTrim = trim((string) $mealImage);
@@ -368,15 +369,7 @@
                             </div>
                         </div>
                     </article>
-                @empty
-                    <div class="col-span-full text-center py-16">
-                        <svg class="w-20 h-20 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-                        </svg>
-                        <h3 class="text-xl font-semibold text-black mb-2">{{ __('No meals available') }}</h3>
-                        <p class="text-black/60">{{ __('Check back soon for new meals.') }}</p>
-                    </div>
-                @endforelse
+                @endforeach
                     </div>
                 </div>
                 <div class="products-rail__cursor products-rail__cursor--dot" aria-hidden="true"></div>
@@ -384,6 +377,17 @@
                     <span>{{ __('Drag') }}</span>
                 </div>
             </div>
+            @else
+            <div class="products-empty-state" data-anim="fade-up">
+                <div class="products-empty-state__icon" aria-hidden="true">
+                    <svg class="h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                    </svg>
+                </div>
+                <h3 class="products-empty-state__title">{{ __('No meals available') }}</h3>
+                <p class="products-empty-state__desc">{{ __('Check back soon for new meals.') }}</p>
+            </div>
+            @endif
 
             <div class="mt-10 flex items-center justify-center md:mt-20">
                 <a href="{{ route('meals.index') }}" class="btn btn--primary btn--md">{{ __('Choose from Market') }}</a>
@@ -462,7 +466,7 @@
                 </p>
             </header>
 
-            <div class="testimonials-rail" data-testimonials-rail data-anim="fade-up">
+            <div class="testimonials-rail" data-testimonials-rail>
                 <div class="testimonials-rail__viewport" data-testimonials-viewport>
                     <div class="testimonials-rail__track" data-testimonials-track>
                 @forelse ($testimonials as $testimonial)
@@ -1047,6 +1051,31 @@
     --rail-gap: clamp(1rem, 1.6vw, 1.6rem);
     --card-width: clamp(240px, 20vw, 300px);
 }
+.products-empty-state {
+    max-width: 36rem;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem;
+    text-align: center;
+    border-radius: 1rem;
+    border: 1px dashed rgba(148, 163, 184, 0.45);
+    background: rgba(255, 255, 255, 0.72);
+}
+.products-empty-state__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+    color: rgba(100, 116, 139, 0.85);
+}
+.products-empty-state__title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin-bottom: 0.5rem;
+}
+.products-empty-state__desc {
+    color: rgba(15, 23, 42, 0.62);
+}
 .products-rail__viewport {
     overflow: hidden;
     border-radius: 16px;
@@ -1258,12 +1287,12 @@
     transform: translateY(0) scale(1);
 }
 .testimonials-rail.is-preparing .testimonials-rail__item:not([data-testimonial-clone="1"]) {
-    opacity: 0;
-    transform: translateY(16px) scale(.985);
-}
-.testimonials-rail.is-preparing [data-testimonial-clone="1"] {
     opacity: 1;
     transform: none;
+}
+.testimonials-rail.is-preparing [data-testimonial-clone="1"] {
+    opacity: 0;
+    pointer-events: none;
 }
 .testimonials-rail.is-ready .testimonials-rail__item {
     animation: testimonialCardIn .55s cubic-bezier(.16,1,.3,1) forwards;
@@ -1836,6 +1865,8 @@
             var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             var baseItems = Array.from(track.querySelectorAll('[data-testimonial-item]'));
             if (!baseItems.length) return;
+
+            section.classList.add('is-ready');
 
             var state = {
                 x: 0,

@@ -1045,14 +1045,16 @@ class CheckoutController extends Controller
 
         if ($httpOk && ($apiStatus === 200 || $hasData)) {
             $stored = AddressCheckoutHelper::unwrapStoredAddress($result['data'] ?? null);
-            $refreshed = $auth->findAddressById($userToken, (int) ($stored['id'] ?? 0), false);
-            if (is_array($refreshed)) {
-                $stored = $refreshed;
+            if (is_array($stored) && (int) ($stored['id'] ?? 0) > 0) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $stored,
+                ]);
             }
 
             return response()->json([
                 'success' => true,
-                'data' => $stored ?? $result['data'] ?? null,
+                'data' => $result['data'] ?? null,
             ]);
         }
 
@@ -1165,7 +1167,8 @@ class CheckoutController extends Controller
 
         $result = $auth->deleteAddress($token, $addressId);
         $ok = filter_var($result['success'] ?? false, FILTER_VALIDATE_BOOLEAN)
-            || filter_var($result['ok'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            || filter_var($result['ok'] ?? false, FILTER_VALIDATE_BOOLEAN)
+            || filter_var($result['_http_ok'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
         if (! $ok) {
             return response()->json([
@@ -1342,13 +1345,28 @@ class CheckoutController extends Controller
         }
 
         $sub = $this->extractSubscriptionRow($result['data'] ?? null, $subscriptionId);
-        $pending = session('pending_subscription_confirm');
-        if (
-            is_array($pending)
-            && (int) ($pending['subscription_id'] ?? 0) === $subscriptionId
-            && ! $this->accountApiService->isSubscriptionPaymentConfirmed($sub)
-        ) {
-            $this->accountApiService->maybeForwardPendingMoyasarCallback($pending, $token);
+
+        if (! $this->accountApiService->isSubscriptionPaymentConfirmed($sub)) {
+            $pending = is_array(session('pending_subscription_confirm'))
+                ? session('pending_subscription_confirm')
+                : ['subscription_id' => $subscriptionId];
+
+            if ((int) ($pending['subscription_id'] ?? 0) !== $subscriptionId) {
+                $pending['subscription_id'] = $subscriptionId;
+            }
+
+            $moyasarId = trim((string) $request->query('moyasar_id', ''));
+            if ($moyasarId !== '') {
+                $pending['moyasar_id'] = $moyasarId;
+            }
+            if ($request->query('status')) {
+                $pending['status'] = (string) $request->query('status');
+            }
+            if (empty($pending['external_payment_id'])) {
+                $pending['external_payment_id'] = (int) data_get($sub, 'payment.id', 0);
+            }
+
+            $this->accountApiService->maybeForwardPendingMoyasarCallback($pending, $token, $sub);
             $retry = $this->accountApiService->showSubscription($subscriptionId);
             if ($retry['ok'] ?? false) {
                 $sub = $this->extractSubscriptionRow($retry['data'] ?? null, $subscriptionId);
