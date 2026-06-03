@@ -51,15 +51,6 @@ class CheckoutController extends Controller
             $addresses = [];
         }
 
-        $blocked = session('checkout_deleted_address_ids', []);
-        if (is_array($blocked) && $blocked !== []) {
-            $blockedLookup = array_fill_keys(array_map('intval', $blocked), true);
-            $addresses = array_values(array_filter(
-                $addresses,
-                static fn (array $row): bool => ! isset($blockedLookup[(int) ($row['id'] ?? 0)])
-            ));
-        }
-
         return AddressCheckoutHelper::markDeliverability($addresses);
     }
 
@@ -76,22 +67,6 @@ class CheckoutController extends Controller
         ));
 
         return AddressCheckoutHelper::markDeliverability($addresses);
-    }
-
-    /**
-     * @return array<int, int>
-     */
-    private function rememberDeletedCheckoutAddress(int $addressId): array
-    {
-        $blocked = session('checkout_deleted_address_ids', []);
-        if (! is_array($blocked)) {
-            $blocked = [];
-        }
-        $blocked[] = $addressId;
-        $blocked = array_values(array_unique(array_filter(array_map('intval', $blocked), static fn (int $id): bool => $id > 0)));
-        session(['checkout_deleted_address_ids' => $blocked]);
-
-        return $blocked;
     }
 
     public function __construct(
@@ -1141,7 +1116,7 @@ class CheckoutController extends Controller
     }
 
     /**
-     * POST /checkout/select-address — mark a saved address active for subscription checkout.
+     * POST /checkout/select-address — POST /addresses/{id}/days (same as mobile app).
      */
     public function selectCheckoutAddress(Request $request): JsonResponse
     {
@@ -1167,56 +1142,30 @@ class CheckoutController extends Controller
 
         $addressId = (int) $data['address_id'];
         $auth = app(ApiAuthService::class);
-        $address = $auth->findAddressById($token, $addressId, false);
-        if (! is_array($address)) {
-            return response()->json([
-                'success' => false,
-                'message' => __('checkout.confirm_saved_address_before_payment'),
-            ], 422);
-        }
-
-        $prepareError = $auth->prepareAddressForDeliveryActivation($token, $addressId);
-        if ($prepareError !== null) {
-            return response()->json([
-                'success' => false,
-                'message' => $prepareError,
-            ], 422);
-        }
 
         $cart = session()->get(CartManager::SESSION_SUBSCRIPTION)
             ?? session()->get(CartManager::SESSION_MARKET, []);
         $withWeekend = SubscriptionCheckoutPayload::resolveWithWeekend($cart, $this->externalDataService);
         $defaultDays = SubscriptionCheckoutPayload::defaultDeliveryWeekdays($withWeekend === '1');
-        $storedDays = is_array($address['days'] ?? null) ? $address['days'] : [];
-        $daysToSync = $storedDays !== [] ? $storedDays : $defaultDays;
 
-        if ($storedDays !== []) {
-            return response()->json([
-                'success' => true,
-                'data' => $address,
-                'already_active' => true,
-                'addresses' => $this->checkoutManageableAddresses($token),
-            ]);
-        }
+        $sync = $auth->syncAddressDeliveryDaysForCheckout(
+            $token,
+            $addressId,
+            $defaultDays,
+            $withWeekend === '1',
+        );
 
-        $daysSync = $auth->updateAddressDeliveryDays($token, $addressId, $daysToSync);
-        if (! ($daysSync['_http_ok'] ?? false)) {
-            Log::warning('CheckoutController::selectCheckoutAddress days sync failed', [
-                'address_id' => $addressId,
-                'body' => $daysSync,
-            ]);
-
+        if (! ($sync['ok'] ?? false)) {
             return response()->json([
                 'success' => false,
-                'message' => (string) ($daysSync['message'] ?? __('address.save_failed')),
+                'message' => (string) ($sync['message'] ?? __('address.save_failed')),
             ], 422);
         }
 
-        $refreshed = $auth->findAddressById($token, $addressId, false);
-
         return response()->json([
             'success' => true,
-            'data' => $refreshed ?? $address,
+            'data' => $sync['address'],
+            'already_active' => (bool) ($sync['already_active'] ?? false),
             'addresses' => $this->checkoutManageableAddresses($token),
         ]);
     }
@@ -1252,28 +1201,11 @@ class CheckoutController extends Controller
 
         $result = $auth->deleteAddress($token, $addressId);
         if (! filter_var($result['success'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
-            $deactivated = $auth->deactivateAddress($token, $addressId);
-            $remaining = $auth->findAddressById($token, $addressId, false);
-            if (
-                ($deactivated['_http_ok'] ?? false)
-                && ($remaining === null || ! ApiAuthService::isAddressRowActive($remaining))
-            ) {
-                $this->rememberDeletedCheckoutAddress($addressId);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => __('address.deleted'),
-                    'addresses' => $this->checkoutManageableAddresses($token),
-                ]);
-            }
-
             return response()->json([
                 'success' => false,
                 'message' => (string) ($result['message'] ?? __('address.delete_failed')),
             ], 422);
         }
-
-        $this->rememberDeletedCheckoutAddress($addressId);
 
         return response()->json([
             'success' => true,
@@ -1675,45 +1607,22 @@ class CheckoutController extends Controller
             }
 
             $auth = app(ApiAuthService::class);
-            $saved = $auth->findAddressById($token, $addressId, false);
-            if (! is_array($saved)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => __('checkout.confirm_saved_address_before_payment'),
-                    'errors' => ['selected_address_id' => [__('checkout.confirm_saved_address_before_payment')]],
-                ], 422);
-            }
-
             $withWeekend = SubscriptionCheckoutPayload::resolveWithWeekend($cart, $this->externalDataService);
             $defaultDays = SubscriptionCheckoutPayload::defaultDeliveryWeekdays($withWeekend === '1');
-            $storedDays = is_array($saved['days'] ?? null) ? $saved['days'] : [];
-            $daysToSync = $storedDays !== [] ? $storedDays : $defaultDays;
-            $isActive = filter_var($saved['is_active'] ?? $saved['isActive'] ?? false, FILTER_VALIDATE_BOOLEAN);
-            if (! $isActive || $storedDays === []) {
-                $prepareError = $auth->prepareAddressForDeliveryActivation($token, $addressId);
-                if ($prepareError !== null) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => $prepareError,
-                        'errors' => ['selected_address_id' => [$prepareError]],
-                    ], 422);
-                }
+            $sync = $auth->syncAddressDeliveryDaysForCheckout(
+                $token,
+                $addressId,
+                $defaultDays,
+                $withWeekend === '1',
+            );
+            if (! ($sync['ok'] ?? false)) {
+                $message = (string) ($sync['message'] ?? __('address.save_failed'));
 
-                $daysSync = $auth->updateAddressDeliveryDays($token, $addressId, $daysToSync);
-                if (! ($daysSync['_http_ok'] ?? false)) {
-                    Log::warning('CheckoutController::moyasarSession address activation failed', [
-                        'address_id' => $addressId,
-                        'body' => $daysSync,
-                    ]);
-
-                    $message = (string) ($daysSync['message'] ?? __('address.save_failed'));
-
-                    return response()->json([
-                        'success' => false,
-                        'message' => $message,
-                        'errors' => ['selected_address_id' => [$message]],
-                    ], 422);
-                }
+                return response()->json([
+                    'success' => false,
+                    'message' => $message,
+                    'errors' => ['selected_address_id' => [$message]],
+                ], 422);
             }
         }
 

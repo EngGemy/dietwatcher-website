@@ -480,25 +480,18 @@ class AccountApiService
 
         $withWeekend = filter_var($payload['with_weekend'] ?? '0', FILTER_VALIDATE_BOOLEAN);
         $defaultDays = SubscriptionCheckoutPayload::defaultDeliveryWeekdays($withWeekend);
-        $storedDays = is_array($address['days'] ?? null) ? $address['days'] : [];
+        $storedDays = $auth->resolveAddressDeliveryDays($token, $addressId, $address, $withWeekend);
         if ($storedDays === []) {
-            $prepareError = $auth->prepareAddressForDeliveryActivation($token, $addressId);
-            if ($prepareError !== null) {
-                return $prepareError;
+            $sync = $auth->syncAddressDeliveryDaysForCheckout($token, $addressId, $defaultDays, $withWeekend);
+            if (! ($sync['ok'] ?? false)) {
+                return (string) ($sync['message'] ?? __('checkout.address_max_active_delivery'));
             }
 
-            $daysSync = $auth->updateAddressDeliveryDays($token, $addressId, $defaultDays);
-            if (! ($daysSync['_http_ok'] ?? false)) {
-                Log::warning('AccountApiService::updateAddressDeliveryDays failed', [
-                    'address_id' => $addressId,
-                    'body' => $daysSync,
-                ]);
-
-                return (string) ($daysSync['message'] ?? __('checkout.address_max_active_delivery'));
-            }
-
-            $address['days'] = $defaultDays;
+            $address = is_array($sync['address'] ?? null) ? $sync['address'] : $address;
+            $storedDays = $auth->resolveAddressDeliveryDays($token, $addressId, $address, $withWeekend);
         }
+
+        $address['days'] = $storedDays;
 
         $daysResult = $this->getAddressDeliveryDays($addressId, $token);
         $daysData = is_array($daysResult['data'] ?? null) ? $daysResult['data'] : null;
@@ -571,7 +564,7 @@ class AccountApiService
         }
 
         $data = is_array($calc['data'] ?? null) ? $calc['data'] : [];
-        $apiMin = SubscriptionCheckoutPayload::extractApiMinStartDate($data);
+        $apiMin = SubscriptionCheckoutPayload::extractRawApiMinStartDate($data);
 
         if ($apiMin === '') {
             $payload['date'] = $userDate;
@@ -586,9 +579,16 @@ class AccountApiService
         }
 
         if ($userDate < $apiMin) {
+            Log::info('AccountApiService clamping subscription start date to API minimum', [
+                'requested' => $userDate,
+                'api_min' => $apiMin,
+            ]);
+            $payload['date'] = $apiMin;
+            $payload['start_date'] = $apiMin;
+
             return [
-                'ok' => false,
-                'message' => SubscriptionCheckoutPayload::startDateBeforeMinimumMessage($apiMin),
+                'ok' => true,
+                'message' => '',
                 'min_start_date' => $apiMin,
                 'payload' => $payload,
             ];

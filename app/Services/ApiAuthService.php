@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Support\AddressCheckoutHelper;
 use App\Support\SaudiPhone;
+use App\Support\SubscriptionCheckoutPayload;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -256,7 +257,7 @@ class ApiAuthService
             return filter_var($addr['is_active'] ?? $addr['isActive'], FILTER_VALIDATE_BOOLEAN);
         }
 
-        return true;
+        return false;
     }
 
     /**
@@ -319,19 +320,16 @@ class ApiAuthService
     }
 
     /**
-     * Deactivate delivery on an address so another can be activated (API max: 2 active).
+     * GET /addresses/{id}/days — weekday delivery slots (same as mobile app).
      */
-    public function deactivateAddress(string $token, int $addressId): array
+    public function getAddressDeliveryDays(string $token, int $addressId): array
     {
         if ($addressId <= 0) {
             return ['success' => false, 'message' => __('address.save_failed'), '_http_ok' => false];
         }
 
         try {
-            $response = $this->httpWithToken($token)->asForm()->post(
-                $this->url("addresses/{$addressId}"),
-                ['is_active' => '0']
-            );
+            $response = $this->httpWithToken($token)->get($this->url("addresses/{$addressId}/days"));
             $json = $response->json() ?? [];
             if (! is_array($json)) {
                 $json = [];
@@ -341,7 +339,7 @@ class ApiAuthService
 
             return $json;
         } catch (\Exception $e) {
-            Log::warning('ApiAuthService::deactivateAddress failed', [
+            Log::warning('ApiAuthService::getAddressDeliveryDays failed', [
                 'address_id' => $addressId,
                 'error' => $e->getMessage(),
             ]);
@@ -351,26 +349,117 @@ class ApiAuthService
     }
 
     /**
-     * Free a delivery slot before activating $addressId (external API allows 2 active max).
+     * @param  array<string, mixed>|null  $address
+     * @return array<int, int>
      */
-    public function prepareAddressForDeliveryActivation(string $token, int $addressId): ?string
+    public function resolveAddressDeliveryDays(string $token, int $addressId, ?array $address = null, bool $withWeekend = true): array
     {
-        if ($addressId <= 0) {
-            return __('checkout.confirm_saved_address_before_payment');
+        $address ??= $this->findAddressById($token, $addressId, false);
+        if (is_array($address) && is_array($address['days'] ?? null) && $address['days'] !== []) {
+            return SubscriptionCheckoutPayload::extractDeliveryDays($address, null, $withWeekend);
         }
 
+        $daysResult = $this->getAddressDeliveryDays($token, $addressId);
+        $daysData = is_array($daysResult['data'] ?? null) ? $daysResult['data'] : null;
+
+        return SubscriptionCheckoutPayload::extractDeliveryDays($address, $daysData, $withWeekend);
+    }
+
+    /**
+     * Same rule as AddressDayUpdateAction: reject when more than one other address is active.
+     */
+    public function countOtherActiveAddresses(string $token, int $addressId): int
+    {
         $rows = $this->getAddresses($token, true, false);
+        $count = 0;
         foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
             $otherId = (int) ($row['id'] ?? 0);
             if ($otherId <= 0 || $otherId === $addressId) {
                 continue;
             }
             if (self::isAddressRowActive($row)) {
-                $this->deactivateAddress($token, $otherId);
+                $count++;
             }
         }
 
-        return null;
+        return $count;
+    }
+
+    /**
+     * Activate delivery days via POST /addresses/{id}/days (mirrors mobile API flow).
+     *
+     * @param  array<int, int>  $defaultDays
+     * @return array{ok: bool, message: string, address: array<string, mixed>|null, already_active: bool}
+     */
+    public function syncAddressDeliveryDaysForCheckout(
+        string $token,
+        int $addressId,
+        array $defaultDays,
+        bool $withWeekend = true,
+    ): array {
+        if ($addressId <= 0) {
+            return [
+                'ok' => false,
+                'message' => __('checkout.confirm_saved_address_before_payment'),
+                'address' => null,
+                'already_active' => false,
+            ];
+        }
+
+        $address = $this->findAddressById($token, $addressId, false);
+        if (! is_array($address)) {
+            return [
+                'ok' => false,
+                'message' => __('checkout.confirm_saved_address_before_payment'),
+                'address' => null,
+                'already_active' => false,
+            ];
+        }
+
+        $days = $this->resolveAddressDeliveryDays($token, $addressId, $address, $withWeekend);
+        $isActive = self::isAddressRowActive($address);
+
+        if ($isActive && $days !== []) {
+            return [
+                'ok' => true,
+                'message' => '',
+                'address' => $address,
+                'already_active' => true,
+            ];
+        }
+
+        if ($this->countOtherActiveAddresses($token, $addressId) > 1) {
+            return [
+                'ok' => false,
+                'message' => (string) __('checkout.address_max_active_delivery'),
+                'address' => null,
+                'already_active' => false,
+            ];
+        }
+
+        $daysToSync = $days !== [] ? $days : $defaultDays;
+        $sync = $this->updateAddressDeliveryDays($token, $addressId, $daysToSync);
+        if (! ($sync['_http_ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'message' => $this->extractApiMessage($sync, (int) ($sync['status'] ?? 422))
+                    ?: __('address.save_failed'),
+                'address' => null,
+                'already_active' => false,
+            ];
+        }
+
+        $refreshed = $this->findAddressById($token, $addressId, false);
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'address' => is_array($refreshed) ? $refreshed : $address,
+            'already_active' => false,
+        ];
     }
 
     /**
@@ -399,37 +488,14 @@ class ApiAuthService
         try {
             $response = $this->httpWithToken($token)->delete($this->url("addresses/{$id}"));
             $json = $this->normalizeAddressMutationResponse($response);
-
-            if ($this->addressDeleteVerified($token, $id, $json)) {
-                $json['success'] = true;
-
-                return $json;
+            $json['message'] = $this->extractApiMessage($json, $response->status());
+            if (! array_key_exists('success', $json)) {
+                $json['success'] = $response->successful();
+            } else {
+                $json['success'] = filter_var($json['success'], FILTER_VALIDATE_BOOLEAN);
             }
 
-            foreach ($this->addressDeleteFallbackAttempts($id) as $attempt) {
-                try {
-                    $fallbackResponse = $attempt($token);
-                    $fallbackJson = $this->normalizeAddressMutationResponse($fallbackResponse);
-                    if ($this->addressDeleteVerified($token, $id, $fallbackJson)) {
-                        $fallbackJson['success'] = true;
-
-                        return $fallbackJson;
-                    }
-                } catch (\Throwable $fallbackError) {
-                    Log::debug('ApiAuthService::deleteAddress fallback failed', [
-                        'id' => $id,
-                        'error' => $fallbackError->getMessage(),
-                    ]);
-                }
-            }
-
-            return [
-                'success' => false,
-                'message' => $this->extractApiMessage($json, (int) ($json['status'] ?? $response->status()))
-                    ?: __('address.delete_failed'),
-                '_http_ok' => (bool) ($json['_http_ok'] ?? false),
-                'status' => (int) ($json['status'] ?? $response->status()),
-            ];
+            return $json;
         } catch (\Exception $e) {
             Log::error('ApiAuthService::deleteAddress failed', ['id' => $id, 'error' => $e->getMessage()]);
 
@@ -469,55 +535,6 @@ class ApiAuthService
         $json['status'] = $response->status();
 
         return $json;
-    }
-
-    /**
-     * @param  array<string, mixed>  $json
-     */
-    private function addressDeleteVerified(string $token, int $id, array $json): bool
-    {
-        if (isset($json['success']) && ! filter_var($json['success'], FILTER_VALIDATE_BOOLEAN)) {
-            return false;
-        }
-
-        if (! filter_var($json['_http_ok'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
-            return false;
-        }
-
-        try {
-            $response = $this->httpWithToken($token)->get($this->url('addresses'));
-            if (! $response->successful()) {
-                return false;
-            }
-        } catch (\Throwable $e) {
-            Log::warning('ApiAuthService::addressDeleteVerified list fetch failed', [
-                'id' => $id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return false;
-        }
-
-        $remaining = $this->findAddressById($token, $id, false);
-        if ($remaining === null) {
-            return true;
-        }
-
-        return ! self::isAddressRowActive($remaining);
-    }
-
-    /**
-     * @return array<int, callable(string): \Illuminate\Http\Client\Response>
-     */
-    private function addressDeleteFallbackAttempts(int $id): array
-    {
-        return [
-            fn (string $token) => $this->httpWithToken($token)->asForm()->post($this->url("addresses/{$id}"), ['_method' => 'DELETE']),
-            fn (string $token) => $this->httpWithToken($token)->asForm()->post($this->url("addresses/{$id}"), [
-                'is_active' => '0',
-                'isActive' => '0',
-            ]),
-        ];
     }
 
     // ─── Districts ────────────────────────────────────────────────────

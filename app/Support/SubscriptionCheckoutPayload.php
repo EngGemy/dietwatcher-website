@@ -233,6 +233,33 @@ final class SubscriptionCheckoutPayload
     }
 
     /**
+     * Authoritative API minimum start date (no far-future cap — used before payment clamp).
+     *
+     * @param  array<string, mixed>|null  $data
+     */
+    public static function extractRawApiMinStartDate(?array $data): string
+    {
+        if (! is_array($data)) {
+            return '';
+        }
+
+        foreach ([
+            'first_available_date_for_subscription',
+            'min_start_date',
+            'first_available_date',
+            'minimum_start_date',
+            'available_from',
+        ] as $key) {
+            $normalized = self::normalizeStartDate((string) ($data[$key] ?? ''));
+            if ($normalized !== '') {
+                return $normalized;
+            }
+        }
+
+        return '';
+    }
+
+    /**
      * Reject start dates in the past or unreasonably far in the future (bad API / stale subscription data).
      */
     public static function sanitizeSubscriptionStartDate(string $candidate): string

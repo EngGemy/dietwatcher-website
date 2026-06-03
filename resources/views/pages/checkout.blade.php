@@ -2230,12 +2230,6 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (! addressId) {
                     return false;
                 }
-                const row = addr || this.savedAddresses.find((a) => String(a.id) === String(addressId));
-                if (row && this.addressIsCheckoutReady(row)) {
-                    this.syncAddressError = '';
-
-                    return true;
-                }
                 try {
                     const res = await fetch('{{ route('checkout.select-address') }}', {
                         method: 'POST',
@@ -3053,32 +3047,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     if (! res.ok || ! data.success) {
                         return;
                     }
-                    const apiMin = this.sanitizeSubscriptionStartDate(
-                        String(data.first_available_date_for_subscription || data.min_start_date || '').trim().slice(0, 10)
-                    );
+                    const apiMin = String(data.first_available_date_for_subscription || data.min_start_date || '').trim().slice(0, 10);
                     if (apiMin) {
                         this.applyApiMinStartDate(apiMin);
                     }
                 } catch (e) {}
-            },
-
-            sanitizeSubscriptionStartDate(candidate) {
-                const normalized = String(candidate || '').trim().slice(0, 10);
-                if (! /^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-                    return '';
-                }
-                const parts = normalized.split('-').map((v) => parseInt(v, 10));
-                const parsed = new Date(parts[0], parts[1] - 1, parts[2]);
-                parsed.setHours(0, 0, 0, 0);
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const max = new Date(today);
-                max.setDate(max.getDate() + 180);
-                if (parsed < today || parsed > max) {
-                    return '';
-                }
-
-                return normalized;
             },
 
             applyApiMinStartDate(apiMin) {
