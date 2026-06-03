@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\AddressCheckoutHelper;
 use App\Support\SaudiPhone;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
@@ -164,16 +165,51 @@ class ApiAuthService
     /**
      * GET /addresses  (requires Sanctum token)
      */
-    public function getAddresses(string $token, bool $raw = false): array
+    public function getAddresses(string $token, bool $raw = false, bool $activeOnly = true): array
     {
         try {
-            $response = $this->httpWithToken($token)->get($this->url('addresses'));
+            $params = [];
+            if ($activeOnly) {
+                // External API supports isActive query filtering.
+                $params['isActive'] = '1';
+            }
+            $response = $this->httpWithToken($token)->get($this->url('addresses'), $params);
             $body = $response->json();
-            if ($raw) {
-                return is_array($body) ? $body : [];
+
+            $rows = [];
+            if (is_array($body)) {
+                if (isset($body['data']) && is_array($body['data'])) {
+                    // Handles: { data: [...] } and { data: { data: [...] } }
+                    if (array_is_list($body['data'])) {
+                        $rows = $body['data'];
+                    } elseif (isset($body['data']['data']) && is_array($body['data']['data'])) {
+                        $rows = $body['data']['data'];
+                    } elseif (isset($body['data']['items']) && is_array($body['data']['items'])) {
+                        $rows = $body['data']['items'];
+                    } else {
+                        $rows = array_values(array_filter($body['data'], 'is_array'));
+                    }
+                } elseif (isset($body['items']) && is_array($body['items'])) {
+                    $rows = $body['items'];
+                } elseif (array_is_list($body)) {
+                    $rows = $body;
+                }
             }
 
-            return $body['data'] ?? $body ?? [];
+            if ($activeOnly) {
+                $rows = array_values(array_filter($rows, static function ($addr): bool {
+                    if (! is_array($addr)) {
+                        return false;
+                    }
+
+                    return (bool) ($addr['is_active'] ?? $addr['isActive'] ?? true) === true;
+                }));
+            }
+
+            $rows = array_values(array_filter($rows, 'is_array'));
+            $rows = AddressCheckoutHelper::dedupeRows($rows);
+
+            return $rows;
         } catch (\Exception $e) {
             Log::error('ApiAuthService::getAddresses failed', ['error' => $e->getMessage()]);
 

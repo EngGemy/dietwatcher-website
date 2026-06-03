@@ -13,6 +13,7 @@ use App\Models\Settings\Setting;
 use App\Services\AccountApiService;
 use App\Services\ApiAuthService;
 use App\Services\ExternalDataService;
+use App\Support\AddressCheckoutHelper;
 use App\Support\SubscriptionCheckoutPayload;
 use App\Services\Payment\MoyasarPaymentService;
 use App\Support\SaudiPhone;
@@ -311,6 +312,12 @@ class CheckoutController extends Controller
 
         $checkoutProgramId = $hasPlanItems && $firstPlanItem ? (int) ($firstPlanItem['id'] ?? 0) : 0;
 
+        $minStartDate = SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate();
+        $defaultStartDate = SubscriptionCheckoutPayload::normalizeStartDate((string) old('start_date', ''));
+        if ($defaultStartDate === '' || $defaultStartDate < $minStartDate) {
+            $defaultStartDate = $minStartDate;
+        }
+
         // When API returns no rows server-side, checkout JS can still fetch /api/plan/{id}/durations; this seeds one card from cart if needed.
         $cartDurationFallback = null;
         if ($hasPlanItems && $planDurations === [] && $firstPlanItem) {
@@ -342,7 +349,9 @@ class CheckoutController extends Controller
             'selectedDurationIdFromCart',
             'preferredPlanDurationId',
             'checkoutProgramId',
-            'cartDurationFallback'
+            'cartDurationFallback',
+            'defaultStartDate',
+            'minStartDate',
         ));
     }
 
@@ -390,7 +399,7 @@ class CheckoutController extends Controller
         ) {
             $token = session('external_api_token');
             if (is_string($token) && $token !== '') {
-                $savedAddresses = app(ApiAuthService::class)->getAddresses($token);
+                $savedAddresses = app(ApiAuthService::class)->getAddresses($token, true, false);
                 if (is_array($savedAddresses)) {
                     $picked = collect($savedAddresses)->first(
                         fn ($a) => (int) ($a['id'] ?? 0) === (int) $validated['selected_address_id']
@@ -949,11 +958,31 @@ class CheckoutController extends Controller
         ];
 
         $userToken = session('external_api_token');
-        if (is_string($userToken) && $userToken !== '') {
-            $result = app(ApiAuthService::class)->storeAddress($userToken, $payload);
-        } else {
-            $result = $this->externalDataService->createAddress($payload);
+        if (! is_string($userToken) || $userToken === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.verify_phone_to_save_address'),
+            ], 401);
         }
+
+        $auth = app(ApiAuthService::class);
+        $existing = $auth->getAddresses($userToken, true, false);
+        $candidate = array_merge($payload, [
+            'district_id' => (int) $data['delivery_district_id'],
+            'latitude' => (float) $data['delivery_lat'],
+            'longitude' => (float) $data['delivery_lng'],
+        ]);
+        $duplicate = AddressCheckoutHelper::findDuplicate($existing, $candidate);
+        if ($duplicate !== null) {
+            return response()->json([
+                'success' => true,
+                'already_saved' => true,
+                'message' => __('checkout.address_already_saved'),
+                'data' => $duplicate,
+            ]);
+        }
+
+        $result = $auth->storeAddress($userToken, $payload);
 
         if (($result['skipped'] ?? false) === true) {
             return response()->json(['success' => true, 'skipped' => true]);
@@ -964,9 +993,11 @@ class CheckoutController extends Controller
         $hasData = array_key_exists('data', $result);
 
         if ($httpOk && ($apiStatus === 200 || $hasData)) {
+            $stored = AddressCheckoutHelper::unwrapStoredAddress($result['data'] ?? null);
+
             return response()->json([
                 'success' => true,
-                'data' => $result['data'] ?? null,
+                'data' => $stored ?? $result['data'] ?? null,
             ]);
         }
 
@@ -990,7 +1021,7 @@ class CheckoutController extends Controller
             ]);
         }
 
-        $addresses = app(ApiAuthService::class)->getAddresses($token, true);
+        $addresses = app(ApiAuthService::class)->getAddresses($token, true, false);
         if (! is_array($addresses)) {
             $addresses = [];
         }
@@ -1101,7 +1132,7 @@ class CheckoutController extends Controller
         ) {
             $token = session('external_api_token');
             if (is_string($token) && $token !== '') {
-                $savedAddresses = app(ApiAuthService::class)->getAddresses($token, true);
+                $savedAddresses = app(ApiAuthService::class)->getAddresses($token, true, false);
                 if (is_array($savedAddresses)) {
                     $picked = collect($savedAddresses)->first(
                         fn ($a) => (int) ($a['id'] ?? 0) === (int) $validated['selected_address_id']
@@ -1146,6 +1177,7 @@ class CheckoutController extends Controller
 
         $validated['duration'] = 'once';
 
+        $planDurationsFromApi = [];
         if ($hasPlanItems) {
             $firstKey = null;
             foreach ($cart as $key => $item) {
@@ -1238,6 +1270,17 @@ class CheckoutController extends Controller
         $amountInHalalas = (int) round($total * 100);
         $subscriptionApiPayload = $amounts['subscription_api_payload'];
 
+        if ($isSubscriptionCheckout && ! $previewOnly) {
+            $dateError = self::validateSubscriptionStartDate($validated['start_date'] ?? '');
+            if ($dateError !== null) {
+                return response()->json($dateError, 422);
+            }
+            $normalizedStart = SubscriptionCheckoutPayload::normalizeStartDate($validated['start_date'] ?? '')
+                ?: SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate();
+            $subscriptionApiPayload['date'] = $normalizedStart;
+            $subscriptionApiPayload['start_date'] = $normalizedStart;
+        }
+
         $pickupDescription = null;
         if (($validated['delivery_type'] ?? '') === 'pickup' && ! empty($validated['branch_id'])) {
             $branches = $this->externalDataService->getBranches();
@@ -1265,6 +1308,10 @@ class CheckoutController extends Controller
                 'currency' => 'SAR',
                 'description' => __('payment.preview_checkout_description'),
             ]);
+        }
+
+        if ($isSubscriptionCheckout) {
+            return $this->subscriptionMoyasarSessionResponse($subscriptionApiPayload, $moyasarService);
         }
 
         $draftOrder = session('checkout_moyasar_order');
@@ -1367,5 +1414,100 @@ class CheckoutController extends Controller
         $o = (float) ($d['offer_price'] ?? 0);
 
         return ($o > 0 && $o < $p) ? $o : $p;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private static function validateSubscriptionStartDate(string $startDate): ?array
+    {
+        $normalized = SubscriptionCheckoutPayload::normalizeStartDate($startDate);
+        $minDate = SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate();
+
+        if ($normalized === '' || $normalized >= $minDate) {
+            return null;
+        }
+
+        $message = SubscriptionCheckoutPayload::startDateBeforeMinimumMessage($minDate);
+
+        return [
+            'success' => false,
+            'message' => $message,
+            'errors' => ['start_date' => [$message]],
+        ];
+    }
+
+    /**
+     * @param  array<string, string>  $subscriptionApiPayload
+     */
+    private function subscriptionMoyasarSessionResponse(
+        array $subscriptionApiPayload,
+        MoyasarPaymentService $moyasarService,
+    ): JsonResponse {
+        if ($subscriptionApiPayload === []) {
+            return response()->json([
+                'success' => false,
+                'message' => __('payment.fill_delivery_first'),
+            ], 422);
+        }
+
+        $token = (string) session('external_api_token', '');
+        if ($token === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('payment.verify_phone_to_pay'),
+            ], 403);
+        }
+
+        $boot = $this->accountApiService->bootstrapSubscriptionMoyasar($subscriptionApiPayload, $token);
+        if (! ($boot['ok'] ?? false) || ! is_array($boot['bootstrap'] ?? null)) {
+            $minStart = (string) ($boot['min_start_date'] ?? '');
+            $message = (string) ($boot['message'] ?? __('account.request_failed'));
+            if ($minStart !== '') {
+                $message = SubscriptionCheckoutPayload::resolveStartDateErrorMessage($message, $minStart);
+            }
+            $response = [
+                'success' => false,
+                'message' => $message,
+                'errors' => [],
+            ];
+            if ($minStart !== '') {
+                $response['min_start_date'] = $minStart;
+                $response['errors'] = ['start_date' => [$message]];
+            }
+
+            return response()->json($response, 422);
+        }
+
+        $bootstrap = $boot['bootstrap'];
+        $subscriptionId = (int) ($boot['subscription_id'] ?? $bootstrap['subscription_id'] ?? 0);
+        $publishableKey = $moyasarService->resolvePublishableKey($bootstrap['publishable_key'] ?? null);
+
+        if (! $moyasarService->isValidPublishableKey($publishableKey)) {
+            Log::warning('Subscription Moyasar bootstrap missing valid publishable key', [
+                'api_key' => $bootstrap['publishable_key'] ?? null,
+                'configured' => $moyasarService->getPublishableKey() !== '',
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => __('payment.moyasar_key_missing'),
+                'errors' => [],
+            ], 422);
+        }
+
+        return response()->json(array_filter([
+            'success' => true,
+            'preview' => false,
+            'api_checkout' => true,
+            'subscription_id' => $subscriptionId,
+            'adjusted_start_date' => $boot['adjusted_start_date'] ?? null,
+            'amount_halalas' => (int) $bootstrap['amount_halalas'],
+            'publishable_key' => $publishableKey,
+            'callback_url' => route('payment.callback'),
+            'currency' => (string) ($bootstrap['currency'] ?? 'SAR'),
+            'description' => (string) ($bootstrap['description'] ?? __('payment.subscription_checkout_description')),
+            'metadata' => is_array($bootstrap['metadata'] ?? null) ? $bootstrap['metadata'] : [],
+        ], static fn ($v) => $v !== null && $v !== ''));
     }
 }

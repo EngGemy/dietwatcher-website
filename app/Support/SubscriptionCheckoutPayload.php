@@ -89,7 +89,10 @@ final class SubscriptionCheckoutPayload
             'receiving' => $receiving,
             'with_support' => '0',
             'with_weekend' => '0',
-            'start_date' => (string) ($validated['start_date'] ?? now()->format('Y-m-d')),
+            'start_date' => self::normalizeStartDate((string) ($validated['start_date'] ?? ''))
+                ?: self::defaultCheckoutMinimumStartDate(),
+            'date' => self::normalizeStartDate((string) ($validated['start_date'] ?? ''))
+                ?: self::defaultCheckoutMinimumStartDate(),
             'payment_option' => 'credit_card',
             'useWallet' => (string) ($validated['useWallet'] ?? $validated['use_wallet'] ?? '0'),
         ];
@@ -122,6 +125,104 @@ final class SubscriptionCheckoutPayload
         }
 
         return array_filter($payload, static fn ($v) => $v !== null && $v !== '');
+    }
+
+    public static function defaultCheckoutMinimumStartDate(): string
+    {
+        return now()->addHours(48)->format('Y-m-d');
+    }
+
+    public static function normalizeStartDate(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse($value)->format('Y-m-d');
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    /**
+     * Checkout minimum is always 48 hours — not the plan duration's catalog metadata dates.
+     *
+     * @param  array<string, mixed>|null  $durationRow
+     */
+    public static function minimumStartDateForDuration(?array $durationRow): string
+    {
+        return self::defaultCheckoutMinimumStartDate();
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $durations
+     */
+    public static function minimumStartDateForDurationId(array $durations, ?int $durationId): string
+    {
+        if ($durationId !== null && $durationId > 0) {
+            foreach ($durations as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+                if ((int) ($row['id'] ?? 0) === $durationId) {
+                    return self::minimumStartDateForDuration($row);
+                }
+            }
+        }
+
+        return self::minimumStartDateForDuration(null);
+    }
+
+    public static function parseMinimumDateFromValidationMessage(string $message): string
+    {
+        if (preg_match('#(\d{4}-\d{2}-\d{2})#', $message, $matches)) {
+            return $matches[1];
+        }
+
+        if (preg_match('#(\d{2}-\d{2}-\d{4})#', $message, $matches)) {
+            try {
+                return \Illuminate\Support\Carbon::createFromFormat('d-m-Y', $matches[1])->format('Y-m-d');
+            } catch (\Throwable) {
+                return '';
+            }
+        }
+
+        return '';
+    }
+
+    public static function formatMinimumStartDateLabel(string $ymd): string
+    {
+        return \Illuminate\Support\Carbon::parse($ymd)
+            ->locale(app()->getLocale())
+            ->translatedFormat('d M Y');
+    }
+
+    public static function startDateBeforeMinimumMessage(string $minDateYmd): string
+    {
+        return __('checkout.start_date_before_minimum', [
+            'date' => self::formatMinimumStartDateLabel($minDateYmd),
+        ]);
+    }
+
+    public static function resolveStartDateErrorMessage(string $message, ?string $minStartDateYmd = null): string
+    {
+        $message = trim($message);
+        $min = self::normalizeStartDate((string) ($minStartDateYmd));
+        if ($min === '') {
+            $min = self::parseMinimumDateFromValidationMessage($message);
+        }
+
+        $generic = trim(__('account.request_failed'));
+        $isGeneric = $message === '' || $message === $generic;
+        $hasDateHint = self::parseMinimumDateFromValidationMessage($message) !== '';
+
+        if ($min !== '' && ($isGeneric || $hasDateHint)) {
+            return self::startDateBeforeMinimumMessage($min);
+        }
+
+        return $message !== '' ? $message : $generic;
     }
 
     /**

@@ -18,14 +18,58 @@ class MoyasarPaymentService
 
     public function __construct()
     {
-        $this->secretKey = config('services.moyasar.secret_key', '');
-        $this->publishableKey = config('services.moyasar.publishable_key', '');
+        $secret = trim((string) config('services.moyasar.secret_key', ''));
+        $publishable = trim((string) config('services.moyasar.publishable_key', ''));
+
+        if ($this->looksLikePublishableKey($secret) && $this->looksLikeSecretKey($publishable)) {
+            Log::warning('Moyasar keys are swapped in .env (pk_ is under MOYASAR_SECRET_KEY). Fix env and run config:clear.');
+            [$secret, $publishable] = [$publishable, $secret];
+        }
+
+        $this->secretKey = $secret;
+        $this->publishableKey = $publishable;
         $this->apiUrl = config('services.moyasar.api_url', 'https://api.moyasar.com/v1');
     }
 
     public function getPublishableKey(): string
     {
         return $this->publishableKey;
+    }
+
+    public function isValidPublishableKey(?string $key): bool
+    {
+        return $this->looksLikePublishableKey($key);
+    }
+
+    /**
+     * Prefer a candidate key from the API when valid; otherwise use website config.
+     */
+    public function resolvePublishableKey(?string $preferred = null): string
+    {
+        $preferred = trim((string) $preferred);
+        if ($this->looksLikePublishableKey($preferred)) {
+            return $preferred;
+        }
+
+        if ($this->looksLikePublishableKey($this->publishableKey)) {
+            return $this->publishableKey;
+        }
+
+        return $preferred !== '' ? $preferred : $this->publishableKey;
+    }
+
+    private function looksLikePublishableKey(?string $key): bool
+    {
+        $key = trim((string) $key);
+
+        return $key !== '' && preg_match('/^pk_(test|live)_[a-zA-Z0-9]+$/', $key) === 1;
+    }
+
+    private function looksLikeSecretKey(?string $key): bool
+    {
+        $key = trim((string) $key);
+
+        return $key !== '' && preg_match('/^sk_(test|live)_[a-zA-Z0-9]+$/', $key) === 1;
     }
 
     /**

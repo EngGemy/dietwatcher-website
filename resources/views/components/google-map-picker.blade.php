@@ -86,7 +86,7 @@
             </button>
             <span class="gmp-topbar__back-spacer" x-show="variant === 'inline'" aria-hidden="true"></span>
             <div class="gmp-topbar__search-wrap">
-                <svg class="gmp-topbar__search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <svg class="gmp-topbar__search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
                 </svg>
                 <input
@@ -95,6 +95,7 @@
                     class="gmp-topbar__search-input"
                     placeholder="{{ __('Search for a location…') }}"
                     autocomplete="off"
+                    x-ref="searchInput"
                 />
             </div>
             <button type="button" @click="useMyLocation()" class="gmp-topbar__gps @if($isInline) gmp-topbar__gps--wide @endif" title="{{ __('Use my location') }}">
@@ -123,6 +124,7 @@
         @endif
 
         <p class="gmp-map-hint" x-show="variant === 'inline' && !inlineConfirmed">{{ __('Click on the map or drag it to set your delivery location.') }}</p>
+        <p class="gmp-sheet__error gmp-map-stage__error" x-show="variant === 'inline' && sheetError && !inlineConfirmed" x-text="sheetError" x-transition></p>
 
         <div class="gmp-pin" aria-hidden="true">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#279ff9" class="gmp-pin__svg" width="44" height="44" style="width:44px;height:44px">
@@ -187,16 +189,14 @@
                     placeholder="{{ __('e.g. Gym, Clinic, Parents…') }}" />
             </div>
 
-            <div class="gmp-sheet__field">
-                <label class="gmp-sheet__label">{{ __('District') }}</label>
-                <div class="gmp-select-wrap">
-                    <select x-model="form.district_id" class="gmp-sheet__select">
-                        <option value="">{{ __('Select district') }}</option>
-                        <template x-for="d in districts" :key="d.id">
-                            <option :value="d.id" x-text="d.name"></option>
-                        </template>
-                    </select>
-                </div>
+            {{-- Hidden by request: district UI removed, but value stays bound for validation/post --}}
+            <div class="hidden">
+                <select x-model="form.district_id" class="gmp-sheet__select">
+                    <option value="">{{ __('Select district') }}</option>
+                    <template x-for="d in districts" :key="d.id">
+                        <option :value="d.id" x-text="d.name"></option>
+                    </template>
+                </select>
             </div>
 
             <p class="gmp-sheet__error" x-show="sheetError" x-text="sheetError" x-transition></p>
@@ -290,6 +290,7 @@
 .gmp-wrapper--missing-api-key .gmp-modal .gmp-map--placeholder { margin-top:0 !important; min-height:min(360px,70vh) !important; }
 .gmp-map-api-error { margin:0; padding:.65rem .85rem; font-size:.8rem; font-weight:600; color:#991b1b; background:#fef2f2; border-bottom:1px solid #fecaca; text-align:center; }
 .gmp-map-hint { margin:0; padding:.35rem .75rem .5rem; font-size:.78rem; color:#6b7280; text-align:center; background:#fafafa; border-bottom:1px solid #eef0f4; }
+.gmp-map-stage__error { margin:0; padding:.5rem .75rem; text-align:center; background:#fef2f2; border-bottom:1px solid #fecaca; }
 .gmp-wrapper--inline .gmp-pin { transform:translate(-50%, calc(-100% + 28px)); }
 .gmp-wrapper--inline .gmp-geocoding { top:120px; }
 
@@ -328,11 +329,13 @@
 .gmp-topbar { position:absolute; top:0; inset-inline:0; z-index:10; display:flex; align-items:center; gap:.5rem; padding:.75rem .75rem; background:#fff; box-shadow:0 2px 12px rgba(0,0,0,.1); }
 .gmp-topbar__back { width:38px; height:38px; border:none; background:#f5f5fa; border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; color:#2e2e30; transition:background .2s; }
 .gmp-topbar__back:hover { background:#e0e0e8; }
-.gmp-topbar__search-wrap { flex:1; position:relative; }
-.gmp-topbar__search-icon { position:absolute; top:50%; inset-inline-start:10px; transform:translateY(-50%); width:16px; height:16px; color:#999; pointer-events:none; }
-.gmp-topbar__search-input { width:100%; padding:.6rem .75rem .6rem 2.2rem; border:1.5px solid #e0e0e8; border-radius:10px; font-size:.88rem; outline:none; background:#f5f5fa; transition:border .2s; }
+.gmp-topbar__search-wrap { flex:1; position:relative; min-width:0; }
+.gmp-topbar__search-icon { position:absolute; top:50%; inset-inline-start:10px; transform:translateY(-50%); width:16px; height:16px; color:#999; pointer-events:none; z-index:2; }
+.gmp-topbar__search-input { width:100%; padding:.6rem .75rem .6rem 2.2rem; border:1.5px solid #e0e0e8; border-radius:10px; font-size:.88rem; outline:none; background:#f5f5fa; transition:border .2s; box-sizing:border-box; }
 [dir="rtl"] .gmp-topbar__search-input { padding:.6rem 2.2rem .6rem .75rem; }
 .gmp-topbar__search-input:focus { border-color:#279ff9; background:#fff; }
+/* Google Places dropdown must sit above the map */
+.pac-container { z-index: 10050 !important; font-family: inherit; }
 .gmp-topbar__gps { width:38px; height:38px; border:none; background:#279ff9; border-radius:10px; display:flex; flex-direction:row; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; color:#fff; transition:background .2s; }
 .gmp-topbar__gps:hover { background:#1e8de0; }
 
@@ -386,19 +389,6 @@ window._gmpNotify = function() {
     window._gmpCallbacks = [];
 };
 window.initGoogleMaps = function() {
-    // Preload the libraries so the Maps JS API bootstrap (`v=weekly`) moves out of
-    // the legacy-callback path and into the importLibrary dispatcher. Using the new
-    // Places library pulls PlaceAutocompleteElement instead of the deprecated
-    // google.maps.places.Autocomplete constructor.
-    try {
-        if (window.google && window.google.maps && typeof window.google.maps.importLibrary === 'function') {
-            Promise.all([
-                window.google.maps.importLibrary('maps'),
-                window.google.maps.importLibrary('places'),
-            ]).finally(window._gmpNotify);
-            return;
-        }
-    } catch (e) {}
     window._gmpNotify();
 };
 window.gm_authFailure = function() {
@@ -423,6 +413,10 @@ function googleMapPicker(opts) {
     const L_HOME = @json(__('Home'));
     const L_WORK = @json(__('Office'));
     const L_OTHER = @json(__('Other'));
+    const L_GEO_DENIED = @json(__('google_maps.geolocation_denied'));
+    const L_GEO_UNAVAILABLE = @json(__('google_maps.geolocation_unavailable'));
+    const L_GEO_TIMEOUT = @json(__('google_maps.geolocation_timeout'));
+    const L_GEO_UNSUPPORTED = @json(__('google_maps.geolocation_unsupported'));
 
     return {
         prefix:          opts.prefix || 'location',
@@ -451,7 +445,9 @@ function googleMapPicker(opts) {
         _map:       null,
         _geocoder:  null,
         _autocomplete: null,
+        _searchMounted: false,
         _center:    { lat: opts.initialLat || 24.7136, lng: opts.initialLng || 46.6753 },
+        _pendingCenter: null,
         _dragTimeout: null,
         mapsKeyPresent: opts.mapsKeyPresent !== false,
         mapsAuthFailed: false,
@@ -495,11 +491,7 @@ function googleMapPicker(opts) {
             this.form.building_num = '';
             this.form.floor = '';
             this.form.door = '';
-            this._center = { lat, lng };
-            if (this._map && window.google && window.google.maps) {
-                this._map.panTo(this._center);
-                this._map.setZoom(16);
-            }
+            this.applyMapCenter({ lat, lng });
             const building_notes = this.buildingLine();
             this.confirmedAddressText = this.form.description;
             this.confirmedBuildingLine = building_notes;
@@ -626,8 +618,12 @@ function googleMapPicker(opts) {
             if (!mapEl) return;
 
             const doInit = () => {
-                if (this._map) return;
                 if (!window.google || !window.google.maps) return;
+
+                if (this._map) {
+                    this.mountSearchAutocomplete();
+                    return;
+                }
 
                 this._map = new google.maps.Map(mapEl, {
                     center: this._center,
@@ -637,7 +633,16 @@ function googleMapPicker(opts) {
                     gestureHandling: 'greedy',
                 });
                 this._geocoder = new google.maps.Geocoder();
-                this.reverseGeocode(this._center);
+                if (this._pendingCenter) {
+                    const pending = this._pendingCenter;
+                    this._pendingCenter = null;
+                    this._center = pending;
+                    this._map.setCenter(pending);
+                    this._map.setZoom(16);
+                    this.reverseGeocode(pending);
+                } else {
+                    this.reverseGeocode(this._center);
+                }
 
                 const resizeMap = () => {
                     if (!this._map || !window.google || !window.google.maps) return;
@@ -655,22 +660,15 @@ function googleMapPicker(opts) {
                     clearTimeout(this._dragTimeout);
                     this._dragTimeout = setTimeout(() => {
                         const c = this._map.getCenter();
-                        this._center = { lat: c.lat(), lng: c.lng() };
-                        this.reverseGeocode(this._center);
+                        this.applyMapCenter({ lat: c.lat(), lng: c.lng() }, { skipPan: true });
                     }, 400);
                 });
 
                 this._map.addListener('click', (e) => {
-                    const loc = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-                    this._center = loc;
-                    this._map.panTo(loc);
-                    this.reverseGeocode(loc);
+                    this.applyMapCenter({ lat: e.latLng.lat(), lng: e.latLng.lng() });
                 });
 
-                const searchInput = document.getElementById(UID + '_search');
-                if (searchInput) {
-                    this.mountPlaceAutocomplete(searchInput);
-                }
+                this.mountSearchAutocomplete();
             };
 
             if (window._gmpLoaded && window.google && window.google.maps) {
@@ -693,56 +691,37 @@ function googleMapPicker(opts) {
             }
         },
 
-        async mountPlaceAutocomplete(inputEl) {
+        mountSearchAutocomplete() {
+            if (this._searchMounted) return;
+
+            const inputEl = this.$refs.searchInput || document.getElementById(UID + '_search');
             if (!inputEl || !window.google || !window.google.maps) return;
+            if (!google.maps.places || !google.maps.places.Autocomplete) return;
+
+            this._searchMounted = true;
             const handlePick = (place) => {
                 if (!place) return;
-                const loc = place.location || (place.geometry && place.geometry.location) || null;
+                const loc = place.geometry && place.geometry.location ? place.geometry.location : null;
                 if (!loc) return;
                 const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
                 const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
                 if (Number.isNaN(lat) || Number.isNaN(lng)) return;
-                this._center = { lat, lng };
-                this._map.panTo(this._center);
-                this._map.setZoom(16);
-                this.reverseGeocode(this._center);
+                if (place.formatted_address) {
+                    inputEl.value = place.formatted_address;
+                }
+                this.applyMapCenter({ lat, lng });
             };
 
-            try {
-                if (typeof google.maps.importLibrary === 'function') {
-                    const placesLib = await google.maps.importLibrary('places');
-                    const PlaceAutocompleteElement = placesLib && placesLib.PlaceAutocompleteElement;
-                    if (PlaceAutocompleteElement) {
-                        const el = new PlaceAutocompleteElement({
-                            componentRestrictions: { country: 'sa' },
-                        });
-                        el.className = 'gmp-topbar__search-input gmp-topbar__search-input--pac';
-                        el.setAttribute('placeholder', inputEl.getAttribute('placeholder') || '');
-                        inputEl.replaceWith(el);
-                        this._autocomplete = el;
-                        el.addEventListener('gmp-placeselect', async (ev) => {
-                            const picked = ev.place || (ev.detail && ev.detail.place);
-                            if (!picked) return;
-                            try {
-                                await picked.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
-                            } catch (_) {}
-                            handlePick(picked);
-                        });
-                        return;
-                    }
-                }
-            } catch (e) {}
-
-            // Fallback for older Maps SDK versions still cached by the browser.
-            if (google.maps.places && google.maps.places.Autocomplete) {
-                this._autocomplete = new google.maps.places.Autocomplete(inputEl, {
-                    componentRestrictions: { country: 'sa' },
-                });
-                this._autocomplete.addListener('place_changed', () => {
-                    const place = this._autocomplete.getPlace();
-                    handlePick(place);
-                });
+            this._autocomplete = new google.maps.places.Autocomplete(inputEl, {
+                componentRestrictions: { country: 'sa' },
+                fields: ['geometry', 'formatted_address', 'address_components'],
+            });
+            if (this._map) {
+                this._autocomplete.bindTo('bounds', this._map);
             }
+            this._autocomplete.addListener('place_changed', () => {
+                handlePick(this._autocomplete.getPlace());
+            });
         },
 
         reverseGeocode(latlng) {
@@ -757,22 +736,209 @@ function googleMapPicker(opts) {
                 this.geocoding = false;
                 if (status === 'OK' && results[0]) {
                     this.form.description = results[0].formatted_address;
+                    const searchInput = this.$refs.searchInput || document.getElementById(UID + '_search');
+                    if (searchInput) {
+                        searchInput.value = this.form.description;
+                    }
+                    const inferredDistrictId = this.inferDistrictIdFromGeocode(results[0]);
+                    if (inferredDistrictId) {
+                        this.form.district_id = inferredDistrictId;
+                    }
                     this.dispatchAddressDraft();
+                    return;
                 }
+                this.sheetError = @json(__('google_maps.geocode_failed'));
             });
         },
 
-        useMyLocation() {
-            if (!navigator.geolocation) return;
-            navigator.geolocation.getCurrentPosition(pos => {
-                const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                this._center = loc;
-                if (this._map) {
-                    this._map.panTo(loc);
+        normalizeDistrictText(value) {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[ًٌٍَُِّْـ]/g, '')
+                .replace(/\b(district|riyadh|saudi|arabia)\b/g, '')
+                .replace(/حي|الرياض|السعودية/g, '')
+                .replace(/[^a-z\u0600-\u06ff0-9]+/g, '');
+        },
+
+        districtNameCandidates(row) {
+            const out = [];
+            const push = (v) => {
+                if (v == null) return;
+                if (typeof v === 'object') {
+                    Object.values(v).forEach(push);
+                    return;
+                }
+                const s = String(v).trim();
+                if (s !== '') out.push(s);
+            };
+            push(row && row.name);
+            push(row && row.district_identifier);
+            push(row && row.name_ar);
+            push(row && row.name_en);
+            push(row && row.title);
+            return out;
+        },
+
+        inferDistrictIdFromGeocode(result) {
+            if (!result || !Array.isArray(this.districts) || this.districts.length === 0) {
+                return '';
+            }
+            const components = Array.isArray(result.address_components) ? result.address_components : [];
+            const wantedTypes = ['sublocality_level_1', 'sublocality', 'neighborhood', 'administrative_area_level_2'];
+            const geoNames = [];
+            components.forEach((c) => {
+                const types = Array.isArray(c.types) ? c.types : [];
+                if (types.some((t) => wantedTypes.includes(t))) {
+                    if (c.long_name) geoNames.push(String(c.long_name));
+                    if (c.short_name) geoNames.push(String(c.short_name));
+                }
+            });
+            if (result.formatted_address) {
+                geoNames.push(...String(result.formatted_address).split(',').map((s) => s.trim()));
+            }
+            const normalizedGeo = geoNames
+                .map((n) => this.normalizeDistrictText(n))
+                .filter((n) => n !== '');
+            if (normalizedGeo.length === 0) {
+                return '';
+            }
+
+            // Pass 1: strict equality
+            for (const d of this.districts) {
+                const did = d && d.id != null ? String(d.id) : '';
+                if (!did) continue;
+                const cand = this.districtNameCandidates(d)
+                    .map((n) => this.normalizeDistrictText(n))
+                    .filter((n) => n !== '');
+                if (cand.some((cn) => normalizedGeo.includes(cn))) {
+                    return did;
+                }
+            }
+
+            // Pass 2: fuzzy contains
+            for (const d of this.districts) {
+                const did = d && d.id != null ? String(d.id) : '';
+                if (!did) continue;
+                const cand = this.districtNameCandidates(d)
+                    .map((n) => this.normalizeDistrictText(n))
+                    .filter((n) => n !== '');
+                const matched = cand.some((cn) => normalizedGeo.some((gn) => gn.includes(cn) || cn.includes(gn)));
+                if (matched) {
+                    return did;
+                }
+            }
+
+            return '';
+        },
+
+        ensureMapReady() {
+            return new Promise((resolve) => {
+                if (this._map && this._geocoder) {
+                    resolve(true);
+                    return;
+                }
+                if (!this.mapsKeyPresent || this.mapsAuthFailed) {
+                    resolve(false);
+                    return;
+                }
+                this.initMap();
+                let attempts = 0;
+                const tick = () => {
+                    attempts += 1;
+                    if (this._map && this._geocoder) {
+                        resolve(true);
+                        return;
+                    }
+                    if (attempts >= 50) {
+                        resolve(false);
+                        return;
+                    }
+                    setTimeout(tick, 100);
+                };
+                setTimeout(tick, 50);
+            });
+        },
+
+        applyMapCenter(loc, opts = {}) {
+            if (!loc || Number.isNaN(Number(loc.lat)) || Number.isNaN(Number(loc.lng))) {
+                return;
+            }
+            const lat = Number(loc.lat);
+            const lng = Number(loc.lng);
+            this.sheetError = '';
+            this._center = { lat, lng };
+            this.form.latitude = lat;
+            this.form.longitude = lng;
+
+            if (this._map && window.google && window.google.maps) {
+                if (!opts.skipPan) {
+                    this._map.setCenter(this._center);
                     this._map.setZoom(16);
                 }
-                this.reverseGeocode(loc);
-            });
+                const resizeAndGeocode = () => {
+                    window.google.maps.event.trigger(this._map, 'resize');
+                    this.reverseGeocode(this._center);
+                };
+                if (window.google.maps.event) {
+                    window.google.maps.event.addListenerOnce(this._map, 'idle', resizeAndGeocode);
+                } else {
+                    resizeAndGeocode();
+                }
+                this.$nextTick(() => {
+                    window.dispatchEvent(new CustomEvent('checkout-home-map-refresh'));
+                });
+            } else {
+                this._pendingCenter = { lat, lng };
+                this.initMap();
+            }
+        },
+
+        geolocationErrorMessage(err) {
+            const code = err && typeof err.code === 'number' ? err.code : -1;
+            if (code === 1) return L_GEO_DENIED;
+            if (code === 2) return L_GEO_UNAVAILABLE;
+            if (code === 3) return L_GEO_TIMEOUT;
+            return L_GEO_UNAVAILABLE;
+        },
+
+        async useMyLocation() {
+            this.sheetError = '';
+            if (!this.mapsKeyPresent || this.mapsAuthFailed) {
+                this.sheetError = @json(__('google_maps.api_error_hint'));
+                return;
+            }
+            if (!navigator.geolocation) {
+                this.sheetError = L_GEO_UNSUPPORTED;
+                return;
+            }
+            this.geocoding = true;
+            const ready = await this.ensureMapReady();
+            if (!ready) {
+                this.geocoding = false;
+                this.sheetError = @json(__('google_maps.api_error_hint'));
+                return;
+            }
+
+            const onSuccess = (pos) => {
+                this.geocoding = false;
+                const loc = {
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                };
+                this.applyMapCenter(loc);
+            };
+            const onError = (err) => {
+                this.geocoding = false;
+                this.sheetError = this.geolocationErrorMessage(err);
+            };
+
+            const geoOpts = {
+                enableHighAccuracy: true,
+                timeout: 20000,
+                maximumAge: 0,
+            };
+
+            navigator.geolocation.getCurrentPosition(onSuccess, onError, geoOpts);
         },
 
         confirmLocation() {

@@ -92,7 +92,7 @@ class OtpController extends Controller
                             $result['profile'] = $parsed['profile'];
                             $result['is_continue'] = $parsed['is_continue'];
 
-                            $addresses = $this->apiAuth->getAddresses($parsed['token']);
+                            $addresses = $this->apiAuth->getAddresses($parsed['token'], false, false);
                             $result['addresses'] = is_array($addresses) ? $addresses : [];
 
                             return $result;
@@ -349,7 +349,7 @@ class OtpController extends Controller
                 'pending_register_expires_at',
             ]);
 
-            $addresses = $this->apiAuth->getAddresses($parsed['token']);
+            $addresses = $this->apiAuth->getAddresses($parsed['token'], false, false);
             if (! is_array($addresses)) {
                 $addresses = [];
             }

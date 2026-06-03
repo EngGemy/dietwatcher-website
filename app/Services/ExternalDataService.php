@@ -409,6 +409,9 @@ class ExternalDataService
                 'delivery_price' => (float) (is_array($del) ? ($del['amount'] ?? 0) : $del),
                 'is_default' => (bool) ($d['is_default'] ?? false),
                 'label' => ($d['days'] ?? 0).' '.__('Days'),
+                'start_date' => \App\Support\SubscriptionCheckoutPayload::normalizeStartDate(
+                    (string) ($d['start_date'] ?? $d['startDate'] ?? $d['starts_at'] ?? $d['available_from'] ?? '')
+                ) ?: null,
             ];
         }
 
@@ -460,11 +463,27 @@ class ExternalDataService
             if ($line === '') {
                 continue;
             }
+            // Keep menu label clean:
+            // - hide x1
+            // - show count/range only when >1, after text (e.g. "Snack x2", "Snack x2-x3")
             if (preg_match('/^(.+?)\s+[Xx]\s*(\d+)\s*$/u', $line, $m)) {
-                $out[] = (int) $m[2].'x '.trim($m[1]);
-            } else {
-                $out[] = '1x '.$line;
+                $label = trim((string) $m[1]);
+                $count = (int) ($m[2] ?? 1);
+                $out[] = $count > 1 ? ($label.' x'.$count) : $label;
+                continue;
             }
+            if (preg_match('/^(.+?)\s+[Xx]\s*(\d+)\s*-\s*(\d+)\s*$/u', $line, $m)) {
+                $label = trim((string) $m[1]);
+                $min = (int) ($m[2] ?? 1);
+                $max = (int) ($m[3] ?? $min);
+                if ($min <= 1 && $max <= 1) {
+                    $out[] = $label;
+                } else {
+                    $out[] = $label.' x'.$min.'-x'.$max;
+                }
+                continue;
+            }
+            $out[] = $line;
         }
 
         return $out;
@@ -1140,40 +1159,97 @@ class ExternalDataService
     // ─── Plan Durations & Calories ────────────────────────────────
 
     /**
-     * Get plan durations from API (available packages for a plan).
+     * Get plan durations from API (available packages for a program).
      */
     public function getPlanDurations(int $planId): array
     {
-        return Cache::remember($this->cacheKey("plan_durations_{$planId}"), 3600, function () use ($planId) {
-            try {
-                $response = $this->http()->get("{$this->baseUrl}/programs/{$planId}/durations");
-                if ($response->successful()) {
-                    return array_map(function ($d) {
-                        $ofr = $d['offer_price'] ?? $d['offerPrice'] ?? [];
-                        $pr = (float) ($d['price']['amount'] ?? $d['price'] ?? 0);
-                        $of = (float) (is_array($ofr) ? ($ofr['amount'] ?? 0) : $ofr);
-                        $eff = $of > 0 && $of < $pr ? $of : $pr;
-
-                        return [
-                            'id' => $d['id'] ?? 0,
-                            'days' => (int) ($d['days'] ?? 0),
-                            'price' => $pr,
-                            'offer_price' => $of,
-                            'list_price' => $pr,
-                            'effective_price' => $eff,
-                            'has_offer' => $of > 0 && $of < $pr,
-                            'delivery_price' => (float) ($d['delivery_price']['amount'] ?? $d['delivery_price'] ?? $d['deliveryPrice'] ?? 0),
-                            'is_default' => $d['is_default'] ?? $d['isDefault'] ?? false,
-                            'label' => $d['label'] ?? ($d['days'] ?? 0).' '.__('Days'),
-                        ];
-                    }, $response->json('data', []));
-                }
-            } catch (\Exception $e) {
-                Log::warning("External API /programs/{$planId}/durations failed: ".$e->getMessage());
+        return Cache::remember($this->cacheKey("plan_durations_v2_{$planId}"), 3600, function () use ($planId) {
+            $rows = $this->fetchPlanDurationsFromEndpoint($planId);
+            if ($rows !== []) {
+                return $rows;
             }
 
-            return [];
+            return $this->fetchPlanDurationsFromProgramProfile($planId);
         });
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function fetchPlanDurationsFromEndpoint(int $planId): array
+    {
+        try {
+            $response = $this->http()->get("{$this->baseUrl}/programs/{$planId}/durations");
+            if ($response->successful()) {
+                return array_map(
+                    fn (array $d): array => $this->mapPlanDurationRow($d),
+                    $response->json('data', [])
+                );
+            }
+        } catch (\Exception $e) {
+            Log::warning("External API /programs/{$planId}/durations failed: ".$e->getMessage());
+        }
+
+        return [];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function fetchPlanDurationsFromProgramProfile(int $planId): array
+    {
+        $program = $this->getProgram($planId);
+        if ($program === null) {
+            return [];
+        }
+
+        $plans = $program->subscription_plans ?? [];
+        if (! is_array($plans)) {
+            $plans = json_decode(json_encode($plans), true) ?? [];
+        }
+
+        $rows = [];
+        foreach ($plans as $plan) {
+            if (! is_array($plan)) {
+                continue;
+            }
+            foreach ($plan['durations'] ?? [] as $duration) {
+                if (! is_array($duration)) {
+                    continue;
+                }
+                $rows[] = $this->mapPlanDurationRow($duration);
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  array<string, mixed>  $d
+     * @return array<string, mixed>
+     */
+    protected function mapPlanDurationRow(array $d): array
+    {
+        $ofr = $d['offer_price'] ?? $d['offerPrice'] ?? [];
+        $pr = (float) ($d['price']['amount'] ?? $d['price'] ?? 0);
+        $of = (float) (is_array($ofr) ? ($ofr['amount'] ?? 0) : $ofr);
+        $eff = $of > 0 && $of < $pr ? $of : $pr;
+
+        return [
+            'id' => $d['id'] ?? 0,
+            'days' => (int) ($d['days'] ?? 0),
+            'price' => $pr,
+            'offer_price' => $of,
+            'list_price' => $pr,
+            'effective_price' => $eff,
+            'has_offer' => $of > 0 && $of < $pr,
+            'delivery_price' => (float) ($d['delivery_price']['amount'] ?? $d['delivery_price'] ?? $d['deliveryPrice'] ?? 0),
+            'is_default' => $d['is_default'] ?? $d['isDefault'] ?? false,
+            'label' => $d['label'] ?? ($d['days'] ?? 0).' '.__('Days'),
+            'start_date' => \App\Support\SubscriptionCheckoutPayload::normalizeStartDate(
+                (string) ($d['start_date'] ?? $d['startDate'] ?? $d['starts_at'] ?? $d['available_from'] ?? '')
+            ) ?: null,
+        ];
     }
 
     /**

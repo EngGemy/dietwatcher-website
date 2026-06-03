@@ -8,6 +8,7 @@ use App\Enums\PaymentKind;
 use App\Enums\PaymentStatus;
 use App\Models\Payment;
 use App\Services\ExternalDataService;
+use App\Services\Payment\MoyasarPaymentService;
 use App\Support\SubscriptionCheckoutPayload;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
@@ -356,14 +357,326 @@ class AccountApiService
         }
 
         try {
-            return $this->decode(
-                $this->authedWithToken($token)->asForm()->post($this->url('subscriptions'), $payload)
-            );
+            $response = $this->authedWithToken($token)->asForm()->post($this->url('subscriptions'), $payload);
+            $result = $this->decode($response);
+            if (! ($result['ok'] ?? false)) {
+                Log::warning('AccountApiService::createSubscription rejected', [
+                    'http_status' => $response->status(),
+                    'message' => $this->extractApiValidationMessage($result),
+                    'body' => $response->json(),
+                ]);
+            }
+
+            return $result;
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::createSubscription failed', ['error' => $e->getMessage()]);
 
             return $this->empty(__('account.request_failed'));
         }
+    }
+
+    /**
+     * Create (or reuse) a pending API subscription and return Moyasar bootstrap from PaymentResource.
+     *
+     * @param  array<string, string>  $payload
+     * @return array{ok: bool, message: string, min_start_date: string|null, adjusted_start_date: string|null, subscription_id: int|null, bootstrap: array<string, mixed>|null}
+     */
+    public function bootstrapSubscriptionMoyasar(array $payload, ?string $token = null): array
+    {
+        $token = (string) ($token ?: session('external_api_token', ''));
+        if ($token === '') {
+            return [
+                'ok' => false,
+                'message' => __('account.login_required'),
+                'min_start_date' => null,
+                'adjusted_start_date' => null,
+                'subscription_id' => null,
+                'bootstrap' => null,
+            ];
+        }
+
+        $addressError = $this->ensureSubscriptionDeliveryAddress($payload, $token);
+        if ($addressError !== null) {
+            return [
+                'ok' => false,
+                'message' => $addressError,
+                'min_start_date' => null,
+                'adjusted_start_date' => null,
+                'subscription_id' => null,
+                'bootstrap' => null,
+            ];
+        }
+
+        $payloadHash = $this->hashSubscriptionPayload($payload);
+        $adjustedStartDate = null;
+        $minStartDate = null;
+
+        $cached = session('checkout_api_subscription_checkout');
+        if (is_array($cached) && ($cached['payload_hash'] ?? '') === $payloadHash) {
+            $subscriptionId = (int) ($cached['subscription_id'] ?? 0);
+            $bootstrap = is_array($cached['bootstrap'] ?? null) ? $cached['bootstrap'] : null;
+            if ($subscriptionId > 0 && $bootstrap !== null) {
+                return [
+                    'ok' => true,
+                    'message' => '',
+                    'min_start_date' => null,
+                    'adjusted_start_date' => null,
+                    'subscription_id' => $subscriptionId,
+                    'bootstrap' => $bootstrap,
+                ];
+            }
+        }
+
+        $result = $this->createSubscription($payload, $token);
+        $minStartDate = null;
+        $dateRetryCount = 0;
+
+        while (! ($result['ok'] ?? false) && $dateRetryCount < 3) {
+            $message = $this->extractApiValidationMessage($result);
+            $parsedMin = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
+
+            if ($parsedMin === '') {
+                break;
+            }
+
+            $currentDate = SubscriptionCheckoutPayload::normalizeStartDate(
+                (string) ($payload['date'] ?? $payload['start_date'] ?? '')
+            );
+
+            if ($currentDate !== '' && $currentDate >= $parsedMin) {
+                $minStartDate = $parsedMin;
+                break;
+            }
+
+            session()->forget('checkout_api_subscription_checkout');
+            $payload['date'] = $parsedMin;
+            $payload['start_date'] = $parsedMin;
+            $minStartDate = $parsedMin;
+            $adjustedStartDate = $parsedMin;
+            $payloadHash = $this->hashSubscriptionPayload($payload);
+            $dateRetryCount++;
+            $result = $this->createSubscription($payload, $token);
+        }
+
+        if (! ($result['ok'] ?? false)) {
+            $message = $this->extractApiValidationMessage($result);
+            if ($minStartDate === null) {
+                $minStartDate = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
+            }
+            $dateRelated = $minStartDate !== ''
+                && (
+                    SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message) !== ''
+                    || $dateRetryCount > 0
+                );
+
+            return [
+                'ok' => false,
+                'message' => $dateRelated
+                    ? SubscriptionCheckoutPayload::resolveStartDateErrorMessage($message, $minStartDate)
+                    : $message,
+                'min_start_date' => $dateRelated ? $minStartDate : null,
+                'adjusted_start_date' => null,
+                'subscription_id' => null,
+                'bootstrap' => null,
+            ];
+        }
+
+        $createData = is_array($result['data'] ?? null) ? $result['data'] : [];
+        if ($createData === [] && is_array($result['raw']['data'] ?? null)) {
+            $createData = $result['raw']['data'];
+        }
+
+        $bootstrap = $this->extractMoyasarBootstrapFromCreateResponse($createData, $result['raw'] ?? null);
+        if ($bootstrap === null) {
+            return [
+                'ok' => false,
+                'message' => __('checkout.subscription_payment_unavailable'),
+                'min_start_date' => null,
+                'adjusted_start_date' => null,
+                'subscription_id' => $this->extractExternalSubscriptionId($createData),
+                'bootstrap' => null,
+            ];
+        }
+
+        $subscriptionId = (int) ($bootstrap['subscription_id'] ?? $this->extractExternalSubscriptionId($createData) ?? 0);
+
+        session([
+            'checkout_api_subscription_checkout' => [
+                'payload_hash' => $payloadHash,
+                'subscription_id' => $subscriptionId,
+                'bootstrap' => $bootstrap,
+            ],
+        ]);
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'min_start_date' => null,
+            'adjusted_start_date' => $adjustedStartDate,
+            'subscription_id' => $subscriptionId,
+            'bootstrap' => $bootstrap,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function extractMoyasarBootstrapFromCreateResponse(mixed $data, mixed $raw = null): ?array
+    {
+        $payment = $this->extractPaymentResource($data);
+        if ($payment === null && is_array($raw)) {
+            $payment = $this->extractPaymentResource(is_array($raw['data'] ?? null) ? $raw['data'] : $raw);
+        }
+
+        if ($payment === null) {
+            return null;
+        }
+
+        $amountRaw = $payment['amount'] ?? $payment['pay_amount'] ?? null;
+        $amountHalalas = is_numeric($amountRaw) ? (int) $amountRaw : 0;
+        if ($amountHalalas <= 0) {
+            return null;
+        }
+
+        $metadata = is_array($payment['metadata'] ?? null) ? $payment['metadata'] : [];
+        $metadata = array_map(static fn ($v) => (string) $v, $metadata);
+
+        $publishableKey = app(MoyasarPaymentService::class)->resolvePublishableKey(
+            (string) (
+                $payment['publishable_api_key']
+                ?? $payment['publishable_key']
+                ?? ''
+            )
+        );
+
+        if ($publishableKey === '') {
+            return null;
+        }
+
+        $subscriptionId = null;
+        if (is_array($data)) {
+            $subscriptionId = $this->extractExternalSubscriptionId($data);
+        }
+
+        return [
+            'amount_halalas' => $amountHalalas,
+            'publishable_key' => $publishableKey,
+            'currency' => (string) ($payment['currency'] ?? 'SAR'),
+            'description' => (string) ($payment['description'] ?? ''),
+            'metadata' => $metadata,
+            'subscription_id' => $subscriptionId,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     */
+    protected function extractApiValidationMessage(array $result): string
+    {
+        $raw = is_array($result['raw'] ?? null) ? $result['raw'] : [];
+        $errors = $raw['errors'] ?? null;
+        if (is_array($errors)) {
+            foreach (['date', 'start_date'] as $field) {
+                $fieldMessages = $errors[$field] ?? null;
+                if (! is_array($fieldMessages)) {
+                    if (is_string($fieldMessages) && trim($fieldMessages) !== '') {
+                        return trim($fieldMessages);
+                    }
+
+                    continue;
+                }
+                foreach ($fieldMessages as $msg) {
+                    if (is_string($msg) && trim($msg) !== '') {
+                        return trim($msg);
+                    }
+                }
+            }
+
+            foreach ($errors as $messages) {
+                if (is_array($messages)) {
+                    foreach ($messages as $msg) {
+                        if (is_string($msg) && trim($msg) !== '') {
+                            return trim($msg);
+                        }
+                    }
+                }
+                if (is_string($messages) && trim($messages) !== '') {
+                    return trim($messages);
+                }
+            }
+        }
+
+        foreach (['message', 'error', 'detail'] as $key) {
+            $value = $raw[$key] ?? null;
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        $message = trim((string) ($result['message'] ?? ''));
+
+        return $message !== '' ? $message : __('account.request_failed');
+    }
+
+    /**
+     * @param  array<string, string>  $payload
+     */
+    protected function hashSubscriptionPayload(array $payload): string
+    {
+        ksort($payload);
+
+        return hash('sha256', json_encode($payload, JSON_UNESCAPED_UNICODE));
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function extractPaymentResource(mixed $data): ?array
+    {
+        if (! is_array($data)) {
+            return null;
+        }
+
+        if (isset($data['amount']) || isset($data['pay_amount']) || isset($data['publishable_api_key'])) {
+            return $data;
+        }
+
+        if (isset($data['payment']) && is_array($data['payment'])) {
+            return $data['payment'];
+        }
+
+        if (isset($data['subscription']['payment']) && is_array($data['subscription']['payment'])) {
+            return $data['subscription']['payment'];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, string>  $payload
+     */
+    protected function ensureSubscriptionDeliveryAddress(array &$payload, string $token): ?string
+    {
+        if (($payload['receiving'] ?? '') !== 'delivery') {
+            return null;
+        }
+
+        $addressId = trim((string) ($payload['address_id'] ?? ''));
+        if ($addressId !== '' && $addressId !== '0') {
+            return null;
+        }
+
+        $addresses = app(ApiAuthService::class)->getAddresses($token, true, false);
+        if ($addresses !== []) {
+            $latest = collect($addresses)->sortByDesc(fn (array $row): int => (int) ($row['id'] ?? 0))->first();
+            if (is_array($latest) && (int) ($latest['id'] ?? 0) > 0) {
+                $payload['address_id'] = (string) $latest['id'];
+
+                return null;
+            }
+        }
+
+        return __('checkout.confirm_saved_address_before_payment');
     }
 
     /**
