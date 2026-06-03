@@ -57,7 +57,7 @@ class FilterPlans extends Component
         // (default subscription plan minimum), while keeping list rendering stable.
         $plans = array_map(function (array $plan) use ($service): array {
             $id = (int) ($plan['id'] ?? 0);
-            if ($id <= 0) {
+            if ($id <= 0 || (float) ($plan['min_price'] ?? 0) > 0) {
                 return $plan;
             }
             $detail = $service->getProgram($id);

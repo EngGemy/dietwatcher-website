@@ -73,6 +73,107 @@ class ExternalDataService
     }
 
     /**
+     * Public catalog client — no bearer token.
+     *
+     * Meal routes use auth.optional: an invalid Authorization header returns 401
+     * before the controller runs. Programs/categories are public.
+     */
+    protected function catalogHttp(): PendingRequest
+    {
+        return Http::withOptions([
+            'timeout' => 25,
+            'connect_timeout' => 8,
+        ])->acceptJson()
+            ->withHeaders([
+                'Accept-Language' => app()->getLocale(),
+            ]);
+    }
+
+    /**
+     * @return array<string, mixed>|null  null = HTTP/transport failure (do not long-cache)
+     */
+    protected function fetchCatalogGet(string $path, array $query = []): ?array
+    {
+        $response = $this->catalogHttp()->get("{$this->baseUrl}{$path}", $query);
+        if (! $response->successful()) {
+            Log::warning('External API catalog request failed', [
+                'path' => $path,
+                'status' => $response->status(),
+                'body' => Str::limit($response->body(), 500),
+            ]);
+
+            return null;
+        }
+
+        $json = $response->json();
+
+        return is_array($json) ? $json : [];
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    protected function unwrapApiList(mixed $json): array
+    {
+        if (! is_array($json)) {
+            return [];
+        }
+
+        $data = $json['data'] ?? $json;
+
+        if (isset($data['data']) && is_array($data['data'])) {
+            return array_values($data['data']);
+        }
+
+        if (is_array($data) && array_is_list($data)) {
+            return $data;
+        }
+
+        if (is_array($data)) {
+            return array_values(array_filter($data, 'is_array'));
+        }
+
+        return [];
+    }
+
+    /**
+     * Cache successful catalog reads; never long-cache transport/HTTP failures.
+     *
+     * @template T
+     * @param  callable(): T  $fetch
+     * @return T
+     */
+    protected function rememberCatalog(string $cacheKey, int $successTtl, callable $fetch, mixed $failureDefault)
+    {
+        $fullKey = $this->cacheKey($cacheKey);
+        $failKey = $fullKey.'_fail';
+
+        if (Cache::has($fullKey)) {
+            return Cache::get($fullKey);
+        }
+
+        if (Cache::has($failKey)) {
+            return $failureDefault;
+        }
+
+        try {
+            $result = $fetch();
+            Cache::forget($failKey);
+            Cache::put($fullKey, $result, $successTtl);
+
+            return $result;
+        } catch (\Throwable $e) {
+            Log::warning('External catalog fetch failed', [
+                'key' => $cacheKey,
+                'error' => $e->getMessage(),
+            ]);
+            Cache::put($failKey, true, 90);
+
+            return $failureDefault;
+        }
+    }
+
+    /**
      * Expose the configured HTTP client (e.g. for one-off form posts outside cached helpers).
      */
     public function httpClient(): PendingRequest
@@ -98,26 +199,20 @@ class ExternalDataService
      */
     public function getPrograms(?int $categoryId = null): array
     {
-        $cacheKey = $this->cacheKey($categoryId ? "programs_cat_{$categoryId}" : 'programs');
+        $cacheKey = $categoryId ? "programs_cat_{$categoryId}" : 'programs';
 
-        return Cache::remember($cacheKey, 3600, function () use ($categoryId) {
-            try {
-                $params = [];
-                if ($categoryId) {
-                    $params['category_id'] = $categoryId;
-                }
-                $response = $this->http()->get("{$this->baseUrl}/programs", $params);
-                if ($response->successful()) {
-                    $raw = $response->json('data', []);
-
-                    return array_map([$this, 'transformProgram'], $raw);
-                }
-            } catch (\Exception $e) {
-                Log::warning('External API /programs failed: '.$e->getMessage());
+        return $this->rememberCatalog($cacheKey, 3600, function () use ($categoryId): array {
+            $params = [];
+            if ($categoryId) {
+                $params['category_id'] = $categoryId;
+            }
+            $json = $this->fetchCatalogGet('/programs', $params);
+            if ($json === null) {
+                throw new \RuntimeException('GET /programs failed');
             }
 
-            return [];
-        });
+            return array_map([$this, 'transformProgram'], $this->unwrapApiList($json));
+        }, []);
     }
 
     /**
@@ -128,10 +223,10 @@ class ExternalDataService
     {
         // Try the detail endpoint first
         try {
-            $response = $this->http()->get("{$this->baseUrl}/programs/{$id}");
-            if ($response->successful() && ! isset($response->json()['exception'])) {
-                $raw = $response->json('data');
-                if ($raw) {
+            $json = $this->fetchCatalogGet("/programs/{$id}");
+            if ($json !== null) {
+                $raw = $json['data'] ?? $json;
+                if (is_array($raw) && ! isset($raw['exception'])) {
                     return (object) $this->transformProgram($raw);
                 }
             }
@@ -496,38 +591,34 @@ class ExternalDataService
      */
     public function getCategories(): array
     {
-        return Cache::remember($this->cacheKey('program_categories'), 3600, function () {
-            // Try /program-categories first
-            try {
-                $response = $this->http()->get("{$this->baseUrl}/program-categories");
-                if ($response->successful()) {
-                    $data = $response->json('data', []);
-                    if (! empty($data)) {
-                        return array_map(function ($cat) {
-                            $name = $cat['name'] ?? '';
-                            if (is_string($name)) {
-                                $decoded = json_decode($name, true);
-                                $name = is_array($decoded) ? $decoded : $name;
-                            }
-
-                            return [
-                                'id' => $cat['id'] ?? 0,
-                                'name' => $name,
-                                'description' => $cat['description'] ?? '',
-                                'image_url' => $this->absoluteMediaUrl((string) ($cat['cover'] ?? $cat['image'] ?? $cat['image_url'] ?? '')),
-                                'badge' => $cat['badge'] ?? null,
-                                'programs_count' => $cat['programsCount'] ?? 0,
-                            ];
-                        }, $data);
-                    }
-                }
-            } catch (\Exception $e) {
-                Log::warning('External API /program-categories failed: '.$e->getMessage());
+        return $this->rememberCatalog('program_categories', 3600, function (): array {
+            $json = $this->fetchCatalogGet('/program-categories');
+            if ($json === null) {
+                throw new \RuntimeException('GET /program-categories failed');
             }
 
-            // No categories available from API yet
-            return [];
-        });
+            $data = $this->unwrapApiList($json);
+            if ($data === []) {
+                return [];
+            }
+
+            return array_map(function ($cat) {
+                $name = $cat['name'] ?? '';
+                if (is_string($name)) {
+                    $decoded = json_decode($name, true);
+                    $name = is_array($decoded) ? $decoded : $name;
+                }
+
+                return [
+                    'id' => $cat['id'] ?? 0,
+                    'name' => $name,
+                    'description' => $cat['description'] ?? '',
+                    'image_url' => $this->absoluteMediaUrl((string) ($cat['cover'] ?? $cat['image'] ?? $cat['image_url'] ?? '')),
+                    'badge' => $cat['badge'] ?? null,
+                    'programs_count' => $cat['programsCount'] ?? 0,
+                ];
+            }, $data);
+        }, []);
     }
 
     /**
@@ -567,9 +658,9 @@ class ExternalDataService
     public function getProgramMeals(int $id): array
     {
         try {
-            $response = $this->http()->get("{$this->baseUrl}/programs/get-meals/{$id}");
-            if ($response->successful()) {
-                return $response->json('data', []);
+            $json = $this->fetchCatalogGet("/programs/get-meals/{$id}");
+            if ($json !== null) {
+                return $this->unwrapApiList($json);
             }
         } catch (\Exception $e) {
             Log::warning("External API /programs/get-meals/{$id} failed: ".$e->getMessage());
@@ -594,40 +685,40 @@ class ExternalDataService
         $tags = $filters['tags'] ?? [];
         $search = trim((string) ($filters['search'] ?? ''));
 
-        $cacheKey = $this->cacheKey('meals_'.md5(json_encode($filters)));
+        $cacheKey = 'meals_'.md5(json_encode($filters));
+        $empty = ['data' => [], 'meta' => ['currentPage' => $page, 'lastPage' => 1, 'total' => 0]];
 
-        return Cache::remember($cacheKey, 300, function () use ($page, $groupId, $menuId, $tags, $search) {
-            try {
-                $params = ['page' => $page];
-                if ($groupId) {
-                    $params['group_id'] = $groupId;
-                }
-                if ($menuId) {
-                    $params['menu_id'] = $menuId;
-                }
-                if (! empty($tags)) {
-                    $params['tags'] = array_values(array_map('intval', $tags));
-                }
-                if ($search !== '') {
-                    $params['search'] = $search;
-                }
-
-                $response = $this->http()->get("{$this->baseUrl}/meals", $params);
-                if ($response->successful()) {
-                    $json = $response->json();
-                    $meta = $this->normalizePaginationMeta($json['meta'] ?? [], $page);
-
-                    return [
-                        'data' => array_map([$this, 'transformMeal'], $json['data'] ?? []),
-                        'meta' => $meta,
-                    ];
-                }
-            } catch (\Exception $e) {
-                Log::warning('External API /meals failed: '.$e->getMessage());
+        return $this->rememberCatalog($cacheKey, 300, function () use ($page, $groupId, $menuId, $tags, $search): array {
+            $params = ['page' => $page];
+            if ($groupId) {
+                $params['group_id'] = $groupId;
+            }
+            if ($menuId) {
+                $params['menu_id'] = $menuId;
+            }
+            if (! empty($tags)) {
+                $params['tags'] = array_values(array_map('intval', $tags));
+            }
+            if ($search !== '') {
+                $params['search'] = $search;
             }
 
-            return ['data' => [], 'meta' => ['currentPage' => $page, 'lastPage' => 1]];
-        });
+            $json = $this->fetchCatalogGet('/meals', $params);
+            if ($json === null) {
+                throw new \RuntimeException('GET /meals failed');
+            }
+
+            $rows = $this->unwrapApiList($json);
+            $meta = $this->normalizePaginationMeta($json['meta'] ?? [], $page);
+            if (($meta['total'] ?? 0) === 0 && $rows !== []) {
+                $meta['total'] = count($rows);
+            }
+
+            return [
+                'data' => array_map([$this, 'transformMeal'], $rows),
+                'meta' => $meta,
+            ];
+        }, $empty);
     }
 
     /**
@@ -636,32 +727,34 @@ class ExternalDataService
      */
     public function getAllMeals(?int $groupId = null): array
     {
-        $cacheKey = $this->cacheKey('all_meals'.($groupId ? "_group_{$groupId}" : ''));
+        $cacheKey = 'all_meals'.($groupId ? "_group_{$groupId}" : '');
 
-        return Cache::remember($cacheKey, 600, function () use ($groupId) {
+        return $this->rememberCatalog($cacheKey, 600, function () use ($groupId): array {
             $allMeals = [];
             $page = 1;
             $maxPages = 50;
+            $lastPage = 1;
 
             do {
-                try {
-                    $params = ['page' => $page];
-                    if ($groupId) {
-                        $params['group_id'] = $groupId;
+                $params = ['page' => $page];
+                if ($groupId) {
+                    $params['group_id'] = $groupId;
+                }
+
+                $json = $this->fetchCatalogGet('/meals', $params);
+                if ($json === null) {
+                    if ($page === 1) {
+                        throw new \RuntimeException('GET /meals failed');
                     }
 
-                    $response = $this->http()->get("{$this->baseUrl}/meals", $params);
-                    if ($response->successful()) {
-                        $json = $response->json();
-                        $data = array_map([$this, 'transformMeal'], $json['data'] ?? []);
-                        $allMeals = array_merge($allMeals, $data);
-                        $meta = $this->normalizePaginationMeta($json['meta'] ?? [], $page);
-                        $lastPage = (int) ($meta['lastPage'] ?? 1);
-                    } else {
-                        break;
-                    }
-                } catch (\Exception $e) {
-                    Log::warning("External API /meals (page {$page}) failed: ".$e->getMessage());
+                    break;
+                }
+
+                $rows = $this->unwrapApiList($json);
+                $allMeals = array_merge($allMeals, array_map([$this, 'transformMeal'], $rows));
+                $meta = $this->normalizePaginationMeta($json['meta'] ?? [], $page);
+                $lastPage = (int) ($meta['lastPage'] ?? 1);
+                if ($lastPage <= 1 && $rows !== []) {
                     break;
                 }
 
@@ -669,7 +762,7 @@ class ExternalDataService
             } while ($page <= $lastPage && $page <= $maxPages);
 
             return $allMeals;
-        });
+        }, []);
     }
 
     /**
@@ -688,15 +781,11 @@ class ExternalDataService
     public function getMeal(int $id): ?array
     {
         try {
-            $response = $this->http()->get("{$this->baseUrl}/meals/{$id}");
-            if ($response->successful()) {
-                $payload = $response->json();
-                $data = $payload['data'] ?? null;
+            $json = $this->fetchCatalogGet("/meals/{$id}");
+            if ($json !== null) {
+                $data = $json['data'] ?? $json;
                 if (is_array($data) && isset($data['id'])) {
                     return $this->transformMeal($data);
-                }
-                if (is_array($payload) && isset($payload['id'])) {
-                    return $this->transformMeal($payload);
                 }
             }
         } catch (\Exception $e) {
@@ -1372,31 +1461,31 @@ class ExternalDataService
      */
     public function getMealFilters(): array
     {
-        return Cache::remember($this->cacheKey('meals_filters'), 600, function () {
-            try {
-                $response = $this->http()->get("{$this->baseUrl}/meals/filters");
-                if ($response->successful()) {
-                    $body = $response->json();
-                    $payload = $body['data'] ?? $body ?? [];
+        $empty = [
+            'groups' => [],
+            'menus' => [],
+            'tags' => [],
+        ];
 
-                    return [
-                        'groups' => $this->normalizeFilterBucket(
-                            $payload['groups'] ?? $payload['categories'] ?? $payload['shopMealGroups'] ?? []
-                        ),
-                        'menus' => $this->normalizeFilterBucket($payload['menus'] ?? []),
-                        'tags' => $this->normalizeFilterBucket($payload['tags'] ?? []),
-                    ];
-                }
-            } catch (\Exception $e) {
-                Log::warning('External API /meals/filters failed: '.$e->getMessage());
+        return $this->rememberCatalog('meals_filters', 600, function (): array {
+            $json = $this->fetchCatalogGet('/meals/filters');
+            if ($json === null) {
+                throw new \RuntimeException('GET /meals/filters failed');
+            }
+
+            $payload = $json['data'] ?? $json ?? [];
+            if (! is_array($payload)) {
+                $payload = [];
             }
 
             return [
-                'groups' => $this->getShopMealGroups(),
-                'menus' => [],
-                'tags' => [],
+                'groups' => $this->normalizeFilterBucket(
+                    $payload['groups'] ?? $payload['categories'] ?? $payload['shopMealGroups'] ?? []
+                ),
+                'menus' => $this->normalizeFilterBucket($payload['menus'] ?? []),
+                'tags' => $this->normalizeFilterBucket($payload['tags'] ?? []),
             ];
-        });
+        }, $empty);
     }
 
     /**
@@ -1679,7 +1768,16 @@ class ExternalDataService
         foreach (['en', 'ar'] as $locale) {
             foreach ($baseKeys as $key) {
                 Cache::forget("{$locale}_{$key}");
+                Cache::forget("{$locale}_{$key}_fail");
             }
+            for ($i = 1; $i <= 50; $i++) {
+                Cache::forget("{$locale}_programs_cat_{$i}");
+                Cache::forget("{$locale}_programs_cat_{$i}_fail");
+                Cache::forget("{$locale}_all_meals_group_{$i}");
+                Cache::forget("{$locale}_all_meals_group_{$i}_fail");
+            }
+            Cache::forget("{$locale}_all_meals");
+            Cache::forget("{$locale}_all_meals_fail");
             for ($i = 1; $i <= 20; $i++) {
                 Cache::forget("{$locale}_orders_page_{$i}");
                 Cache::forget("{$locale}_subscriptions_page_{$i}");
