@@ -61,8 +61,12 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
               x-init="init()"
               @address-selected.window="handleAddressFromMap($event)"
               @map-address-draft.window="handleMapAddressDraft($event)"
+              @checkout-coverage-changed.window="handleCoverageChanged($event)"
               @submit.prevent="submitForm($event)">
             @csrf
+            @if($hasPlanItems)
+                <input type="hidden" name="with_weekend" value="{{ $withWeekend ?? '0' }}" />
+            @endif
 
             {{-- Desktop: 50/50 two-column layout (matches Figma / static checkout) --}}
             <div class="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start lg:gap-x-10">
@@ -93,17 +97,22 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                             </svg>
                                         </div>
                                         <div class="date-picker-label" id="date_display">
-                                            @php
-                                                $defaultDate = $defaultStartDate;
-                                                $dateObj = \Carbon\Carbon::parse($defaultDate);
-                                            @endphp
-                                            <span class="date-picker-label__day">{{ $dateObj->format('d') }}</span>
-                                            <span class="date-picker-label__month">{{ $dateObj->translatedFormat('M Y') }}</span>
+                                            @if(! empty($defaultStartDate))
+                                                @php
+                                                    $dateObj = \Carbon\Carbon::parse($defaultStartDate);
+                                                @endphp
+                                                <span class="date-picker-label__day">{{ $dateObj->format('d') }}</span>
+                                                <span class="date-picker-label__month">{{ $dateObj->translatedFormat('M Y') }}</span>
+                                            @else
+                                                <span class="date-picker-label__day">--</span>
+                                                <span class="date-picker-label__month">{{ __('Verify phone to set date') }}</span>
+                                            @endif
                                         </div>
                                     </div>
                                     @error('start_date')
                                         <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
                                     @enderror
+                                    <p x-show="startDateNotice" x-cloak class="text-amber-800 text-sm mt-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2" x-text="startDateNotice"></p>
                                 </div>
                             @endif
 
@@ -415,6 +424,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                             :placeholder="__('Search for an address')"
                                         />
                                     </div>
+                                    <p x-show="deliveryType === 'home' && coverageMessage" x-cloak
+                                       class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+                                       x-text="coverageMessage"></p>
                                     @unless(config('services.google_maps.key'))
                                         <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                                             {{ __('Add GOOGLE_MAPS_API_KEY to your .env file to load the live map.') }}
@@ -1318,7 +1330,15 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             hasCartItems: @json(!empty($cart)),
             startDate: @json($defaultStartDate),
             minStartDate: @json($minStartDate),
+            scheduleReady: @json($scheduleReady ?? false),
+            startDateNotice: '',
             startDateTouched: false,
+            coverageOk: @json(old('delivery_type', 'home') === 'pickup'),
+            coverageMessage: '',
+            inlineMapLat: '',
+            inlineMapLng: '',
+            inlineMapDistrictId: '',
+            _minDatePollTimer: null,
             _skipStartDateTouch: false,
             _moyasarFingerprint: '',
             _moyasarRequestId: 0,
@@ -1812,6 +1832,18 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 }
             },
 
+            handleCoverageChanged(event) {
+                const d = event.detail || {};
+                this.coverageOk = !!d.ok;
+                this.coverageMessage = d.ok ? '' : @json(__('checkout.area_not_served'));
+                this.inlineMapLat = d.lat != null && d.lat !== '' ? String(d.lat) : '';
+                this.inlineMapLng = d.lng != null && d.lng !== '' ? String(d.lng) : '';
+                this.inlineMapDistrictId = d.districtId ? String(d.districtId) : '';
+                if (! d.ok) {
+                    this.addressConfirmedForSync = false;
+                }
+            },
+
             savedAddressDistrict(addr) {
                 if (! addr || ! addr.district) {
                     return '';
@@ -1956,6 +1988,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     return;
                 }
                 this.syncAddressError = '';
+                this.coverageOk = true;
+                this.coverageMessage = '';
                 this.selectedAddressId = addr.id ?? null;
                 this.addingNewAddress = false;
                 this.newAddressError = '';
@@ -2190,6 +2224,29 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 return false;
             },
 
+            startDateValid() {
+                if (! this.isPlanCheckout) {
+                    return true;
+                }
+                if (! this.phoneVerified || ! this.minStartDate) {
+                    return false;
+                }
+                const d = String(this.startDate || document.getElementById('start_date_input')?.value || '').trim().slice(0, 10);
+
+                return d !== '' && d >= this.minStartDate;
+            },
+
+            coverageReady() {
+                if (this.deliveryType === 'pickup') {
+                    return true;
+                }
+                if (this.selectedAddressId) {
+                    return true;
+                }
+
+                return this.coverageOk;
+            },
+
             /** Home delivery: map pin confirmed + city + district (no saved-address id required). */
             inlineHomeAddressReady() {
                 if (this.deliveryType !== 'home') {
@@ -2277,7 +2334,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 return this.deliveryReady()
                     && hasSelectedPlan
                     && hasSelectedDuration
-                    && this.hasStartDate()
+                    && this.startDateValid()
+                    && this.coverageReady()
                     && ! homeBlockedBySync;
             },
 
@@ -2595,7 +2653,10 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
             scheduleMoyasarRefresh() {
                 clearTimeout(this._moyasarTimer);
-                this._moyasarTimer = setTimeout(() => {
+                this._moyasarTimer = setTimeout(async () => {
+                    if (this.isPlanCheckout && this.phoneVerified) {
+                        await this.refreshMinStartDateFromApi();
+                    }
                     const el = document.getElementById('moyasar-form-checkout');
                     if (! this.canProceedToPayment()) {
                         this.moyasarError = '';
@@ -2636,6 +2697,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
             async bootstrapMoyasarPreview() {
                 if (this.phoneVerified) {
+                    return;
+                }
+                if (! this.hasCartItems) {
                     return;
                 }
                 const hasSdk = await this.waitForMoyasar();
@@ -2705,11 +2769,46 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             applyDurationMinimumStartDate() {
-                if (! this.isPlanCheckout || ! this.minStartDate) {
+                return this.refreshMinStartDateFromApi();
+            },
+
+            async refreshMinStartDateFromApi() {
+                if (! this.isPlanCheckout || ! this.phoneVerified) {
                     return;
                 }
-                this.updateStartDatePickerMinimum(this.minStartDate);
-                this.applyDefaultStartDateIfNeeded(this.minStartDate);
+                const params = new URLSearchParams();
+                if (this.selectedPlanDurationId) {
+                    params.set('plan_duration_id', String(this.selectedPlanDurationId));
+                }
+                params.set('delivery_type', this.deliveryType === 'pickup' ? 'pickup' : 'home');
+                const url = @json(route('checkout.subscription-schedule')) + '?' + params.toString();
+                try {
+                    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                    const data = await res.json().catch(() => ({}));
+                    if (! res.ok || ! data.success) {
+                        return;
+                    }
+                    const apiMin = String(data.first_available_date_for_subscription || data.min_start_date || '').trim().slice(0, 10);
+                    if (apiMin) {
+                        this.applyApiMinStartDate(apiMin);
+                    }
+                } catch (e) {}
+            },
+
+            applyApiMinStartDate(apiMin) {
+                const normalized = String(apiMin || '').trim().slice(0, 10);
+                if (! normalized) {
+                    return;
+                }
+                const current = String(this.startDate || document.getElementById('start_date_input')?.value || '').trim().slice(0, 10);
+                if (current && current < normalized) {
+                    this.startDateNotice = @json(__('checkout.start_date_adjusted_notice'));
+                    this.startDateTouched = false;
+                }
+                this.updateStartDatePickerMinimum(normalized);
+                if (! this.startDateTouched || ! current || current < normalized) {
+                    this.applyDefaultStartDateIfNeeded(normalized);
+                }
             },
 
             updateStartDatePickerMinimum(minDate) {
@@ -2777,6 +2876,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 const fd = new FormData(form);
                 fd.set('selected_plan_id', String(this.selectedPlanId || ''));
                 fd.set('selected_duration', this.selectedDurationValue());
+                fd.set('start_date', String(document.getElementById('start_date_input')?.value || this.startDate || ''));
                 if (this.selectedPlanDurationId) {
                     fd.set('plan_duration_id', String(this.selectedPlanDurationId));
                 }
@@ -2785,6 +2885,15 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 }
                 if (this.selectedZoneId) {
                     fd.set('zone_id', String(this.selectedZoneId));
+                }
+                if (! this.startDateValid()) {
+                    this.moyasarError = @json(__('checkout.start_date_required'));
+                    const el = document.getElementById('moyasar-form-checkout');
+                    if (el) {
+                        el.innerHTML = '';
+                    }
+
+                    return;
                 }
                 const fingerprint = this.buildMoyasarFingerprint(fd);
                 if (fingerprint === this._moyasarFingerprint && this.moyasarWidgetMounted()) {
@@ -2854,6 +2963,10 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     const sep = cb.includes('?') ? '&' : '?';
                     cb = cb + sep + 'order=' + encodeURIComponent(data.order_number);
                 }
+                if (data.subscription_id) {
+                    const sep = cb.includes('?') ? '&' : '?';
+                    cb = cb + sep + 'subscription=' + encodeURIComponent(String(data.subscription_id));
+                }
                 Moyasar.init({
                     element: '#moyasar-form-checkout',
                     amount: data.amount_halalas,
@@ -2889,7 +3002,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         this.customerName = String(detail.profile.name);
                     }
                     this.showNameField = this.isContinueUser || ! (this.customerName || '').trim();
-                    this.applyDurationMinimumStartDate();
+                    await this.refreshMinStartDateFromApi();
                     this.$nextTick(() => this.scheduleMoyasarRefresh());
                 });
 
@@ -2922,6 +3035,10 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 this.$watch('deliveryType', (v) => {
                     if (v === 'pickup') {
                         this.syncPickupPhase();
+                        this.coverageOk = true;
+                        this.coverageMessage = '';
+                    } else {
+                        this.coverageOk = !!this.selectedAddressId;
                     }
                     if (v === 'home') {
                         setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 300);
@@ -2947,6 +3064,14 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
                 if (this.phoneVerified) {
                     await this.refreshCustomerFromServer();
+                    if (this.isPlanCheckout) {
+                        await this.refreshMinStartDateFromApi();
+                    }
+                }
+                if (this.isPlanCheckout && this.phoneVerified) {
+                    this._minDatePollTimer = setInterval(() => {
+                        this.refreshMinStartDateFromApi();
+                    }, 5 * 60 * 1000);
                 }
                 const startDateInput = document.getElementById('start_date_input');
                 if (startDateInput) {
@@ -2982,23 +3107,21 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
         const startDateInput = document.getElementById('start_date_input');
         const serverMinDate = @json($minStartDate);
-        let minDateStr = serverMinDate || startDateInput?.value || '';
+        let minDateStr = serverMinDate || '';
 
-        if (startDateInput) {
+        if (startDateInput && minDateStr) {
             const currentValue = String(startDateInput.value || '').trim();
-            if (! currentValue || (minDateStr && currentValue < minDateStr)) {
-                startDateInput.value = minDateStr || currentValue;
-                if (minDateStr) {
-                    updateDisplay(minDateStr);
-                }
+            if (! currentValue || currentValue < minDateStr) {
+                startDateInput.value = minDateStr;
+                updateDisplay(minDateStr);
             }
         }
 
-        if (startDateInput && minDateStr) {
+        if (startDateInput) {
             flatpickr('#start_date_input', {
                 dateFormat: 'Y-m-d',
-                minDate: minDateStr,
-                defaultDate: startDateInput.value || minDateStr,
+                minDate: minDateStr || undefined,
+                defaultDate: startDateInput.value || minDateStr || undefined,
                 disableMobile: true,
                 @if($locale === 'ar')
                 locale: 'ar',

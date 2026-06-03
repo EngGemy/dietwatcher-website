@@ -91,21 +91,9 @@ final class SubscriptionCheckoutPayload
         $deliveryType = (string) ($validated['delivery_type'] ?? 'home');
         $receiving = $deliveryType === 'pickup' ? 'pickup' : 'delivery';
 
-        $durations = $external->getCheckoutPlanDurations($programId);
-        $durationRow = null;
-        foreach ($durations as $row) {
-            if (is_array($row) && (int) ($row['id'] ?? 0) === $durationId) {
-                $durationRow = $row;
-                break;
-            }
-        }
-        $minStart = self::minimumStartDateForDuration($durationRow);
-        $startDate = self::effectiveStartDateForPayload((string) ($validated['start_date'] ?? ''));
-        if ($startDate === '' || $startDate < $minStart) {
-            $startDate = $minStart;
-        }
+        $startDate = self::normalizeStartDate((string) ($validated['start_date'] ?? ''));
 
-        $withWeekend = (string) ($validated['with_weekend'] ?? '0');
+        $withWeekend = self::resolveWithWeekend($cart, $external, $validated);
         $withPickup = $receiving === 'pickup' ? '1' : '0';
 
         $payload = [
@@ -118,8 +106,6 @@ final class SubscriptionCheckoutPayload
             'with_support' => '0',
             'with_weekend' => $withWeekend,
             'with_service' => '0',
-            'start_date' => $startDate,
-            'date' => $startDate,
             'payment_option' => 'credit_card',
             'useWallet' => (string) ($validated['useWallet'] ?? $validated['use_wallet'] ?? '0'),
         ];
@@ -156,62 +142,126 @@ final class SubscriptionCheckoutPayload
             $payload['meal_type'] = $mealType;
         }
 
+        if ($startDate !== '') {
+            $payload['start_date'] = $startDate;
+            $payload['date'] = $startDate;
+        }
+
         return array_filter($payload, static fn ($v) => $v !== null && $v !== '');
     }
 
-    public static function defaultCheckoutMinimumStartDate(): string
+    /**
+     * Resolve with_weekend from plan week_end_status (API) or validated input.
+     *
+     * @param  array<string, mixed>  $cart
+     * @param  array<string, mixed>|null  $validated
+     */
+    public static function resolveWithWeekend(array $cart, ExternalDataService $external, ?array $validated = null): string
     {
-        // Match API helper twoDaysAfterNoon(): +48h before noon, +72h after noon (Asia/Riyadh).
-        $now = now(config('app.timezone', 'Asia/Riyadh'));
-        $noon = $now->copy()->setTime(12, 0, 0);
-
-        if ($now->greaterThan($noon)) {
-            $now->addHours(72);
-        } else {
-            $now->addHours(48);
+        if (is_array($validated) && array_key_exists('with_weekend', $validated)) {
+            return filter_var($validated['with_weekend'], FILTER_VALIDATE_BOOLEAN) ? '1' : '0';
         }
 
-        return $now->format('Y-m-d');
-    }
-
-    public static function effectiveStartDateForPayload(string $candidate): string
-    {
-        $normalized = self::normalizeStartDate($candidate);
-        $floor = self::defaultCheckoutMinimumStartDate();
-        if ($normalized === '' || $normalized < $floor) {
-            return $floor;
+        $plan = self::firstPlanLine($cart);
+        if ($plan['line'] === null) {
+            return '0';
         }
 
-        return $normalized;
+        $programId = $plan['program_id'];
+        $options = is_array($plan['line']['options'] ?? null) ? $plan['line']['options'] : [];
+        $subscriptionPlanId = (int) ($options['subscription_plan_id'] ?? 0);
+        $planId = $subscriptionPlanId > 0 ? $subscriptionPlanId : $programId;
+
+        $weekEndStatus = self::planWeekEndStatus($external, $programId, $planId);
+        if ($weekEndStatus === 'with_week_end') {
+            return '1';
+        }
+        if ($weekEndStatus === 'without_week_end') {
+            return '0';
+        }
+
+        return '0';
     }
 
     /**
-     * Next start date to try when the API rejects the current date (handles stale years and equal-date rejections).
+     * Minimal payload for POST /subscriptions/calculate (schedule / min start date).
+     *
+     * @param  array<string, mixed>  $cart
+     * @param  array<string, mixed>|null  $validated
+     * @return array<string, string>
      */
-    public static function nextStartDateAfterApiRejection(string $currentDate, string $parsedMinimum): string
+    public static function buildMinimalSchedulePayload(
+        array $cart,
+        ExternalDataService $external,
+        ?array $validated = null,
+    ): array {
+        $validated = is_array($validated) ? $validated : [];
+        $validated['delivery_type'] = $validated['delivery_type'] ?? 'home';
+        $validated['start_date'] = '';
+
+        $payload = self::buildFormPayload($validated, $cart, $external);
+        unset($payload['payment_option'], $payload['start_date'], $payload['date'], $payload['promocode_name']);
+
+        return $payload;
+    }
+
+    /**
+     * Read authoritative min/default start date from calculate response data.
+     *
+     * @param  array<string, mixed>|null  $data
+     */
+    public static function extractApiMinStartDate(?array $data): string
     {
-        $floor = self::defaultCheckoutMinimumStartDate();
-        $parsedMinimum = self::reconcileApiMinimumStartDate($parsedMinimum);
-        $currentDate = self::normalizeStartDate($currentDate);
-
-        try {
-            $target = \Illuminate\Support\Carbon::parse($parsedMinimum)->startOfDay();
-            $floorDate = \Illuminate\Support\Carbon::parse($floor)->startOfDay();
-            if ($target->lt($floorDate)) {
-                $target = $floorDate->copy();
-            }
-
-            if ($currentDate !== '') {
-                $current = \Illuminate\Support\Carbon::parse($currentDate)->startOfDay();
-                if ($current->gte($target)) {
-                    $target = $current->copy()->addDay();
-                }
-            }
-
-            return $target->format('Y-m-d');
-        } catch (\Throwable) {
-            return $floor;
+        if (! is_array($data)) {
+            return '';
         }
+
+        foreach ([
+            'first_available_date_for_subscription',
+            'min_start_date',
+            'first_available_date',
+            'minimum_start_date',
+            'available_from',
+        ] as $key) {
+            $normalized = self::normalizeStartDate((string) ($data[$key] ?? ''));
+            if ($normalized !== '') {
+                return $normalized;
+            }
+        }
+
+        return '';
+    }
+
+    protected static function planWeekEndStatus(ExternalDataService $external, int $programId, int $planId): ?string
+    {
+        if ($programId <= 0) {
+            return null;
+        }
+
+        $program = $external->getProgram($programId);
+        if ($program === null) {
+            return null;
+        }
+
+        $plans = $program->subscription_plans ?? [];
+        if (! is_array($plans)) {
+            $plans = json_decode(json_encode($plans), true) ?? [];
+        }
+
+        foreach ($plans as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            if ($planId > 0 && (int) ($row['id'] ?? 0) !== $planId) {
+                continue;
+            }
+            $status = (string) ($row['week_end_status'] ?? '');
+            if ($status !== '') {
+                return $status;
+            }
+        }
+
+        return null;
     }
 
     public static function normalizeStartDate(string $value): string
@@ -229,65 +279,32 @@ final class SubscriptionCheckoutPayload
     }
 
     /**
-     * Earliest subscription start: noon cutoff (+2 days before 12:00, +3 days after).
-     *
-     * @param  array<string, mixed>|null  $durationRow
-     */
-    public static function minimumStartDateForDuration(?array $durationRow): string
-    {
-        return self::defaultCheckoutMinimumStartDate();
-    }
-
-    /**
-     * Normalize a minimum date parsed from API validation (handles stale years like 2024 in d-m-Y messages).
+     * Normalize a date string from API validation messages (handles d-m-Y in errors).
      */
     public static function reconcileApiMinimumStartDate(string $candidate): string
     {
-        $normalized = self::normalizeStartDate($candidate);
-        if ($normalized === '') {
-            return self::defaultCheckoutMinimumStartDate();
-        }
-
-        try {
-            $floor = \Illuminate\Support\Carbon::parse(self::defaultCheckoutMinimumStartDate())->startOfDay();
-            $date = \Illuminate\Support\Carbon::parse($normalized)->startOfDay();
-            $today = now(config('app.timezone', 'Asia/Riyadh'))->startOfDay();
-
-            if ($date->gte($today) && $date->gte($floor)) {
-                return $date->format('Y-m-d');
-            }
-
-            if ($date->lt($today)) {
-                $rolled = $date->copy()->year($floor->year);
-                if ($rolled->lt($floor)) {
-                    $rolled = $floor->copy();
-                }
-
-                return $rolled->format('Y-m-d');
-            }
-
-            return $floor->format('Y-m-d');
-        } catch (\Throwable) {
-            return self::defaultCheckoutMinimumStartDate();
-        }
+        return self::normalizeStartDate($candidate);
     }
 
     /**
-     * Reject parsed API minimums that are unreasonably far in the future (bad regex matches).
+     * Normalize API minimum date; reject unreasonably far future values from bad regex matches.
      */
     public static function sanitizeApiMinimumStartDate(string $candidate): string
     {
-        $reconciled = self::reconcileApiMinimumStartDate($candidate);
-
-        try {
-            if (\Illuminate\Support\Carbon::parse($reconciled)->gt(now()->addYears(3))) {
-                return self::defaultCheckoutMinimumStartDate();
-            }
-        } catch (\Throwable) {
-            return self::defaultCheckoutMinimumStartDate();
+        $normalized = self::normalizeStartDate($candidate);
+        if ($normalized === '') {
+            return '';
         }
 
-        return $reconciled;
+        try {
+            if (\Illuminate\Support\Carbon::parse($normalized)->gt(now()->addYears(3))) {
+                return '';
+            }
+        } catch (\Throwable) {
+            return '';
+        }
+
+        return $normalized;
     }
 
     /**
@@ -295,8 +312,20 @@ final class SubscriptionCheckoutPayload
      */
     public static function extractMinStartDateFromApiResult(array $apiResult): string
     {
+        $data = is_array($apiResult['data'] ?? null) ? $apiResult['data'] : [];
+        $fromData = self::extractApiMinStartDate($data);
+        if ($fromData !== '') {
+            return $fromData;
+        }
+
         $raw = is_array($apiResult['raw'] ?? null) ? $apiResult['raw'] : [];
-        foreach (['min_start_date', 'minimum_start_date', 'available_from'] as $key) {
+        $rawData = is_array($raw['data'] ?? null) ? $raw['data'] : [];
+        $fromRawData = self::extractApiMinStartDate($rawData);
+        if ($fromRawData !== '') {
+            return $fromRawData;
+        }
+
+        foreach (['min_start_date', 'minimum_start_date', 'available_from', 'first_available_date_for_subscription'] as $key) {
             $value = $raw[$key] ?? null;
             if (is_string($value) && trim($value) !== '') {
                 $sanitized = self::sanitizeApiMinimumStartDate($value);
@@ -333,25 +362,6 @@ final class SubscriptionCheckoutPayload
         return self::sanitizeApiMinimumStartDate(
             self::parseMinimumDateFromValidationMessage((string) ($apiResult['message'] ?? ''))
         );
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $durations
-     */
-    public static function minimumStartDateForDurationId(array $durations, ?int $durationId): string
-    {
-        if ($durationId !== null && $durationId > 0) {
-            foreach ($durations as $row) {
-                if (! is_array($row)) {
-                    continue;
-                }
-                if ((int) ($row['id'] ?? 0) === $durationId) {
-                    return self::minimumStartDateForDuration($row);
-                }
-            }
-        }
-
-        return self::minimumStartDateForDuration(null);
     }
 
     public static function parseMinimumDateFromValidationMessage(string $message): string
@@ -392,7 +402,10 @@ final class SubscriptionCheckoutPayload
 
     public static function formatMinimumStartDateLabel(string $ymd): string
     {
-        $ymd = self::reconcileApiMinimumStartDate($ymd);
+        $ymd = self::normalizeStartDate($ymd);
+        if ($ymd === '') {
+            return '';
+        }
 
         return \Illuminate\Support\Carbon::parse($ymd)
             ->locale(app()->getLocale())
@@ -648,26 +661,8 @@ final class SubscriptionCheckoutPayload
      */
     public static function clampPayloadStartDate(array $payload, ExternalDataService $external): array
     {
-        $programId = (int) ($payload['program_id'] ?? 0);
-        $durationId = (int) ($payload['plan_duration_id'] ?? 0);
-        if ($programId <= 0) {
-            return $payload;
-        }
-
-        $durationRow = null;
-        foreach ($external->getCheckoutPlanDurations($programId) as $row) {
-            if (is_array($row) && (int) ($row['id'] ?? 0) === $durationId) {
-                $durationRow = $row;
-                break;
-            }
-        }
-
-        $min = self::minimumStartDateForDuration($durationRow);
-        $current = self::effectiveStartDateForPayload((string) ($payload['date'] ?? $payload['start_date'] ?? ''));
-        if ($current === '' || $current < $min) {
-            $payload['date'] = $min;
-            $payload['start_date'] = $min;
-        } else {
+        $current = self::normalizeStartDate((string) ($payload['date'] ?? $payload['start_date'] ?? ''));
+        if ($current !== '') {
             $payload['date'] = $current;
             $payload['start_date'] = $current;
         }

@@ -531,10 +531,8 @@ class AccountApiService
         if ($userDate === '') {
             return [
                 'ok' => false,
-                'message' => SubscriptionCheckoutPayload::startDateBeforeMinimumMessage(
-                    SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate()
-                ),
-                'min_start_date' => SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate(),
+                'message' => __('checkout.start_date_required'),
+                'min_start_date' => null,
                 'payload' => $payload,
             ];
         }
@@ -548,9 +546,6 @@ class AccountApiService
             $minStartDate = SubscriptionCheckoutPayload::extractMinStartDateFromApiResult($calc);
             if ($minStartDate === '') {
                 $minStartDate = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
-            }
-            if ($minStartDate !== '') {
-                $minStartDate = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($minStartDate);
             }
 
             $dateRelated = SubscriptionCheckoutPayload::isStartDateValidationMessage($message)
@@ -567,26 +562,22 @@ class AccountApiService
         }
 
         $data = is_array($calc['data'] ?? null) ? $calc['data'] : [];
-        $apiMin = SubscriptionCheckoutPayload::normalizeStartDate(
-            (string) ($data['min_start_date'] ?? $data['first_available_date_for_subscription'] ?? '')
-        );
+        $apiMin = SubscriptionCheckoutPayload::extractApiMinStartDate($data);
+
         if ($apiMin === '') {
-            $apiMin = SubscriptionCheckoutPayload::normalizeStartDate(
-                (string) ($data['first_available_date'] ?? '')
-            );
-        }
-        if ($apiMin !== '') {
-            $apiMin = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($apiMin);
-        }
-
-        $localFloor = SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate();
-        $effectiveMin = $apiMin !== '' ? max($apiMin, $localFloor) : $localFloor;
-
-        if ($userDate < $effectiveMin) {
             return [
                 'ok' => false,
-                'message' => SubscriptionCheckoutPayload::startDateBeforeMinimumMessage($effectiveMin),
-                'min_start_date' => $effectiveMin,
+                'message' => __('account.request_failed'),
+                'min_start_date' => null,
+                'payload' => $payload,
+            ];
+        }
+
+        if ($userDate < $apiMin) {
+            return [
+                'ok' => false,
+                'message' => SubscriptionCheckoutPayload::startDateBeforeMinimumMessage($apiMin),
+                'min_start_date' => $apiMin,
                 'payload' => $payload,
             ];
         }
@@ -597,7 +588,7 @@ class AccountApiService
         return [
             'ok' => true,
             'message' => '',
-            'min_start_date' => $effectiveMin,
+            'min_start_date' => $apiMin,
             'payload' => $payload,
         ];
     }
@@ -690,9 +681,6 @@ class AccountApiService
             $minStartDate = SubscriptionCheckoutPayload::extractMinStartDateFromApiResult($result);
             if ($minStartDate === '') {
                 $minStartDate = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
-            }
-            if ($minStartDate !== '') {
-                $minStartDate = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($minStartDate);
             }
             $dateRelated = SubscriptionCheckoutPayload::isStartDateValidationMessage($message)
                 || $minStartDate !== '';

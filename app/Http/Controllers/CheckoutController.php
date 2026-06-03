@@ -309,14 +309,45 @@ class CheckoutController extends Controller
 
         $checkoutProgramId = $hasPlanItems && $firstPlanItem ? (int) ($firstPlanItem['id'] ?? 0) : 0;
 
-        $preferredDurationIdForMin = (int) ($preferredPlanDurationId ?? 0);
-        $minStartDate = SubscriptionCheckoutPayload::minimumStartDateForDurationId(
-            $planDurations,
-            $preferredDurationIdForMin > 0 ? $preferredDurationIdForMin : null,
-        );
-        $defaultStartDate = SubscriptionCheckoutPayload::normalizeStartDate((string) old('start_date', ''));
-        if ($defaultStartDate === '' || $defaultStartDate < $minStartDate) {
-            $defaultStartDate = $minStartDate;
+        $withWeekend = $hasPlanItems
+            ? SubscriptionCheckoutPayload::resolveWithWeekend($cart, $this->externalDataService)
+            : '0';
+
+        $minStartDate = '';
+        $defaultStartDate = '';
+        $scheduleReady = false;
+
+        $customerToken = session('external_api_token');
+        if ($hasPlanItems && is_string($customerToken) && $customerToken !== '') {
+            $schedulePayload = SubscriptionCheckoutPayload::buildMinimalSchedulePayload(
+                $cart,
+                $this->externalDataService,
+                [
+                    'plan_duration_id' => (int) ($preferredPlanDurationId ?? 0),
+                    'delivery_type' => old('delivery_type', 'home'),
+                    'with_weekend' => $withWeekend,
+                ],
+            );
+            if ($schedulePayload !== []) {
+                $calc = $this->accountApiService->calculateSubscription($schedulePayload, $customerToken);
+                if ($calc['ok'] ?? false) {
+                    $apiMin = SubscriptionCheckoutPayload::extractApiMinStartDate(
+                        is_array($calc['data'] ?? null) ? $calc['data'] : null
+                    );
+                    if ($apiMin !== '') {
+                        $minStartDate = $apiMin;
+                        $defaultStartDate = $apiMin;
+                        $scheduleReady = true;
+                    }
+                }
+            }
+        }
+
+        if ($scheduleReady) {
+            $normalizedOld = SubscriptionCheckoutPayload::normalizeStartDate((string) old('start_date', ''));
+            if ($normalizedOld !== '' && $normalizedOld >= $minStartDate) {
+                $defaultStartDate = $normalizedOld;
+            }
         }
 
         // When API returns no rows server-side, checkout JS can still fetch /api/plan/{id}/durations; this seeds one card from cart if needed.
@@ -353,6 +384,8 @@ class CheckoutController extends Controller
             'cartDurationFallback',
             'defaultStartDate',
             'minStartDate',
+            'withWeekend',
+            'scheduleReady',
         ));
     }
 
@@ -784,6 +817,9 @@ class CheckoutController extends Controller
 
         try {
             $planId = $subscriptionPlanId > 0 ? $subscriptionPlanId : $programId;
+            $cart = session()->get(CartManager::SESSION_SUBSCRIPTION)
+                ?? session()->get(CartManager::SESSION_MARKET, []);
+            $withWeekend = SubscriptionCheckoutPayload::resolveWithWeekend($cart, $this->externalDataService);
             $payload = [
                 'program_id' => (string) $programId,
                 'plan_id' => (string) $planId,
@@ -792,7 +828,7 @@ class CheckoutController extends Controller
                 'promocode_name' => $code,
                 'receiving' => 'delivery',
                 'with_support' => '0',
-                'with_weekend' => '0',
+                'with_weekend' => $withWeekend,
             ];
             $response = $this->accountApiService
                 ->calculateSubscription($payload, $token);
@@ -1068,6 +1104,158 @@ class CheckoutController extends Controller
     }
 
     /**
+     * GET /checkout/subscription-schedule — authoritative min start date from API calculate.
+     */
+    public function subscriptionSchedule(Request $request): JsonResponse
+    {
+        $token = session('external_api_token');
+        if (! is_string($token) || $token === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('payment.verify_phone_to_pay'),
+                'needs_auth' => true,
+            ], 403);
+        }
+
+        $cart = session()->get(CartManager::SESSION_SUBSCRIPTION)
+            ?? session()->get(CartManager::SESSION_MARKET, []);
+
+        if ($cart === []) {
+            return response()->json([
+                'success' => false,
+                'message' => __('Your cart is empty'),
+            ], 422);
+        }
+
+        $hasPlanItems = collect($cart)->contains(fn ($item) => ! empty($item['options']['duration_days']));
+        if (! $hasPlanItems) {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.invalid_plan_duration'),
+            ], 422);
+        }
+
+        $withWeekend = SubscriptionCheckoutPayload::resolveWithWeekend($cart, $this->externalDataService);
+        $validated = [
+            'plan_duration_id' => (int) $request->query('plan_duration_id', 0),
+            'delivery_type' => (string) $request->query('delivery_type', 'home'),
+            'with_weekend' => $request->query('with_weekend', $withWeekend),
+        ];
+
+        $payload = SubscriptionCheckoutPayload::buildMinimalSchedulePayload(
+            $cart,
+            $this->externalDataService,
+            $validated,
+        );
+
+        if ($payload === []) {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.invalid_plan_duration'),
+            ], 422);
+        }
+
+        $calc = $this->accountApiService->calculateSubscription($payload, $token);
+        if (! ($calc['ok'] ?? false)) {
+            $message = (string) ($calc['message'] ?? __('account.request_failed'));
+            $minStartDate = SubscriptionCheckoutPayload::extractMinStartDateFromApiResult($calc);
+
+            return response()->json([
+                'success' => false,
+                'message' => $message !== '' ? $message : __('account.request_failed'),
+                'min_start_date' => $minStartDate !== '' ? $minStartDate : null,
+            ], 422);
+        }
+
+        $data = is_array($calc['data'] ?? null) ? $calc['data'] : [];
+        $minStartDate = SubscriptionCheckoutPayload::extractApiMinStartDate($data);
+
+        if ($minStartDate === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('account.request_failed'),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'first_available_date_for_subscription' => $minStartDate,
+            'min_start_date' => $minStartDate,
+            'with_weekend' => $withWeekend,
+        ]);
+    }
+
+    /**
+     * GET /checkout/subscription-status — poll external subscription until paid/active.
+     */
+    public function subscriptionStatus(Request $request): JsonResponse
+    {
+        $token = session('external_api_token');
+        if (! is_string($token) || $token === '') {
+            return response()->json(['success' => false, 'message' => __('account.login_required')], 403);
+        }
+
+        $subscriptionId = (int) $request->query('id', 0);
+        if ($subscriptionId <= 0) {
+            return response()->json(['success' => false, 'message' => __('account.request_failed')], 422);
+        }
+
+        $result = $this->accountApiService->showSubscription($subscriptionId);
+        if (! ($result['ok'] ?? false)) {
+            return response()->json([
+                'success' => false,
+                'message' => (string) ($result['message'] ?? __('account.request_failed')),
+            ], 502);
+        }
+
+        $sub = $this->extractSubscriptionRow($result['data'] ?? null, $subscriptionId);
+        $status = strtolower((string) ($sub['status'] ?? ''));
+        $paymentStatus = strtolower((string) ($sub['payment_status'] ?? data_get($sub, 'payment.status', '')));
+        $confirmed = in_array($status, ['active', 'paid'], true)
+            || in_array($paymentStatus, ['paid', 'success', 'completed'], true);
+
+        return response()->json([
+            'success' => true,
+            'subscription_id' => $subscriptionId,
+            'status' => $status,
+            'payment_status' => $paymentStatus,
+            'confirmed' => $confirmed,
+            'subscription' => $sub,
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function extractSubscriptionRow(mixed $data, int $subscriptionId): array
+    {
+        if (! is_array($data)) {
+            return [];
+        }
+
+        if (isset($data['id']) || isset($data['status'])) {
+            return $data;
+        }
+
+        foreach (['subscriptions', 'data', 'items'] as $key) {
+            $list = $data[$key] ?? null;
+            if (! is_array($list)) {
+                continue;
+            }
+            foreach ($list as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+                if ((int) ($row['id'] ?? 0) === $subscriptionId) {
+                    return $row;
+                }
+            }
+        }
+
+        return [];
+    }
+
+    /**
      * Create or update a pending payment and return Moyasar bootstrap data (after phone OTP verification).
      */
     public function moyasarSession(Request $request, MoyasarPaymentService $moyasarService): JsonResponse
@@ -1328,30 +1516,12 @@ class CheckoutController extends Controller
                     'errors' => ['plan_duration_id' => [__('checkout.invalid_plan_duration')]],
                 ], 422);
             }
-            $programIdForDate = 0;
-            foreach ($cart as $item) {
-                if (! empty($item['options']['duration_days'])) {
-                    $programIdForDate = (int) ($item['id'] ?? 0);
-                    break;
-                }
-            }
-            $dateError = $this->validateSubscriptionStartDate(
-                $validated['start_date'] ?? '',
-                $programIdForDate,
-                (int) ($validated['plan_duration_id'] ?? $planDurationId),
-            );
-            if ($dateError !== null) {
-                return response()->json($dateError, 422);
-            }
             $normalizedStart = SubscriptionCheckoutPayload::normalizeStartDate($validated['start_date'] ?? '');
             if ($normalizedStart === '') {
                 return response()->json([
                     'success' => false,
-                    'message' => SubscriptionCheckoutPayload::startDateBeforeMinimumMessage(
-                        SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate()
-                    ),
+                    'message' => __('checkout.start_date_required'),
                     'errors' => ['start_date' => [__('checkout.start_date_required')]],
-                    'min_start_date' => SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate(),
                 ], 422);
             }
             $subscriptionApiPayload['date'] = $normalizedStart;
@@ -1494,35 +1664,6 @@ class CheckoutController extends Controller
     }
 
     /**
-     * @return array<string, mixed>|null
-     */
-    private function validateSubscriptionStartDate(string $startDate, int $programId = 0, int $planDurationId = 0): ?array
-    {
-        $normalized = SubscriptionCheckoutPayload::normalizeStartDate($startDate);
-        $minDate = SubscriptionCheckoutPayload::defaultCheckoutMinimumStartDate();
-        if ($programId > 0 && $planDurationId > 0) {
-            $durations = $this->externalDataService->getCheckoutPlanDurations($programId);
-            $minDate = SubscriptionCheckoutPayload::minimumStartDateForDurationId(
-                $durations,
-                $planDurationId,
-            );
-        }
-
-        if ($normalized === '' || $normalized >= $minDate) {
-            return null;
-        }
-
-        $message = SubscriptionCheckoutPayload::startDateBeforeMinimumMessage($minDate);
-
-        return [
-            'success' => false,
-            'message' => $message,
-            'errors' => ['start_date' => [$message]],
-            'min_start_date' => $minDate,
-        ];
-    }
-
-    /**
      * @param  array<string, string>  $subscriptionApiPayload
      */
     private function subscriptionMoyasarSessionResponse(
@@ -1550,9 +1691,6 @@ class CheckoutController extends Controller
             $minStart = (string) ($boot['min_start_date'] ?? '');
             if ($minStart === '') {
                 $minStart = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
-            }
-            if ($minStart !== '') {
-                $minStart = SubscriptionCheckoutPayload::reconcileApiMinimumStartDate($minStart);
             }
             if (str_contains($message, 'PlanDuration')) {
                 $message = __('checkout.invalid_plan_duration');
@@ -1597,7 +1735,7 @@ class CheckoutController extends Controller
             'subscription_id' => $subscriptionId,
             'amount_halalas' => (int) $bootstrap['amount_halalas'],
             'publishable_key' => $publishableKey,
-            'callback_url' => route('payment.callback'),
+            'callback_url' => route('payment.callback', ['subscription' => $subscriptionId > 0 ? $subscriptionId : null]),
             'currency' => (string) ($bootstrap['currency'] ?? 'SAR'),
             'description' => (string) ($bootstrap['description'] ?? __('payment.subscription_checkout_description')),
             'metadata' => is_array($bootstrap['metadata'] ?? null) ? $bootstrap['metadata'] : [],

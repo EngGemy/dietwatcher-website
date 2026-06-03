@@ -448,6 +448,7 @@ class ExternalDataService
             'durations' => $durations,
             'calories' => $calories,
             'image_url' => $this->absoluteMediaUrl((string) ($p['image'] ?? $p['image_url'] ?? '')),
+            'week_end_status' => (string) ($p['week_end_status'] ?? ''),
         ];
     }
 

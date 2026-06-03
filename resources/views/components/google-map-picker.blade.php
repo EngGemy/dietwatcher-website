@@ -743,14 +743,27 @@ function googleMapPicker(opts) {
                         searchInput.value = this.form.description;
                     }
                     const inferredDistrictId = this.inferDistrictIdFromGeocode(results[0]);
-                    if (inferredDistrictId) {
-                        this.form.district_id = inferredDistrictId;
-                    }
+                    this.form.district_id = inferredDistrictId || '';
+                    this.notifyCoverage(inferredDistrictId);
                     this.dispatchAddressDraft();
                     return;
                 }
+                this.form.district_id = '';
+                this.notifyCoverage('');
                 this.sheetError = @json(__('google_maps.geocode_failed'));
             });
+        },
+
+        notifyCoverage(districtId) {
+            const ok = !!districtId;
+            window.dispatchEvent(new CustomEvent('checkout-coverage-changed', {
+                detail: {
+                    ok,
+                    districtId: districtId ? String(districtId) : '',
+                    lat: this.form.latitude,
+                    lng: this.form.longitude,
+                },
+            }));
         },
 
         normalizeDistrictText(value) {

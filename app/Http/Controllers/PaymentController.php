@@ -68,6 +68,18 @@ class PaymentController extends Controller
         $status = $request->query('status');
         $message = $request->query('message');
         $orderNumber = $request->query('order');
+        $subscriptionId = (int) $request->query('subscription', 0);
+
+        if ($subscriptionId <= 0) {
+            $checkoutSession = session('checkout_api_subscription_checkout');
+            if (is_array($checkoutSession)) {
+                $subscriptionId = (int) ($checkoutSession['subscription_id'] ?? 0);
+            }
+        }
+
+        if (($orderNumber === null || $orderNumber === '') && $subscriptionId > 0) {
+            return $this->handleSubscriptionPaymentCallback($request, $subscriptionId, $moyasarId, $status, $message);
+        }
 
         Log::info('Moyasar callback received', [
             'moyasar_id' => $moyasarId,
@@ -138,12 +150,11 @@ class PaymentController extends Controller
             $externalToken = (string) session('external_api_token', '');
             if ($externalToken !== '') {
                 if ($payment->kind === PaymentKind::Subscription) {
-                    $syncResult = $this->accountApiService->syncPaidPaymentToExternalSubscription($payment, $externalToken);
+                    // Subscription was created via API bootstrap; webhook confirms payment — no second create.
                     $payment->update([
-                        'external_sync_status' => $syncResult['ok'] ? 'synced' : 'failed',
-                        'external_sync_message' => $syncResult['ok'] ? null : (string) ($syncResult['message'] ?? 'sync_failed'),
-                        'external_subscription_id' => $syncResult['external_subscription_id'] ?? null,
-                        'external_synced_at' => $syncResult['ok'] ? now() : null,
+                        'external_sync_status' => 'skipped',
+                        'external_sync_message' => 'api_bootstrap_subscription',
+                        'external_subscription_id' => $payment->external_subscription_id,
                     ]);
                 } else {
                     $syncResult = $this->accountApiService->syncPaidPaymentToExternalOrder($payment, $externalToken);
@@ -168,11 +179,11 @@ class PaymentController extends Controller
             session()->forget(CartManager::SESSION_SUBSCRIPTION);
 
             try {
-                $message = __('sms.order_confirmed', [
+                $smsMessage = __('sms.order_confirmed', [
                     'order' => $payment->order_number,
                     'amount' => number_format($payment->amount_in_sar, 2),
                 ]);
-                SmsService::create()->send($payment->customer_phone, $message);
+                SmsService::create()->send($payment->customer_phone, $smsMessage);
             } catch (\Exception $e) {
                 Log::warning('Failed to send order confirmation SMS', [
                     'order' => $payment->order_number,
@@ -183,6 +194,61 @@ class PaymentController extends Controller
         }
 
         return redirect()->route('payment.result', ['order' => $payment->order_number]);
+    }
+
+    /**
+     * Subscription checkout callback — redirect to API polling page (no local Payment record).
+     */
+    protected function handleSubscriptionPaymentCallback(
+        Request $request,
+        int $subscriptionId,
+        ?string $moyasarId,
+        ?string $status,
+        ?string $message,
+    ): RedirectResponse {
+        Log::info('Moyasar subscription callback received', [
+            'subscription_id' => $subscriptionId,
+            'moyasar_id' => $moyasarId,
+            'status' => $status,
+        ]);
+
+        if ($status !== 'paid') {
+            $userMessage = $this->paymentService->parseErrorMessage($message);
+
+            return redirect()->route('payment.subscription-confirm', [
+                'subscription' => $subscriptionId,
+                'failed' => 1,
+            ])->with('payment_error', $userMessage);
+        }
+
+        session([
+            'pending_subscription_confirm' => [
+                'subscription_id' => $subscriptionId,
+                'moyasar_id' => $moyasarId,
+            ],
+        ]);
+        session()->forget('checkout_api_subscription_checkout');
+        session()->forget(CartManager::SESSION_SUBSCRIPTION);
+        session()->forget(CartManager::SESSION_MARKET);
+
+        return redirect()->route('payment.subscription-confirm', [
+            'subscription' => $subscriptionId,
+        ]);
+    }
+
+    /**
+     * Poll external API until subscription is active/paid.
+     */
+    public function subscriptionConfirm(Request $request): View
+    {
+        $subscriptionId = (int) $request->query('subscription', 0);
+        $failed = $request->boolean('failed');
+
+        return view('pages.payment-subscription-confirm', [
+            'subscriptionId' => $subscriptionId,
+            'failed' => $failed,
+            'errorMessage' => session('payment_error'),
+        ]);
     }
 
     /**
