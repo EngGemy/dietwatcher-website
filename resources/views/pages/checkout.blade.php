@@ -58,6 +58,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
         <form action="{{ route('checkout.store') }}" method="POST" class="checkout-page__form"
               x-ref="checkoutForm"
               x-data="checkoutPage()"
+              x-init="init()"
               @address-selected.window="handleAddressFromMap($event)"
               @map-address-draft.window="handleMapAddressDraft($event)"
               @submit.prevent="submitForm($event)">
@@ -111,8 +112,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                 <input type="hidden" name="duration" value="once" />
                                 <div>
                                     <p class="mb-3 text-lg md:text-xl">{{ __('Duration') }}</p>
-                                    <p x-show="durationsLoading" x-cloak class="mb-3 text-sm text-gray-500">{{ __('Loading...') }}</p>
-                                    <div x-show="! durationsLoading && planDurations.length" x-cloak class="duration-pills">
+                                    <p x-show="durationsLoading" @if(empty($planDurations) && empty($cartDurationFallback)) x-cloak @endif class="mb-3 text-sm text-gray-500">{{ __('Loading...') }}</p>
+                                    <div x-show="! durationsLoading && planDurations.length" @if(empty($planDurations) && empty($cartDurationFallback)) x-cloak @endif class="duration-pills">
                                         <template x-for="(d, idx) in planDurations" :key="'pd-' + idx + '-' + (d.id ?? 'x')">
                                             <div class="duration-pills__item">
                                                 <div x-show="Number(d.id) > 0">
@@ -127,16 +128,16 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                                     <label class="duration-pills__face" :for="'plan-dur-' + d.id">
                                                         <span class="duration-pills__offer-badge" x-show="durationPlanHasOffer(d)" x-cloak>{{ __('Offer') }}</span>
                                                         <span class="duration-pills__title" x-text="durationCardTitle(d)"></span>
-                                                        <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="'{{ __('SAR') }} ' + durationPlanListTotalStr(d)"></span>
-                                                        <span class="duration-pills__total-line" x-text="'{{ __('SAR') }} ' + durationPlanEffectiveTotalStr(d)"></span>
+                                                        <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="@js(__('SAR')) + ' ' + durationPlanListTotalStr(d)"></span>
+                                                        <span class="duration-pills__total-line" x-text="@js(__('SAR')) + ' ' + durationPlanEffectiveTotalStr(d)"></span>
                                                         <span class="duration-pills__avg" x-show="durationPlanAvgLine(d)" x-text="durationPlanAvgLine(d)"></span>
                                                     </label>
                                                 </div>
                                                 <div x-show="Number(d.id) <= 0" class="duration-pills__face duration-pills__face--static">
                                                     <span class="duration-pills__offer-badge" x-show="durationPlanHasOffer(d)" x-cloak>{{ __('Offer') }}</span>
                                                     <span class="duration-pills__title" x-text="durationCardTitle(d)"></span>
-                                                    <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="'{{ __('SAR') }} ' + durationPlanListTotalStr(d)"></span>
-                                                    <span class="duration-pills__total-line" x-text="'{{ __('SAR') }} ' + durationPlanEffectiveTotalStr(d)"></span>
+                                                    <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="@js(__('SAR')) + ' ' + durationPlanListTotalStr(d)"></span>
+                                                    <span class="duration-pills__total-line" x-text="@js(__('SAR')) + ' ' + durationPlanEffectiveTotalStr(d)"></span>
                                                     <span class="duration-pills__avg" x-show="durationPlanAvgLine(d)" x-text="durationPlanAvgLine(d)"></span>
                                                 </div>
                                             </div>
@@ -215,9 +216,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                         <input type="tel" class="min-w-0 flex-1 border-0 bg-transparent px-3 py-2.5 text-gray-900 outline-none focus:ring-0"
                                                autocomplete="tel" inputmode="numeric" maxlength="9" placeholder="5XXXXXXXX" required dir="ltr"
                                                x-model="phoneLocal"
-                                               @input="phoneLocal = typeof window.dwSaudiPhoneDigits === 'function'
-    ? window.dwSaudiPhoneDigits($event.target.value || '')
-    : ($event.target.value || '').replace(/\D/g, '').slice(0, 9)"
+                                               @input="phoneLocal = (typeof window.dwSaudiPhoneDigits === 'function' ? window.dwSaudiPhoneDigits($event.target.value || '') : ($event.target.value || '').replace(/\D/g, '').slice(0, 9))"
                                                :readonly="phoneVerified"
                                                :class="phoneVerified ? 'cursor-default bg-transparent' : ''" />
                                     </div>
@@ -374,7 +373,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                     $name = ($name[app()->getLocale()] ?? $name['ar'] ?? $name['en'] ?? '');
                                 }
                                 $n = mb_strtolower((string) $name);
-                                return str_contains($n, 'riyadh') || str_contains($n, '??????');
+                                return str_contains($n, 'riyadh') || str_contains($n, 'الرياض');
                             });
                         @endphp
                         <div x-show="deliveryType === 'home' && (savedAddresses.length === 0 || addingNewAddress)" class="space-y-4" x-init="if (!selectedZoneId) selectedZoneId = '{{ (string) (($riyadhZone['id'] ?? '') ?: '') }}'">
@@ -632,7 +631,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             <div class="pt-2">
                                 <button type="submit" class="btn btn--primary btn--md w-full"
                                         :disabled="!phoneVerified || !canProceedToPayment()">
-                                    {{ __('payment.proceed') }} ?
+                                    {{ __('payment.proceed') }} —
                                     <span class="inline-flex items-baseline gap-1" dir="ltr">
                                         <span x-text="money(total())">{{ number_format((float) ($baseSubtotal + $deliveryFeeAmount), 2) }}</span>
                                         <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
@@ -757,7 +756,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             <button type="button" class="otp-modal__resend-btn"
                                     @click="sendOtp()"
                                     :disabled="otpLoading || otpCooldown > 0">
-                                <span x-text="otpCooldown > 0 ? '{{ __('Resend in') }} ' + otpCooldown + 's' : '{{ __('Resend') }}'"></span>
+                                <span x-text="otpCooldown > 0 ? (@js(__('Resend in')) + ' ' + otpCooldown + 's') : @js(__('Resend'))"></span>
                             </button>
                         </p>
                     </div>
@@ -1304,7 +1303,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
     function checkoutPage() {
         return {
             // Reactive state
-            baseSubtotal: {{ $baseSubtotal }},
+            baseSubtotal: @json((float) $baseSubtotal),
             isPlanCheckout: @json($hasPlanItems),
             duration: @json($hasPlanItems ? 'once' : old('duration', 'monthly')),
             selectedPlanDurationId: @json((string) ($preferredPlanDurationId ?? '')),
@@ -1319,8 +1318,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             _moyasarFingerprint: '',
             _moyasarRequestId: 0,
             lastAppliedMinStartDate: '',
-            vatRate: {{ $vatRate }},
-            deliveryFeeAmount: {{ $deliveryFeeAmount }},
+            vatRate: @json((float) $vatRate),
+            deliveryFeeAmount: @json((float) $deliveryFeeAmount),
             discount: 0,
             addressStreet: @json(old('street', '')),
             buildingNotes: @json(old('building', '')),
@@ -1357,11 +1356,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             selectedZoneId: @json(old('zone_id', '')),
             zones: @json($zones),
 
-            checkoutProgramId: {{ (int) ($checkoutProgramId ?? 0) }},
+            checkoutProgramId: @json((int) ($checkoutProgramId ?? 0)),
             /** Matches cart line duration_days ? used when API duration_id differs from list ids */
-            cartDurationDaysHint: {{ (int) ($planDurationDays ?? 0) }},
+            cartDurationDaysHint: @json((int) ($planDurationDays ?? 0)),
             cartDurationFallback: @json($cartDurationFallback ?? null),
-            durationsLoading: @json($hasPlanItems),
+            durationsLoading: @json($hasPlanItems && empty($planDurations) && empty($cartDurationFallback)),
             // Plan durations (filled from server, client fetch, or cart fallback)
             planDurations: @json($planDurations ?? []),
 
@@ -1575,42 +1574,45 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             async hydratePlanDurations() {
-                let list = Array.isArray(this.planDurations) ? [...this.planDurations] : [];
-                list = list.map((row) => this.normalizeDurationRow(row));
-                if (list.length === 0 && this.checkoutProgramId) {
-                    try {
-                        const res = await fetch('{{ url('/api/plan') }}/' + this.checkoutProgramId + '/durations');
-                        const data = await res.json();
-                        const raw = Array.isArray(data) ? data : [];
-                        list = raw.map((row) => this.normalizeDurationRow(row));
-                    } catch (e) {}
-                }
-                if (list.length === 0 && this.cartDurationFallback) {
-                    list = [this.normalizeDurationRow(this.cartDurationFallback)];
-                }
-                this.planDurations = list;
-                this.planDurationPrices = {};
-                list.forEach((row) => {
-                    const id = String(row.id);
-                    const eff = parseFloat(row.effective_price) || 0;
-                    this.planDurationPrices[id] = eff;
-                });
-                const idOk = (s) => s && list.some((r) => String(r.id) === String(s));
-                let sel = @json((string) old('plan_duration_id', $preferredPlanDurationId ?? ''));
-                if (! idOk(sel)) {
-                    let pick = this.cartDurationDaysHint > 0
-                        ? list.find((r) => parseInt(r.days, 10) === this.cartDurationDaysHint)
-                        : null;
-                    if (! pick) {
-                        pick = list.find((r) => r.is_default && Number(r.id) > 0) || list.find((r) => Number(r.id) > 0);
+                try {
+                    let list = Array.isArray(this.planDurations) ? [...this.planDurations] : [];
+                    list = list.map((row) => this.normalizeDurationRow(row));
+                    if (list.length === 0 && this.checkoutProgramId) {
+                        try {
+                            const res = await fetch('{{ url('/api/plan') }}/' + this.checkoutProgramId + '/durations');
+                            const data = await res.json();
+                            const raw = Array.isArray(data) ? data : [];
+                            list = raw.map((row) => this.normalizeDurationRow(row));
+                        } catch (e) {}
                     }
-                    sel = pick ? String(pick.id) : (list[0] ? String(list[0].id) : '');
+                    if (list.length === 0 && this.cartDurationFallback) {
+                        list = [this.normalizeDurationRow(this.cartDurationFallback)];
+                    }
+                    this.planDurations = list;
+                    this.planDurationPrices = {};
+                    list.forEach((row) => {
+                        const id = String(row.id);
+                        const eff = parseFloat(row.effective_price) || 0;
+                        this.planDurationPrices[id] = eff;
+                    });
+                    const idOk = (s) => s && list.some((r) => String(r.id) === String(s));
+                    let sel = @json((string) old('plan_duration_id', $preferredPlanDurationId ?? ''));
+                    if (! idOk(sel)) {
+                        let pick = this.cartDurationDaysHint > 0
+                            ? list.find((r) => parseInt(r.days, 10) === this.cartDurationDaysHint)
+                            : null;
+                        if (! pick) {
+                            pick = list.find((r) => r.is_default && Number(r.id) > 0) || list.find((r) => Number(r.id) > 0);
+                        }
+                        sel = pick ? String(pick.id) : (list[0] ? String(list[0].id) : '');
+                    }
+                    this.selectedPlanDurationId = sel;
+                    if (sel !== '' && this.planDurationPrices[sel] != null) {
+                        this.baseSubtotal = Math.round(this.planDurationPrices[sel] * 100) / 100;
+                    }
+                } finally {
+                    this.durationsLoading = false;
                 }
-                this.selectedPlanDurationId = sel;
-                if (sel !== '' && this.planDurationPrices[sel] != null) {
-                    this.baseSubtotal = Math.round(this.planDurationPrices[sel] * 100) / 100;
-                }
-                this.durationsLoading = false;
             },
 
             planDurationSummaryLabel() {
@@ -1644,13 +1646,13 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 const f = (this.deliveryFloor || '').trim();
                 const d = (this.deliveryDoor || '').trim();
                 if (b) {
-                    p.push('{{ __("Building") }}: ' + b);
+                    p.push(@json(__('Building')) + ': ' + b);
                 }
                 if (f) {
-                    p.push('{{ __("Floor") }}: ' + f);
+                    p.push(@json(__('Floor')) + ': ' + f);
                 }
                 if (d) {
-                    p.push('{{ __("Door") }}: ' + d);
+                    p.push(@json(__('Door')) + ': ' + d);
                 }
                 this.buildingNotes = p.join(', ');
                 if (this.addressConfirmedForSync) {
@@ -1983,7 +1985,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         const isNewUser = !!(d.is_continue);
                         this.isContinueUser = isNewUser;
                         this.showNameField = isNewUser || !hasName;
-                        // Keep selection manual: user confirms address with "?????? ???????" button.
+                        // Keep selection manual: user confirms address with "اختيار العنوان" button.
                     }
                 } catch (e) {}
             },
@@ -2376,7 +2378,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             this.showNameField = true;
                         }
 
-                        // Keep selection manual: user confirms address with "?????? ???????" button.
+                        // Keep selection manual: user confirms address with "اختيار العنوان" button.
                         if (isNewUser) {
                             this.$nextTick(() => this.$refs.checkoutUserCard?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
                         }
@@ -2731,7 +2733,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 });
 
                 if (this.isPlanCheckout) {
-                    await this.hydratePlanDurations();
+                    try {
+                        await this.hydratePlanDurations();
+                    } catch (e) {
+                        this.durationsLoading = false;
+                    }
                 } else {
                     this.durationsLoading = false;
                 }
@@ -2798,7 +2804,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
     document.addEventListener('DOMContentLoaded', function() {
         const locale = '{{ $locale }}';
         const months = locale === 'ar'
-            ? ['?????','??????','????','?????','????','?????','?????','?????','??????','??????','??????','??????']
+            ? ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
             : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
         function updateDisplay(dateStr) {
