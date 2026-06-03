@@ -1348,6 +1348,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             _moyasarFingerprint: '',
             _moyasarRequestId: 0,
             _moyasarSessionFailed: false,
+            _moyasarStartDateRetry: false,
             _paymentBootstrapInFlight: false,
             vatRate: @json((float) $vatRate),
             deliveryFeeAmount: @json((float) $deliveryFeeAmount),
@@ -3047,7 +3048,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     if (! res.ok || ! data.success) {
                         return;
                     }
-                    const apiMin = String(data.first_available_date_for_subscription || data.min_start_date || '').trim().slice(0, 10);
+                    const apiMin = String(
+                        data.api_min_start_date || data.first_available_date_for_subscription || data.min_start_date || ''
+                    ).trim().slice(0, 10);
                     if (apiMin) {
                         this.applyApiMinStartDate(apiMin);
                     }
@@ -3187,12 +3190,20 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     }
                     if (! res.ok || ! data.success) {
                         this._moyasarSessionFailed = true;
+                        const apiMin = String(data.min_start_date || '').trim().slice(0, 10);
+                        if (apiMin && ! this._moyasarStartDateRetry) {
+                            this._moyasarStartDateRetry = true;
+                            this.applyApiMinStartDate(apiMin);
+                            this._moyasarFingerprint = '';
+                            await this.bootstrapMoyasar();
+
+                            return;
+                        }
                         if (data.errors && data.errors.start_date && data.errors.start_date[0]) {
                             this.moyasarError = data.errors.start_date[0];
                         } else {
                             this.moyasarError = data.message || @json(__('payment.fill_delivery_first'));
                         }
-                        const apiMin = String(data.min_start_date || '').trim().slice(0, 10);
                         if (apiMin) {
                             this.updateStartDatePickerMinimum(apiMin);
                         }
@@ -3204,8 +3215,12 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
                         return;
                     }
+                    this._moyasarStartDateRetry = false;
                     this._moyasarFingerprint = fingerprint;
                     this._moyasarSessionFailed = false;
+                    if (data.adjusted_start_date) {
+                        this.applyApiMinStartDate(String(data.adjusted_start_date).slice(0, 10));
+                    }
                     this.initMoyasarWidget(data);
                 } catch (e) {
                     if (requestId === this._moyasarRequestId) {

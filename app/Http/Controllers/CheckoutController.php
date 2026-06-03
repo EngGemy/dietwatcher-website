@@ -1313,17 +1313,34 @@ class CheckoutController extends Controller
         $calc = $this->accountApiService->calculateSubscription($payload, $token);
         if (! ($calc['ok'] ?? false)) {
             $message = (string) ($calc['message'] ?? __('account.request_failed'));
-            $minStartDate = SubscriptionCheckoutPayload::extractMinStartDateFromApiResult($calc);
+            $rawMin = SubscriptionCheckoutPayload::extractRawMinStartDateFromApiResult($calc);
+            if ($rawMin === '') {
+                $rawMin = SubscriptionCheckoutPayload::parseRawMinimumDateFromValidationMessage($message);
+            }
+            if ($rawMin !== '') {
+                return response()->json([
+                    'success' => true,
+                    'first_available_date_for_subscription' => $rawMin,
+                    'min_start_date' => $rawMin,
+                    'api_min_start_date' => $rawMin,
+                    'with_weekend' => $withWeekend,
+                ]);
+            }
 
             return response()->json([
                 'success' => false,
                 'message' => $message !== '' ? $message : __('account.request_failed'),
-                'min_start_date' => $minStartDate !== '' ? $minStartDate : null,
+                'min_start_date' => null,
             ], 422);
         }
 
         $data = is_array($calc['data'] ?? null) ? $calc['data'] : [];
+        $rawMin = SubscriptionCheckoutPayload::extractRawApiMinStartDate($data);
         $minStartDate = SubscriptionCheckoutPayload::extractApiMinStartDate($data);
+
+        if ($minStartDate === '' && $rawMin !== '') {
+            $minStartDate = $rawMin;
+        }
 
         if ($minStartDate === '') {
             $minStartDate = SubscriptionCheckoutPayload::computeFallbackMinStartDate($withWeekend === '1');
@@ -1333,6 +1350,7 @@ class CheckoutController extends Controller
             'success' => true,
             'first_available_date_for_subscription' => $minStartDate,
             'min_start_date' => $minStartDate,
+            'api_min_start_date' => $rawMin !== '' ? $rawMin : $minStartDate,
             'with_weekend' => $withWeekend,
         ]);
     }
@@ -1933,7 +1951,7 @@ class CheckoutController extends Controller
             $message = (string) ($boot['message'] ?? __('account.request_failed'));
             $minStart = (string) ($boot['min_start_date'] ?? '');
             if ($minStart === '') {
-                $minStart = SubscriptionCheckoutPayload::parseMinimumDateFromValidationMessage($message);
+                $minStart = SubscriptionCheckoutPayload::parseRawMinimumDateFromValidationMessage($message);
             }
             if (str_contains($message, 'PlanDuration')) {
                 $message = __('checkout.invalid_plan_duration');
@@ -1981,6 +1999,7 @@ class CheckoutController extends Controller
             'currency' => (string) ($bootstrap['currency'] ?? 'SAR'),
             'description' => (string) ($bootstrap['description'] ?? __('payment.subscription_checkout_description')),
             'metadata' => is_array($bootstrap['metadata'] ?? null) ? $bootstrap['metadata'] : [],
+            'adjusted_start_date' => (string) ($boot['adjusted_start_date'] ?? ''),
         ], static fn ($v) => $v !== null && $v !== ''));
     }
 }

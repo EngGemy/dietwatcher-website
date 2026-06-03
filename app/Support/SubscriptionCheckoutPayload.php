@@ -437,15 +437,77 @@ final class SubscriptionCheckoutPayload
         );
     }
 
+    /**
+     * @param  array<string, mixed>  $apiResult
+     */
+    public static function extractRawMinStartDateFromApiResult(array $apiResult): string
+    {
+        $data = is_array($apiResult['data'] ?? null) ? $apiResult['data'] : [];
+        $fromData = self::extractRawApiMinStartDate($data);
+        if ($fromData !== '') {
+            return $fromData;
+        }
+
+        $raw = is_array($apiResult['raw'] ?? null) ? $apiResult['raw'] : [];
+        $rawData = is_array($raw['data'] ?? null) ? $raw['data'] : [];
+        $fromRawData = self::extractRawApiMinStartDate($rawData);
+        if ($fromRawData !== '') {
+            return $fromRawData;
+        }
+
+        foreach (['min_start_date', 'minimum_start_date', 'available_from', 'first_available_date_for_subscription'] as $key) {
+            $value = $raw[$key] ?? null;
+            if (is_string($value) && trim($value) !== '') {
+                $normalized = self::normalizeStartDate($value);
+                if ($normalized !== '') {
+                    return $normalized;
+                }
+            }
+        }
+
+        $errors = $raw['errors'] ?? null;
+        if (is_array($errors)) {
+            foreach (['date', 'start_date'] as $field) {
+                $messages = $errors[$field] ?? null;
+                if (is_string($messages)) {
+                    $parsed = self::parseRawMinimumDateFromValidationMessage($messages);
+                    if ($parsed !== '') {
+                        return $parsed;
+                    }
+                }
+                if (is_array($messages)) {
+                    foreach ($messages as $msg) {
+                        if (! is_string($msg)) {
+                            continue;
+                        }
+                        $parsed = self::parseRawMinimumDateFromValidationMessage($msg);
+                        if ($parsed !== '') {
+                            return $parsed;
+                        }
+                    }
+                }
+            }
+        }
+
+        return self::parseRawMinimumDateFromValidationMessage((string) ($apiResult['message'] ?? ''));
+    }
+
     public static function parseMinimumDateFromValidationMessage(string $message): string
     {
+        return self::sanitizeSubscriptionStartDate(
+            self::parseRawMinimumDateFromValidationMessage($message)
+        );
+    }
+
+    public static function parseRawMinimumDateFromValidationMessage(string $message): string
+    {
         if (preg_match('#(20\d{2}-\d{2}-\d{2})#', $message, $matches)) {
-            return self::sanitizeSubscriptionStartDate($matches[1]);
+            return self::normalizeStartDate($matches[1]);
         }
 
         if (preg_match('#(\d{2}-\d{2}-20\d{2})#', $message, $matches)) {
             try {
-                return self::sanitizeSubscriptionStartDate(
+                return self::normalizeStartDate(
                     \Illuminate\Support\Carbon::createFromFormat('d-m-Y', $matches[1])->format('Y-m-d')
                 );
             } catch (\Throwable) {
@@ -463,7 +525,7 @@ final class SubscriptionCheckoutPayload
             return false;
         }
 
-        if (self::parseMinimumDateFromValidationMessage($message) !== '') {
+        if (self::parseRawMinimumDateFromValidationMessage($message) !== '') {
             return true;
         }
 
