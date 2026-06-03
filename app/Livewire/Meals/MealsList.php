@@ -201,6 +201,16 @@ class MealsList extends Component
         }
 
         $result = $service->getMeals($filters);
+        if (
+            empty($result['data'] ?? [])
+            && $this->currentPage === 1
+            && $searchTrim === ''
+            && $tagIds === []
+        ) {
+            $service->clearCatalogCacheEntry('meals_'.md5(json_encode($filters)));
+            $result = $service->getMeals($filters);
+        }
+
         if ($this->selectedGroup && empty($result['data'] ?? [])) {
             $menuFilters = array_merge($filters, ['menu_id' => $this->selectedGroup]);
             unset($menuFilters['group_id']);

@@ -159,7 +159,13 @@ class ExternalDataService
         try {
             $result = $fetch();
             Cache::forget($failKey);
-            Cache::put($fullKey, $result, $successTtl);
+            $ttl = $successTtl;
+            if (is_array($result) && array_key_exists('data', $result) && ($result['data'] ?? []) === []) {
+                $ttl = min(60, $successTtl);
+            } elseif (is_array($result) && $result === []) {
+                $ttl = min(60, $successTtl);
+            }
+            Cache::put($fullKey, $result, $ttl);
 
             return $result;
         } catch (\Throwable $e) {
@@ -179,6 +185,13 @@ class ExternalDataService
     public function httpClient(): PendingRequest
     {
         return $this->http();
+    }
+
+    public function clearCatalogCacheEntry(string $cacheKey): void
+    {
+        $fullKey = $this->cacheKey($cacheKey);
+        Cache::forget($fullKey);
+        Cache::forget($fullKey.'_fail');
     }
 
     /**

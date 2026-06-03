@@ -314,11 +314,20 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                                     <span class="line-clamp-2 block text-left" x-text="addr.description || addr.title || ''"></span>
                                                     <span class="mt-1 block text-xs text-gray-500 text-left" x-text="savedAddressDistrict(addr)"></span>
                                                 </div>
+                                                <div class="flex shrink-0 flex-col gap-1.5 sm:flex-row">
                                                 <button type="button"
-                                                        class="shrink-0 rounded-md border border-blue-500 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
+                                                        class="rounded-md border border-blue-500 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
                                                         @click="selectSavedAddress(addr)">
                                                     {{ __('Select') }}
                                                 </button>
+                                                <button type="button"
+                                                        class="rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50"
+                                                        :disabled="deletingAddressId === String(addr.id)"
+                                                        @click="deleteSavedAddress(addr)">
+                                                    <span x-show="deletingAddressId !== String(addr.id)">{{ __('Delete') }}</span>
+                                                    <span x-show="deletingAddressId === String(addr.id)" x-cloak>...</span>
+                                                </button>
+                                                </div>
                                             </div>
                                         </div>
                                     </li>
@@ -1352,6 +1361,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             addingNewAddress: false,
             savingNewAddress: false,
             newAddressError: '',
+            deletingAddressId: null,
             sarSymbol: '\u20C1',
             uiLabels: {
                 cancel: @json(__('Cancel')),
@@ -2272,6 +2282,44 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 this.$nextTick(() => {
                     this.$refs.paymentCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 });
+            },
+
+            async deleteSavedAddress(addr) {
+                if (! addr || ! addr.id) {
+                    return;
+                }
+                if (! window.confirm(@json(__('checkout.delete_saved_address_confirm')))) {
+                    return;
+                }
+                this.deletingAddressId = String(addr.id);
+                this.syncAddressError = '';
+                try {
+                    const deleteUrl = '{{ url('/checkout/addresses') }}/' + encodeURIComponent(String(addr.id));
+                    const res = await fetch(deleteUrl, {
+                        method: 'DELETE',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
+                        },
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (! res.ok || ! data.success) {
+                        this.syncAddressError = data.message || @json(__('address.delete_failed'));
+
+                        return;
+                    }
+                    if (String(this.selectedAddressId) === String(addr.id)) {
+                        this.selectedAddressId = null;
+                        this.addressConfirmedForSync = false;
+                        this.resetPaymentSession(true);
+                        this.clearMoyasarWidget();
+                    }
+                    await this.refreshCustomerFromServer();
+                } catch (e) {
+                    this.syncAddressError = @json(__('address.delete_failed'));
+                } finally {
+                    this.deletingAddressId = null;
+                }
             },
 
             async refreshCustomerFromServer() {

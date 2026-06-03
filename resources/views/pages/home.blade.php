@@ -49,7 +49,7 @@
                         {{ __('Chef-made, calorie-smart meals delivered in Saudi Arabia. Plans online, managed via our app.') }}
                     </p>
 
-                    <a href="https://app.diet-watchers.sa/meal-plans" class="hero-btn-anim hero-magnetic btn btn--primary mb-8 text-lg">
+                    <a href="{{ route('meal-plans.index') }}" class="hero-btn-anim btn btn--primary mb-8 text-lg" data-magnetic="1">
                         {{ __('Choose Meal Plans') }}
                     </a>
 
@@ -162,7 +162,7 @@
             </div>
 
             <div class="text-center">
-                <a href="https://app.diet-watchers.sa/meal-plans" class="btn btn--primary btn--md">{{ __('Choose Your Meal Plan') }}</a>
+                <a href="{{ route('meal-plans.index') }}" class="btn btn--primary btn--md">{{ __('Choose Your Meal Plan') }}</a>
             </div>
         </div>
     </section>
@@ -941,6 +941,12 @@
     transform: translateY(20px);
     animation: heroSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.05s forwards;
     position: relative;
+    animation-fill-mode: forwards;
+    will-change: transform, opacity;
+}
+.hero-btn-anim:active {
+    transform: none !important;
+    opacity: 1 !important;
 }
 .hero-apps-anim {
     opacity: 0;
@@ -1224,9 +1230,13 @@
     opacity: 1;
     transform: translateY(0) scale(1);
 }
-.testimonials-rail.is-preparing .testimonials-rail__item {
+.testimonials-rail.is-preparing .testimonials-rail__item:not([data-testimonial-clone="1"]) {
     opacity: 0;
     transform: translateY(16px) scale(.985);
+}
+.testimonials-rail.is-preparing [data-testimonial-clone="1"] {
+    opacity: 1;
+    transform: none;
 }
 .testimonials-rail.is-ready .testimonials-rail__item {
     animation: testimonialCardIn .55s cubic-bezier(.16,1,.3,1) forwards;
@@ -1546,19 +1556,24 @@
 
         /* ─── Hero magnetic CTA + image parallax ─── */
         (function() {
-            var cta = document.querySelector('.hero-magnetic');
-            if (cta && window.matchMedia('(hover: hover)').matches) {
-                cta.addEventListener('pointermove', function(e) {
-                    var r = cta.getBoundingClientRect();
-                    var x = e.clientX - r.left, y = e.clientY - r.top;
-                    cta.style.setProperty('--mx', x + 'px');
-                    cta.style.setProperty('--my', y + 'px');
-                    var dx = (x - r.width / 2) / r.width;
-                    var dy = (y - r.height / 2) / r.height;
-                    cta.style.transform = 'translate(' + (dx * 8) + 'px,' + (dy * 6) + 'px)';
-                });
-                cta.addEventListener('pointerleave', function() {
-                    cta.style.transform = '';
+            if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+                document.querySelectorAll('[data-magnetic="1"]').forEach(function(cta) {
+                    cta.addEventListener('pointermove', function(e) {
+                        var r = cta.getBoundingClientRect();
+                        var x = e.clientX - r.left;
+                        var y = e.clientY - r.top;
+                        cta.style.setProperty('--mx', x + 'px');
+                        cta.style.setProperty('--my', y + 'px');
+                        var dx = (x - r.width / 2) / r.width;
+                        var dy = (y - r.height / 2) / r.height;
+                        cta.style.transform = 'translate(' + (dx * 8) + 'px,' + (dy * 6) + 'px)';
+                    });
+                    cta.addEventListener('pointerleave', function() {
+                        cta.style.transform = '';
+                    });
+                    cta.addEventListener('pointerdown', function() {
+                        cta.style.transform = '';
+                    });
                 });
             }
 
@@ -1801,6 +1816,7 @@
                 resumeTimer: null,
                 rafId: null,
                 lastTs: 0,
+                hasEntered: false,
             };
 
             function normalizeX() {
@@ -1813,8 +1829,11 @@
                 track.style.transform = 'translate3d(' + state.x + 'px,0,0)';
             }
 
-            function buildRail() {
-                section.classList.add('is-preparing');
+            function buildRail(skipEntrance) {
+                var previousX = state.x;
+                if (! skipEntrance) {
+                    section.classList.add('is-preparing');
+                }
                 Array.from(track.querySelectorAll('[data-testimonial-clone="1"]')).forEach(function(node) {
                     node.remove();
                 });
@@ -1836,17 +1855,21 @@
                     if (idx < baseItems.length - 1) total += gap;
                 });
                 state.loopWidth = Math.max(1, total);
-                state.x = 0;
+                state.x = skipEntrance ? previousX : 0;
+                normalizeX();
                 render();
 
-                section.classList.remove('is-ready');
-                baseItems.forEach(function(item, idx) {
-                    item.style.setProperty('--t-i', String(idx));
-                });
-                requestAnimationFrame(function() {
-                    section.classList.remove('is-preparing');
-                    section.classList.add('is-ready');
-                });
+                if (! skipEntrance) {
+                    section.classList.remove('is-ready');
+                    baseItems.forEach(function(item, idx) {
+                        item.style.setProperty('--t-i', String(idx));
+                    });
+                    requestAnimationFrame(function() {
+                        section.classList.remove('is-preparing');
+                        section.classList.add('is-ready');
+                        state.hasEntered = true;
+                    });
+                }
             }
 
             function tick(ts) {
@@ -1931,7 +1954,9 @@
             var resizeTimer = null;
             window.addEventListener('resize', function() {
                 clearTimeout(resizeTimer);
-                resizeTimer = setTimeout(buildRail, 200);
+                resizeTimer = setTimeout(function() {
+                    buildRail(state.hasEntered);
+                }, 200);
             }, { passive: true });
 
             state.rafId = requestAnimationFrame(tick);

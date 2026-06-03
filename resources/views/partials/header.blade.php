@@ -613,7 +613,34 @@
 
 @media (max-width: 639px) {
     .header__brand-tagline {
-        margin-inline-start: .25rem;
+        display: none !important;
+    }
+    .header__brand-lockup {
+        min-width: 0;
+        flex: 1 1 auto;
+        max-width: calc(100% - 11.5rem);
+    }
+    .header__logo img {
+        max-height: 2rem;
+    }
+    .header__actions {
+        flex-shrink: 0;
+        gap: .35rem;
+        margin-inline-start: auto;
+    }
+    .header__nav {
+        align-items: center;
+        row-gap: .75rem;
+    }
+    .header__toggle {
+        flex-shrink: 0;
+        z-index: 2;
+    }
+    .header__toggle.hidden {
+        display: inline-flex !important;
+    }
+    .header__collapse:not(.hidden) {
+        padding-bottom: .75rem;
     }
 }
 

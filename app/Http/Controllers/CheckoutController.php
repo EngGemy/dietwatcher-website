@@ -1135,6 +1135,52 @@ class CheckoutController extends Controller
     }
 
     /**
+     * DELETE /checkout/addresses/{addressId} — remove a saved address during checkout.
+     */
+    public function deleteCheckoutAddress(int $addressId): JsonResponse
+    {
+        $token = session('external_api_token');
+        if (! is_string($token) || $token === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('payment.verify_phone_to_pay'),
+            ], 403);
+        }
+
+        if ($addressId <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.confirm_saved_address_before_payment'),
+            ], 422);
+        }
+
+        $auth = app(ApiAuthService::class);
+        $address = $auth->findAddressById($token, $addressId, false);
+        if (! is_array($address)) {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.confirm_saved_address_before_payment'),
+            ], 422);
+        }
+
+        $result = $auth->deleteAddress($token, $addressId);
+        $ok = filter_var($result['success'] ?? false, FILTER_VALIDATE_BOOLEAN)
+            || filter_var($result['ok'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        if (! $ok) {
+            return response()->json([
+                'success' => false,
+                'message' => (string) ($result['message'] ?? __('address.delete_failed')),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => __('address.deleted'),
+        ]);
+    }
+
+    /**
      * Hydrate saved addresses + profile after page reload (session token from external login).
      */
     public function customerState(): JsonResponse

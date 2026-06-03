@@ -99,13 +99,19 @@ class AccountApiService
             $logicalOk = $logicalOk && ((int) $bodyStatus < 400);
         }
 
-        return [
+        $decoded = [
             'ok' => $logicalOk,
             'status' => $response->status(),
             'data' => $body['data'] ?? $body['response'] ?? $body,
             'message' => $bodyMessage,
             'raw' => $body,
         ];
+
+        if (! $logicalOk && trim($bodyMessage) === '') {
+            $decoded['message'] = $this->extractApiValidationMessage($decoded);
+        }
+
+        return $decoded;
     }
 
     protected function empty(string $message = ''): array
@@ -563,10 +569,13 @@ class AccountApiService
         $apiMin = SubscriptionCheckoutPayload::extractApiMinStartDate($data);
 
         if ($apiMin === '') {
+            $payload['date'] = $userDate;
+            $payload['start_date'] = $userDate;
+
             return [
-                'ok' => false,
-                'message' => __('account.request_failed'),
-                'min_start_date' => null,
+                'ok' => true,
+                'message' => '',
+                'min_start_date' => $userDate,
                 'payload' => $payload,
             ];
         }

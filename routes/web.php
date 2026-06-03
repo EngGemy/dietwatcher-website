@@ -145,6 +145,11 @@ Route::post('/checkout/select-address', [\App\Http\Controllers\CheckoutControlle
     ->middleware('throttle:30,1')
     ->name('checkout.select-address');
 
+Route::delete('/checkout/addresses/{addressId}', [\App\Http\Controllers\CheckoutController::class, 'deleteCheckoutAddress'])
+    ->middleware('throttle:20,1')
+    ->whereNumber('addressId')
+    ->name('checkout.delete-address');
+
 Route::get('/checkout/customer-state', [\App\Http\Controllers\CheckoutController::class, 'customerState'])
     ->middleware('throttle:60,1')
     ->name('checkout.customer-state');
