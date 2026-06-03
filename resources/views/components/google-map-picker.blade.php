@@ -769,6 +769,7 @@ function googleMapPicker(opts) {
         normalizeDistrictText(value) {
             return String(value || '')
                 .toLowerCase()
+                .replace(/[أإآ]/g, 'ا')
                 .replace(/[ًٌٍَُِّْـ]/g, '')
                 .replace(/\b(district|riyadh|saudi|arabia)\b/g, '')
                 .replace(/حي|الرياض|السعودية/g, '')
@@ -788,6 +789,8 @@ function googleMapPicker(opts) {
             };
             push(row && row.name);
             push(row && row.district_identifier);
+            push(row && row.identifier);
+            push(row && row.slug);
             push(row && row.name_ar);
             push(row && row.name_en);
             push(row && row.title);
@@ -799,7 +802,7 @@ function googleMapPicker(opts) {
                 return '';
             }
             const components = Array.isArray(result.address_components) ? result.address_components : [];
-            const wantedTypes = ['sublocality_level_1', 'sublocality', 'neighborhood', 'administrative_area_level_2'];
+            const wantedTypes = ['sublocality_level_1', 'sublocality_level_2', 'sublocality', 'neighborhood', 'administrative_area_level_2', 'locality'];
             const geoNames = [];
             components.forEach((c) => {
                 const types = Array.isArray(c.types) ? c.types : [];

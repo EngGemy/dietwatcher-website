@@ -757,15 +757,13 @@ class AccountApiService
         $metadata = is_array($payment['metadata'] ?? null) ? $payment['metadata'] : [];
         $metadata = array_map(static fn ($v) => (string) $v, $metadata);
 
-        $publishableKey = app(MoyasarPaymentService::class)->resolvePublishableKey(
-            (string) (
-                $payment['publishable_api_key']
-                ?? $payment['publishable_key']
-                ?? ''
-            )
-        );
+        $publishableKey = trim((string) (
+            $payment['publishable_api_key']
+            ?? $payment['publishable_key']
+            ?? ''
+        ));
 
-        if ($publishableKey === '') {
+        if (! app(MoyasarPaymentService::class)->isValidPublishableKey($publishableKey)) {
             return null;
         }
 
@@ -887,7 +885,7 @@ class AccountApiService
             return null;
         }
 
-        $addresses = app(ApiAuthService::class)->getAddresses($token, true, false);
+        $addresses = app(ApiAuthService::class)->getAddresses($token, true, true);
         if ($addresses !== []) {
             $latest = collect($addresses)->sortByDesc(fn (array $row): int => (int) ($row['id'] ?? 0))->first();
             if (is_array($latest) && (int) ($latest['id'] ?? 0) > 0) {

@@ -472,28 +472,23 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
                                     <input type="hidden" name="building" :value="buildingNotes" :disabled="deliveryType === 'pickup'" />
 
-                                    <div x-show="deliveryType === 'home'" x-cloak class="pt-1">
+                                    <div x-show="deliveryType === 'home'" x-cloak class="space-y-2 pt-1">
                                         <button
                                             type="button"
                                             class="btn btn--primary btn--md w-full"
-                                            @click="confirmInlineAddress()"
-                                            :disabled="!inlineAddressHasRequiredFields()"
+                                            @click="saveDeliveryAddress()"
+                                            :disabled="savingNewAddress || !inlineAddressCanSave()"
                                         >
-                                            {{ __('Confirm Address') }}
-                                        </button>
-                                    </div>
-
-                                    <div x-show="addingNewAddress" x-cloak class="flex items-center gap-3 pt-2">
-                                        <button type="button"
-                                                class="btn btn--primary btn--md flex-1"
-                                                :disabled="savingNewAddress"
-                                                @click="saveNewAddress()">
                                             <span x-show="!savingNewAddress">{{ __('Save address') }}</span>
                                             <span x-show="savingNewAddress" x-cloak>{{ __('Saving...') }}</span>
                                         </button>
-                                        <button type="button"
-                                                class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
-                                                @click="addingNewAddress = false">
+                                        <button
+                                            x-show="addingNewAddress"
+                                            x-cloak
+                                            type="button"
+                                            class="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                                            @click="addingNewAddress = false"
+                                        >
                                             {{ __('Cancel') }}
                                         </button>
                                     </div>
@@ -1342,6 +1337,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             _skipStartDateTouch: false,
             _moyasarFingerprint: '',
             _moyasarRequestId: 0,
+            _moyasarSessionFailed: false,
             vatRate: @json((float) $vatRate),
             deliveryFeeAmount: @json((float) $deliveryFeeAmount),
             discount: 0,
@@ -1705,10 +1701,23 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     p.push(@json(__('Door')) + ': ' + d);
                 }
                 this.buildingNotes = p.join(', ');
-                if (this.addressConfirmedForSync && ! this.selectedAddressId) {
-                    clearTimeout(this._syncExtTimer);
-                    this._syncExtTimer = setTimeout(() => this.syncExternalAddress(), 1200);
+            },
+
+            resolveZoneFromDistrictId(districtId) {
+                if (! districtId || ! Array.isArray(this.zones)) {
+                    return '';
                 }
+                const match = this.zones.find((z) => {
+                    const districtList = z.districts || z.district_ids || [];
+
+                    return districtList.some((d) => {
+                        const id = typeof d === 'object' ? (d.id ?? d.district_id) : d;
+
+                        return String(id) === String(districtId);
+                    });
+                });
+
+                return match ? String(match.id) : '';
             },
 
             buildSyncAddressFormData() {
@@ -1791,8 +1800,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         } else {
                             await this.refreshCustomerFromServer();
                         }
-                        if (this.addressConfirmedForSync || this.selectedAddressId) {
-                            this.scheduleMoyasarRefresh();
+                        if (this.selectedAddressId) {
+                            this._moyasarSessionFailed = false;
+                            this.requestMoyasarBootstrap();
                         }
                     } else {
                         const errs = data && data.errors && typeof data.errors === 'object'
@@ -1839,8 +1849,20 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 this.inlineMapLat = d.lat != null && d.lat !== '' ? String(d.lat) : '';
                 this.inlineMapLng = d.lng != null && d.lng !== '' ? String(d.lng) : '';
                 this.inlineMapDistrictId = d.districtId ? String(d.districtId) : '';
+                if (d.districtId) {
+                    const zoneId = this.resolveZoneFromDistrictId(d.districtId);
+                    if (zoneId) {
+                        this.selectedZoneId = zoneId;
+                        const form = this.$refs.checkoutForm;
+                        const zoneEl = form?.querySelector('select[name="zone_id"]');
+                        if (zoneEl) {
+                            zoneEl.value = zoneId;
+                        }
+                    }
+                }
                 if (! d.ok) {
                     this.addressConfirmedForSync = false;
+                    this.selectedAddressId = null;
                 }
             },
 
@@ -1877,7 +1899,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             deliverableSavedAddresses() {
-                return (this.savedAddresses || []).filter((addr) => this.addressIsDeliverable(addr));
+                return (this.savedAddresses || []).filter((addr) => addr && addr.id != null);
             },
 
             startAddingAddress() {
@@ -1898,42 +1920,48 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 }
             },
 
-            async saveNewAddress() {
+            async saveDeliveryAddress() {
                 this.newAddressError = '';
+                this.syncAddressError = '';
+                if (! this.fullPhone966()) {
+                    this.syncAddressError = @json(__('checkout.address_sync_needs_phone'));
+
+                    return;
+                }
                 const form = this.$refs.checkoutForm;
-                if (! form) return;
-                const fd = new FormData(form);
-                // Only send the fields the sync-address endpoint needs.
-                const payload = new FormData();
-                const keep = ['delivery_lat', 'delivery_lng', 'delivery_district_id', 'delivery_description',
-                              'delivery_kind', 'delivery_title', 'delivery_pickup_type', 'building', 'zone_id'];
-                keep.forEach(k => { if (fd.has(k)) payload.append(k, fd.get(k)); });
-                // The sync-address endpoint still expects the field named `delivery_type`.
-                // On the form it is `delivery_kind` to avoid colliding with the home/pickup radio.
-                if (payload.has('delivery_kind')) {
-                    payload.append('delivery_type', payload.get('delivery_kind'));
-                    payload.delete('delivery_kind');
-                }
-                const phoneForAddress = this.addressPhone966() || this.fullPhone966();
-                if (! phoneForAddress) {
-                    this.newAddressError = @json(__('Please enter a phone number for this address.'));
+                if (! form) {
                     return;
                 }
-                payload.set('phone', phoneForAddress);
-                if (! payload.get('delivery_lat') || ! payload.get('delivery_lng')) {
-                    this.newAddressError = @json(__('Please set a location on the map first.'));
+                const lat = String(this.inlineMapLat || (form.querySelector('input[name="delivery_lat"]')?.value ?? '')).trim();
+                const lng = String(this.inlineMapLng || (form.querySelector('input[name="delivery_lng"]')?.value ?? '')).trim();
+                const district = String(this.inlineMapDistrictId || (form.querySelector('input[name="delivery_district_id"]')?.value ?? '')).trim();
+                if (! lat || ! lng) {
+                    this.syncAddressError = @json(__('Please set a location on the map first.'));
+
                     return;
                 }
-                if (! payload.get('delivery_district_id')) {
-                    this.newAddressError = @json(__('Please confirm the address (district) on the map.'));
+                if (! district) {
+                    this.syncAddressError = @json(__('checkout.area_not_served'));
+
                     return;
                 }
-                if (! payload.get('zone_id')) {
-                    this.newAddressError = @json(__('Please select a city first.'));
-                    return;
+                const zoneFromDistrict = this.resolveZoneFromDistrictId(district);
+                if (zoneFromDistrict) {
+                    this.selectedZoneId = zoneFromDistrict;
+                    const zoneEl = form.querySelector('select[name="zone_id"]');
+                    if (zoneEl) {
+                        zoneEl.value = zoneFromDistrict;
+                    }
                 }
                 this.savingNewAddress = true;
                 try {
+                    const payload = this.buildSyncAddressFormData();
+                    payload.set('delivery_lat', lat);
+                    payload.set('delivery_lng', lng);
+                    payload.set('delivery_district_id', district);
+                    if (this.selectedZoneId) {
+                        payload.set('zone_id', String(this.selectedZoneId));
+                    }
                     const res = await fetch('{{ route('checkout.sync-address') }}', {
                         method: 'POST',
                         body: payload,
@@ -1949,42 +1977,39 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             : [];
                         this.newAddressError = errs[0] || data.message || @json(__('address.save_failed'));
                         this.syncAddressError = this.newAddressError;
+
                         return;
                     }
                     this.syncAddressError = '';
+                    this._moyasarSessionFailed = false;
+                    this._moyasarFingerprint = '';
                     await this.refreshCustomerFromServer();
                     if (data.data && data.data.id) {
                         let fresh = this.savedAddresses.find(a => String(a.id) === String(data.data.id));
-                        if (!fresh) {
-                            fresh = {
-                                id: data.data.id,
-                                latitude: payload.get('delivery_lat'),
-                                longitude: payload.get('delivery_lng'),
-                                city_id: payload.get('zone_id'),
-                                line1: payload.get('delivery_description') || this.addressStreet || '',
-                                description: payload.get('delivery_description') || this.addressStreet || '',
-                                district_id: payload.get('delivery_district_id'),
-                            };
+                        if (! fresh) {
+                            fresh = data.data;
                             this.savedAddresses = [fresh, ...this.savedAddresses];
                         }
                         this.applySavedAddress(fresh);
                     }
                     this.addingNewAddress = false;
+                    this.addressConfirmedForSync = true;
+                    this.coverageOk = true;
+                    this.coverageMessage = '';
                 } catch (e) {
                     this.newAddressError = @json(__('An error occurred. Please try again.'));
+                    this.syncAddressError = this.newAddressError;
                 } finally {
                     this.savingNewAddress = false;
                 }
             },
 
+            async saveNewAddress() {
+                await this.saveDeliveryAddress();
+            },
+
             applySavedAddress(addr) {
                 if (! addr || this.deliveryType !== 'home') {
-                    return;
-                }
-                if (! this.addressIsDeliverable(addr)) {
-                    this.moyasarError = @json(__('checkout.address_not_in_delivery_zone'));
-                    this.syncAddressError = this.moyasarError;
-
                     return;
                 }
                 this.syncAddressError = '';
@@ -2112,15 +2137,14 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         }
                     }
                 });
-                this.$nextTick(() => this.scheduleMoyasarRefresh());
+                this._moyasarSessionFailed = false;
+                this._moyasarFingerprint = '';
+                this.$nextTick(() => this.requestMoyasarBootstrap());
             },
 
             selectSavedAddress(addr) {
-                if (! this.addressIsDeliverable(addr)) {
-                    this.moyasarError = @json(__('checkout.address_not_in_delivery_zone'));
-
-                    return;
-                }
+                this._moyasarSessionFailed = false;
+                this._moyasarFingerprint = '';
                 this.applySavedAddress(addr);
                 this.$nextTick(() => {
                     this.$refs.paymentCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2240,11 +2264,20 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (this.deliveryType === 'pickup') {
                     return true;
                 }
-                if (this.selectedAddressId) {
-                    return true;
-                }
 
-                return this.coverageOk;
+                return !!this.selectedAddressId;
+            },
+
+            inlineAddressCanSave() {
+                const form = this.$refs.checkoutForm;
+                if (! form) {
+                    return false;
+                }
+                const lat = String(this.inlineMapLat || (form.querySelector('input[name="delivery_lat"]')?.value ?? '')).trim();
+                const lng = String(this.inlineMapLng || (form.querySelector('input[name="delivery_lng"]')?.value ?? '')).trim();
+                const district = String(this.inlineMapDistrictId || (form.querySelector('input[name="delivery_district_id"]')?.value ?? '')).trim();
+
+                return lat !== '' && lng !== '' && district !== '' && this.coverageOk !== false;
             },
 
             /** Home delivery: map pin confirmed + city + district (no saved-address id required). */
@@ -2313,11 +2346,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (this.deliveryType === 'pickup') {
                     return !!this.selectedBranchId;
                 }
-                if (this.selectedAddressId) {
-                    return true;
-                }
 
-                return this.inlineHomeAddressReady();
+                return !!this.selectedAddressId;
             },
 
             canProceedToPayment() {
@@ -2326,27 +2356,25 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     ? (this.selectedDurationValue() !== '' || Number(this.cartDurationDaysHint || 0) > 0)
                     : this.selectedDurationValue() !== '';
 
-                const homeBlockedBySync = this.deliveryType === 'home'
-                    && this.syncAddressError
-                    && ! this.selectedAddressId
-                    && ! this.inlineHomeAddressReady();
-
                 return this.deliveryReady()
                     && hasSelectedPlan
                     && hasSelectedDuration
                     && this.startDateValid()
-                    && this.coverageReady()
-                    && ! homeBlockedBySync;
+                    && this.coverageReady();
             },
 
             paymentBlockerMessage() {
                 if (this.deliveryType === 'pickup') {
                     return @json(__('checkout.payment_blocker_pickup'));
                 }
-                if (this.syncAddressError && ! this.selectedAddressId && ! this.inlineHomeAddressReady()) {
-                    return @json(__('checkout.address_sync_block_payment'));
+                if (this.coverageMessage && ! this.selectedAddressId) {
+                    return this.coverageMessage;
                 }
-                return @json(__('checkout.payment_blocker_home'));
+                if (this.syncAddressError && ! this.selectedAddressId) {
+                    return this.syncAddressError;
+                }
+
+                return @json(__('checkout.confirm_saved_address_before_payment'));
             },
 
             // Computed: subscription line total is fixed; meals use duration multiplier
@@ -2651,25 +2679,17 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 event.target.submit();
             },
 
-            scheduleMoyasarRefresh() {
+            requestMoyasarBootstrap() {
+                if (this._moyasarSessionFailed || ! this.phoneVerified || ! this.canProceedToPayment()) {
+                    return;
+                }
                 clearTimeout(this._moyasarTimer);
                 this._moyasarTimer = setTimeout(async () => {
                     if (this.isPlanCheckout && this.phoneVerified) {
                         await this.refreshMinStartDateFromApi();
                     }
-                    const el = document.getElementById('moyasar-form-checkout');
-                    if (! this.canProceedToPayment()) {
-                        this.moyasarError = '';
-                        this._moyasarFingerprint = '';
-                        if (el) {
-                            el.innerHTML = '';
-                        }
-
-                        return;
-                    }
-                    if (! this.phoneVerified) {
-                        this.moyasarError = '';
-                        this._moyasarFingerprint = '';
+                    if (! this.canProceedToPayment() || this._moyasarSessionFailed) {
+                        const el = document.getElementById('moyasar-form-checkout');
                         if (el) {
                             el.innerHTML = '';
                         }
@@ -2677,7 +2697,14 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         return;
                     }
                     this.bootstrapMoyasar();
-                }, 800);
+                }, 400);
+            },
+
+            scheduleMoyasarRefresh() {
+                if (this._moyasarSessionFailed) {
+                    return;
+                }
+                this.requestMoyasarBootstrap();
             },
 
             buildMoyasarFingerprint(fd) {
@@ -2918,6 +2945,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         return;
                     }
                     if (! res.ok || ! data.success) {
+                        this._moyasarSessionFailed = true;
                         if (data.errors && data.errors.start_date && data.errors.start_date[0]) {
                             this.moyasarError = data.errors.start_date[0];
                         } else {
@@ -2936,9 +2964,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         return;
                     }
                     this._moyasarFingerprint = fingerprint;
+                    this._moyasarSessionFailed = false;
                     this.initMoyasarWidget(data);
                 } catch (e) {
                     if (requestId === this._moyasarRequestId) {
+                        this._moyasarSessionFailed = true;
                         this.moyasarError = @json(__('An error occurred. Please try again.'));
                     }
                 }
@@ -2949,9 +2979,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (! el || typeof Moyasar === 'undefined') {
                     return;
                 }
-                const publishableKey = String(
-                    data.publishable_key || @json(config('services.moyasar.publishable_key', ''))
-                ).trim();
+                const apiCheckout = data.api_checkout === true;
+                let publishableKey = String(data.publishable_key || '').trim();
+                if (! publishableKey && ! apiCheckout) {
+                    publishableKey = String(@json(config('services.moyasar.publishable_key', ''))).trim();
+                }
                 if (! publishableKey || ! /^pk_(test|live)_[a-zA-Z0-9]+$/.test(publishableKey)) {
                     this.moyasarError = @json(__('payment.moyasar_key_missing'));
 
@@ -3003,7 +3035,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     }
                     this.showNameField = this.isContinueUser || ! (this.customerName || '').trim();
                     await this.refreshMinStartDateFromApi();
-                    this.$nextTick(() => this.scheduleMoyasarRefresh());
+                    this.$nextTick(() => {
+                        if (this.canProceedToPayment()) {
+                            this.requestMoyasarBootstrap();
+                        }
+                    });
                 });
 
                 if (this.isPlanCheckout) {
@@ -3025,13 +3061,36 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         this.revalidateCoupon();
                     }
                     this.applyDurationMinimumStartDate();
-                    this.scheduleMoyasarRefresh();
+                    if (! this._moyasarSessionFailed && this.canProceedToPayment()) {
+                        this._moyasarFingerprint = '';
+                        this.scheduleMoyasarRefresh();
+                    }
                 });
                 this.$watch('duration', () => this.revalidateCoupon());
-                this.$watch('duration', () => this.scheduleMoyasarRefresh());
-                this.$watch('selectedZoneId', () => this.scheduleMoyasarRefresh());
-                this.$watch('selectedAddressId', () => this.scheduleMoyasarRefresh());
-                this.$watch('selectedBranchId', () => this.scheduleMoyasarRefresh());
+                this.$watch('duration', () => {
+                    if (! this._moyasarSessionFailed && this.canProceedToPayment()) {
+                        this._moyasarFingerprint = '';
+                        this.scheduleMoyasarRefresh();
+                    }
+                });
+                this.$watch('selectedZoneId', () => {
+                    if (! this._moyasarSessionFailed && this.canProceedToPayment()) {
+                        this._moyasarFingerprint = '';
+                        this.scheduleMoyasarRefresh();
+                    }
+                });
+                this.$watch('selectedAddressId', () => {
+                    if (! this._moyasarSessionFailed && this.canProceedToPayment()) {
+                        this._moyasarFingerprint = '';
+                        this.scheduleMoyasarRefresh();
+                    }
+                });
+                this.$watch('selectedBranchId', () => {
+                    if (! this._moyasarSessionFailed && this.canProceedToPayment()) {
+                        this._moyasarFingerprint = '';
+                        this.scheduleMoyasarRefresh();
+                    }
+                });
                 this.$watch('deliveryType', (v) => {
                     if (v === 'pickup') {
                         this.syncPickupPhase();
@@ -3043,9 +3102,17 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     if (v === 'home') {
                         setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 300);
                     }
-                    this.scheduleMoyasarRefresh();
+                    if (! this._moyasarSessionFailed && this.canProceedToPayment()) {
+                        this._moyasarFingerprint = '';
+                        this.scheduleMoyasarRefresh();
+                    }
                 });
-                this.$watch('couponApplied', () => this.scheduleMoyasarRefresh());
+                this.$watch('couponApplied', () => {
+                    if (! this._moyasarSessionFailed && this.canProceedToPayment()) {
+                        this._moyasarFingerprint = '';
+                        this.scheduleMoyasarRefresh();
+                    }
+                });
                 if (this.deliveryType === 'home') {
                     setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 500);
                 }
@@ -3079,10 +3146,15 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     startDateInput.addEventListener('change', () => {
                         this.markStartDateTouched();
                         this.startDate = String(startDateInput.value || '');
-                        this.scheduleMoyasarRefresh();
+                        if (! this._moyasarSessionFailed && this.canProceedToPayment()) {
+                            this._moyasarFingerprint = '';
+                            this.scheduleMoyasarRefresh();
+                        }
                     });
                 }
-                this.scheduleMoyasarRefresh();
+                if (this.phoneVerified && this.canProceedToPayment()) {
+                    this.requestMoyasarBootstrap();
+                }
             }
         }
     }

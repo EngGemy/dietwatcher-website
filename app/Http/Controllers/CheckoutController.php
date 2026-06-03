@@ -1049,14 +1049,6 @@ class CheckoutController extends Controller
             if (is_array($refreshed)) {
                 $stored = $refreshed;
             }
-            $allAddresses = $auth->getAddresses($userToken, true, false);
-            if (is_array($stored) && ! AddressCheckoutHelper::isDeliverableForSubscription($stored, $allAddresses)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => __('checkout.address_not_in_delivery_zone'),
-                    'errors' => ['delivery_district_id' => [__('checkout.address_not_in_delivery_zone')]],
-                ], 422);
-            }
 
             return response()->json([
                 'success' => true,
@@ -1397,6 +1389,39 @@ class CheckoutController extends Controller
 
         $validated['duration'] = 'once';
 
+        $isSubscriptionCheckout = $hasPlanItems && session()->has(CartManager::SESSION_SUBSCRIPTION);
+
+        if (
+            $isSubscriptionCheckout
+            && ($validated['delivery_type'] ?? '') === 'home'
+        ) {
+            $addressId = (int) ($validated['selected_address_id'] ?? 0);
+            if ($addressId <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('checkout.confirm_saved_address_before_payment'),
+                    'errors' => ['selected_address_id' => [__('checkout.confirm_saved_address_before_payment')]],
+                ], 422);
+            }
+
+            $token = (string) session('external_api_token', '');
+            if ($token === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('payment.verify_phone_to_pay'),
+                ], 403);
+            }
+
+            $saved = app(ApiAuthService::class)->findAddressById($token, $addressId, true);
+            if (! is_array($saved)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('checkout.confirm_saved_address_before_payment'),
+                    'errors' => ['selected_address_id' => [__('checkout.confirm_saved_address_before_payment')]],
+                ], 422);
+            }
+        }
+
         $planDurationsFromApi = [];
         if ($hasPlanItems) {
             $firstKey = null;
@@ -1713,12 +1738,11 @@ class CheckoutController extends Controller
 
         $bootstrap = $boot['bootstrap'];
         $subscriptionId = (int) ($boot['subscription_id'] ?? $bootstrap['subscription_id'] ?? 0);
-        $publishableKey = $moyasarService->resolvePublishableKey($bootstrap['publishable_key'] ?? null);
+        $publishableKey = trim((string) ($bootstrap['publishable_key'] ?? ''));
 
         if (! $moyasarService->isValidPublishableKey($publishableKey)) {
-            Log::warning('Subscription Moyasar bootstrap missing valid publishable key', [
+            Log::warning('Subscription Moyasar bootstrap missing valid publishable key from API', [
                 'api_key' => $bootstrap['publishable_key'] ?? null,
-                'configured' => $moyasarService->getPublishableKey() !== '',
             ]);
 
             return response()->json([
