@@ -15,6 +15,7 @@
 
     <link rel="stylesheet" href="{{ asset('assets/styles/main.css') }}" />
     <link rel="stylesheet" href="{{ asset('assets/styles/duration-pills.css') }}" />
+    <link rel="stylesheet" href="{{ asset('assets/styles/duration-swiper.css') }}" />
 
     {{-- Livewire Styles --}}
     @livewireStyles

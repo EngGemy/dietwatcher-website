@@ -497,7 +497,7 @@ $totalPrice = $planPriceInclVat;
                 <div class="rounded-md border border-gray-200 bg-white p-5" x-show="durations.length > 0" x-cloak>
                     <p class="mb-3 text-lg md:text-xl">{{ __('Choose Duration') }}</p>
 
-                    <div class="duration-pills">
+                    <x-duration-carousel>
                         <template x-for="(dur, index) in durations" :key="dur.id">
                             <div class="duration-pills__item">
                                 <input type="radio"
@@ -506,7 +506,7 @@ $totalPrice = $planPriceInclVat;
                                        class="duration-pills__input"
                                        :value="dur.id"
                                        x-model="selectedDurationId"
-                                       @change="onDurationChange(dur)">
+                                       @change="onDurationChange(dur); scrollDurationToSelected()">
                                 <label :for="'dur-' + index" class="duration-pills__face">
                                     <span class="duration-pills__offer-badge" x-show="durationRowHasOffer(dur)" x-cloak>{{ __('Offer') }}</span>
                                     <span class="duration-pills__title" x-text="dur.label || (dur.days + ' {{ __('Days') }}')"></span>
@@ -516,7 +516,7 @@ $totalPrice = $planPriceInclVat;
                                 </label>
                             </div>
                         </template>
-                    </div>
+                    </x-duration-carousel>
                 </div>
 
                 {{-- Payment Summary --}}
@@ -768,6 +768,9 @@ function planDetail() {
         planPrice: {{ $planPrice }},
         vatRate: {{ $vatRate }},
         durations: [],
+        durationScrollAtStart: true,
+        durationScrollAtEnd: false,
+        _durationScrollRaf: null,
         calories: @json($calorieOptions),
         displayPrice: {{ $planPriceInclVat }},
         originalPrice: {{ $offerPrice > 0 ? $planPrice : 0 }},
@@ -868,6 +871,62 @@ function planDetail() {
             return '\u20C1 ' + (Number.isInteger(avg) ? String(avg) : avg.toFixed(2));
         },
 
+        durationViewportScrollLeft(vp) {
+            const isRtl = document.documentElement.dir === 'rtl';
+
+            return isRtl ? Math.abs(vp.scrollLeft) : vp.scrollLeft;
+        },
+
+        onDurationViewportScroll() {
+            if (this._durationScrollRaf) {
+                return;
+            }
+            this._durationScrollRaf = requestAnimationFrame(() => {
+                this._durationScrollRaf = null;
+                this.refreshDurationScrollState();
+            });
+        },
+
+        refreshDurationScrollState() {
+            const vp = this.$refs.durationViewport;
+            if (! vp) {
+                this.durationScrollAtStart = true;
+                this.durationScrollAtEnd = true;
+
+                return;
+            }
+            const max = Math.max(0, vp.scrollWidth - vp.clientWidth);
+            const pos = this.durationViewportScrollLeft(vp);
+            this.durationScrollAtStart = pos <= 8;
+            this.durationScrollAtEnd = max <= 8 || pos >= max - 8;
+        },
+
+        scrollDurationBy(dir) {
+            const vp = this.$refs.durationViewport;
+            if (! vp) {
+                return;
+            }
+            const step = Math.max(vp.clientWidth * 0.78, 200);
+            const isRtl = document.documentElement.dir === 'rtl';
+            const delta = (isRtl ? -dir : dir) * step;
+            vp.scrollBy({ left: delta, behavior: 'smooth' });
+        },
+
+        scrollDurationToSelected() {
+            this.$nextTick(() => {
+                const vp = this.$refs.durationViewport;
+                if (! vp) {
+                    return;
+                }
+                const checked = vp.querySelector('.duration-pills__input:checked');
+                const slide = checked?.closest('.duration-pills__item');
+                if (slide) {
+                    slide.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                }
+                setTimeout(() => this.refreshDurationScrollState(), 360);
+            });
+        },
+
         applySubscriptionPlan(plan) {
             if (!plan) return;
             this.heroImageErrorStage = 0;
@@ -898,6 +957,10 @@ function planDetail() {
             } else {
                 this.selectedDurationId = '';
             }
+            this.$nextTick(() => {
+                this.refreshDurationScrollState();
+                this.scrollDurationToSelected();
+            });
         },
 
         async init() {
@@ -961,6 +1024,24 @@ function planDetail() {
             if (!this.hasRangeDisplay()) {
                 this.applyEstimatedNutritionFromRange(this.selectedCalories);
             }
+
+            this.$watch('durations', () => {
+                this.$nextTick(() => {
+                    this.refreshDurationScrollState();
+                    this.scrollDurationToSelected();
+                });
+            });
+            this.$watch('selectedDurationId', () => {
+                this.scrollDurationToSelected();
+            });
+            if (typeof window !== 'undefined') {
+                this._durationResizeHandler = () => this.refreshDurationScrollState();
+                window.addEventListener('resize', this._durationResizeHandler, { passive: true });
+            }
+            this.$nextTick(() => {
+                this.refreshDurationScrollState();
+                this.scrollDurationToSelected();
+            });
         },
 
         updateNutrition(cal) {

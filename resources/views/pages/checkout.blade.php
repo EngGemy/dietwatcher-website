@@ -120,37 +120,40 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             @if($hasPlanItems)
                                 <input type="hidden" name="duration" value="once" />
                                 <div>
-                                    <p class="mb-3 text-lg md:text-xl">{{ __('Duration') }}</p>
+                                    <p class="mb-3 text-lg md:text-xl">{{ __('Choose Duration') }}</p>
                                     <p x-show="durationsLoading" @if(empty($planDurations) && empty($cartDurationFallback)) x-cloak @endif class="mb-3 text-sm text-gray-500">{{ __('Loading...') }}</p>
-                                    <div x-show="! durationsLoading && planDurations.length" @if(empty($planDurations) && empty($cartDurationFallback)) x-cloak @endif class="duration-pills">
-                                        <template x-for="(d, idx) in planDurations" :key="'pd-' + idx + '-' + (d.id ?? 'x')">
-                                            <div class="duration-pills__item">
-                                                <div x-show="Number(d.id) > 0">
-                                                    <input
-                                                        type="radio"
-                                                        name="plan_duration_id"
-                                                        class="duration-pills__input"
-                                                        :id="'plan-dur-' + d.id"
-                                                        :value="String(d.id)"
-                                                        x-model="selectedPlanDurationId"
-                                                    />
-                                                    <label class="duration-pills__face" :for="'plan-dur-' + d.id">
+                                    <div x-show="! durationsLoading && planDurations.length" @if(empty($planDurations) && empty($cartDurationFallback)) x-cloak @endif>
+                                        <x-duration-carousel>
+                                            <template x-for="(d, idx) in planDurations" :key="'pd-' + idx + '-' + (d.id ?? 'x')">
+                                                <div class="duration-pills__item">
+                                                    <div x-show="Number(d.id) > 0">
+                                                        <input
+                                                            type="radio"
+                                                            name="plan_duration_id"
+                                                            class="duration-pills__input"
+                                                            :id="'plan-dur-' + d.id"
+                                                            :value="String(d.id)"
+                                                            x-model="selectedPlanDurationId"
+                                                            @change="scrollDurationToSelected()"
+                                                        />
+                                                        <label class="duration-pills__face" :for="'plan-dur-' + d.id">
+                                                            <span class="duration-pills__offer-badge" x-show="durationPlanHasOffer(d)" x-cloak>{{ __('Offer') }}</span>
+                                                            <span class="duration-pills__title" x-text="durationCardTitle(d)"></span>
+                                                            <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="durationStrikeLine(d)"></span>
+                                                            <span class="duration-pills__total-line" x-text="durationTotalLine(d)"></span>
+                                                            <span class="duration-pills__avg" x-show="durationPlanAvgLine(d)" x-text="durationPlanAvgLine(d)"></span>
+                                                        </label>
+                                                    </div>
+                                                    <div x-show="Number(d.id) <= 0" class="duration-pills__face duration-pills__face--static">
                                                         <span class="duration-pills__offer-badge" x-show="durationPlanHasOffer(d)" x-cloak>{{ __('Offer') }}</span>
                                                         <span class="duration-pills__title" x-text="durationCardTitle(d)"></span>
                                                         <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="durationStrikeLine(d)"></span>
                                                         <span class="duration-pills__total-line" x-text="durationTotalLine(d)"></span>
                                                         <span class="duration-pills__avg" x-show="durationPlanAvgLine(d)" x-text="durationPlanAvgLine(d)"></span>
-                                                    </label>
+                                                    </div>
                                                 </div>
-                                                <div x-show="Number(d.id) <= 0" class="duration-pills__face duration-pills__face--static">
-                                                    <span class="duration-pills__offer-badge" x-show="durationPlanHasOffer(d)" x-cloak>{{ __('Offer') }}</span>
-                                                    <span class="duration-pills__title" x-text="durationCardTitle(d)"></span>
-                                                    <span class="duration-pills__strike" x-show="durationPlanHasOffer(d)" x-text="durationStrikeLine(d)"></span>
-                                                    <span class="duration-pills__total-line" x-text="durationTotalLine(d)"></span>
-                                                    <span class="duration-pills__avg" x-show="durationPlanAvgLine(d)" x-text="durationPlanAvgLine(d)"></span>
-                                                </div>
-                                            </div>
-                                        </template>
+                                            </template>
+                                        </x-duration-carousel>
                                     </div>
                                     <p x-show="! durationsLoading && ! planDurations.length" x-cloak class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                                         {{ __('Could not load duration options. Please return to the meal plan and try again.') }}
@@ -1452,6 +1455,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             durationsLoading: @json($hasPlanItems && empty($planDurations) && empty($cartDurationFallback)),
             // Plan durations (filled from server, client fetch, or cart fallback)
             planDurations: @json($planDurations ?? []),
+            durationScrollAtStart: true,
+            durationScrollAtEnd: false,
+            _durationScrollRaf: null,
 
             // Branch pickup state
             selectedBranchId: @json(old('branch_id', '')),
@@ -1718,9 +1724,69 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         this.baseSubtotal = Math.round(this.planDurationPrices[sel] * 100) / 100;
                     }
                     this.applyDurationMinimumStartDate();
+                    this.$nextTick(() => {
+                        this.refreshDurationScrollState();
+                        this.scrollDurationToSelected();
+                    });
                 } finally {
                     this.durationsLoading = false;
                 }
+            },
+
+            durationViewportScrollLeft(vp) {
+                const isRtl = document.documentElement.dir === 'rtl';
+
+                return isRtl ? Math.abs(vp.scrollLeft) : vp.scrollLeft;
+            },
+
+            onDurationViewportScroll() {
+                if (this._durationScrollRaf) {
+                    return;
+                }
+                this._durationScrollRaf = requestAnimationFrame(() => {
+                    this._durationScrollRaf = null;
+                    this.refreshDurationScrollState();
+                });
+            },
+
+            refreshDurationScrollState() {
+                const vp = this.$refs.durationViewport;
+                if (! vp) {
+                    this.durationScrollAtStart = true;
+                    this.durationScrollAtEnd = true;
+
+                    return;
+                }
+                const max = Math.max(0, vp.scrollWidth - vp.clientWidth);
+                const pos = this.durationViewportScrollLeft(vp);
+                this.durationScrollAtStart = pos <= 8;
+                this.durationScrollAtEnd = max <= 8 || pos >= max - 8;
+            },
+
+            scrollDurationBy(dir) {
+                const vp = this.$refs.durationViewport;
+                if (! vp) {
+                    return;
+                }
+                const step = Math.max(vp.clientWidth * 0.78, 200);
+                const isRtl = document.documentElement.dir === 'rtl';
+                const delta = (isRtl ? -dir : dir) * step;
+                vp.scrollBy({ left: delta, behavior: 'smooth' });
+            },
+
+            scrollDurationToSelected() {
+                this.$nextTick(() => {
+                    const vp = this.$refs.durationViewport;
+                    if (! vp) {
+                        return;
+                    }
+                    const checked = vp.querySelector('.duration-pills__input:checked');
+                    const slide = checked?.closest('.duration-pills__item');
+                    if (slide) {
+                        slide.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                    }
+                    setTimeout(() => this.refreshDurationScrollState(), 360);
+                });
             },
 
             planDurationSummaryLabel() {
@@ -3540,10 +3606,29 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 } else {
                     this.durationsLoading = false;
                 }
+                this.$watch('planDurations', () => {
+                    this.$nextTick(() => {
+                        this.refreshDurationScrollState();
+                        this.scrollDurationToSelected();
+                    });
+                });
+                this.$watch('durationsLoading', (loading) => {
+                    if (! loading) {
+                        this.$nextTick(() => {
+                            this.refreshDurationScrollState();
+                            this.scrollDurationToSelected();
+                        });
+                    }
+                });
+                if (typeof window !== 'undefined') {
+                    this._durationResizeHandler = () => this.refreshDurationScrollState();
+                    window.addEventListener('resize', this._durationResizeHandler, { passive: true });
+                }
                 this.$watch('selectedPlanDurationId', (id) => {
                     if (! this.isPlanCheckout || id === undefined || id === null) {
                         return;
                     }
+                    this.scrollDurationToSelected();
                     const p = this.planDurationPrices[String(id)];
                     if (p != null) {
                         this.baseSubtotal = Math.round(p * 100) / 100;

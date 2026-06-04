@@ -1,5 +1,5 @@
 /* Chip UI for plan duration (loaded after main.css; keeps working if main.css is stale) */
-.duration-pills {
+.duration-pills:not(.duration-pills--carousel) {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
