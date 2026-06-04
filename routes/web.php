@@ -47,7 +47,7 @@ Route::get('/', function () {
     $mealPlanCategories = collect($externalDataService->getCategoriesForDisplay())->take(6);
 
     // Fetch instant order meals — prefer group 29, fallback to catalog
-    $instantMeals = $externalDataService->getInstantMealsForHome(4, 29);
+    $instantMeals = $externalDataService->getInstantMealsForHome(12, 29);
 
     return view('pages.home', compact('latestPosts', 'testimonials', 'howItWorksSteps', 'mealPlanCategories', 'instantMeals'));
 })->name('home');

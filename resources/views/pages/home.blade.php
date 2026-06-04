@@ -301,7 +301,7 @@
     {{-- Instant Orders Section --}}
     <section class="bg-gray-200 py-20">
         <div class="container">
-            <header class="section-header section-header--center">
+            <header class="section-header section-header--center section-header--always-visible">
                 <h4 class="section-header__subtitle">{{ __('Instant Orders') }}</h4>
                 <h2 class="section-header__title">{{ __('Order Individual Meals Anytime') }}</h2>
                 <p class="section-header__desc">
@@ -309,11 +309,23 @@
                 </p>
             </header>
 
-            @if(count($instantMeals) > 0)
-            <div class="products-rail" data-products-rail data-anim="fade-up">
+            @php
+                $homeStoreMeals = count($instantMeals) > 0
+                    ? $instantMeals
+                    : collect(range(1, 4))->map(fn (int $i) => [
+                        'id' => 0,
+                        'name' => __('Meal').' '.$i,
+                        'price' => 0,
+                        'offer_price' => 0,
+                        'tag_name' => '',
+                        'image_url' => '',
+                        '_placeholder' => true,
+                    ])->all();
+            @endphp
+            <div class="products-rail" data-products-rail data-rail-min-width="240">
                 <div class="products-rail__viewport">
                     <div class="products-rail__track" data-products-track>
-                @foreach($instantMeals as $meal)
+                @foreach($homeStoreMeals as $meal)
                     @php
                         $mealImage = $meal['image_url'] ?? '';
                         $mealImageTrim = trim((string) $mealImage);
@@ -329,17 +341,30 @@
                         $mealFallback = asset('assets/images/meal-' . ($loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3) . '.png');
                         $effectivePrice = ($meal['offer_price'] ?? 0) > 0 && ($meal['offer_price'] < $meal['price']) ? $meal['offer_price'] : $meal['price'];
                     @endphp
+                    @php $isPlaceholderMeal = ! empty($meal['_placeholder']); @endphp
                     <article class="meal-card products-rail__card" data-rail-item>
                         <div class="meal-card__thumbnail">
-                            <a href="{{ route('store.show', $meal['id']) }}">
-                                <img src="{{ $mealImageUrl }}" alt="{{ $meal['name'] }}" onerror="this.src='{{ $mealFallback }}'" />
-                            </a>
+                            @if($isPlaceholderMeal)
+                                <a href="{{ route('meals.index') }}">
+                                    <img src="{{ $mealImageUrl }}" alt="{{ $meal['name'] }}" loading="eager" decoding="async" />
+                                </a>
+                            @else
+                                <a href="{{ route('store.show', $meal['id']) }}">
+                                    <img src="{{ $mealImageUrl }}" alt="{{ $meal['name'] }}" loading="eager" decoding="async" onerror="this.src='{{ $mealFallback }}'" />
+                                </a>
+                            @endif
                         </div>
 
                         <div class="meal-card__body">
-                            <a href="{{ route('store.show', $meal['id']) }}" class="meal-card__title-link">
-                                <h3 class="meal-card__title">{{ $meal['name'] }}</h3>
-                            </a>
+                            @if($isPlaceholderMeal)
+                                <a href="{{ route('meals.index') }}" class="meal-card__title-link">
+                                    <h3 class="meal-card__title">{{ $meal['name'] }}</h3>
+                                </a>
+                            @else
+                                <a href="{{ route('store.show', $meal['id']) }}" class="meal-card__title-link">
+                                    <h3 class="meal-card__title">{{ $meal['name'] }}</h3>
+                                </a>
+                            @endif
 
                             <div class="meal-card__lower">
                                 <div class="meal-card__footer">
@@ -358,14 +383,20 @@
                                     </div>
                                 </div>
 
-                                <button type="button"
-                                        class="meal-card__btn products-rail__btn hero-magnetic"
-                                        data-add-to-cart-btn
-                                        data-default-label="{{ __('Add to Cart') }}"
-                                        data-success-label="{{ __('Added') }}"
-                                        onclick="Livewire.dispatch('add-to-cart', { mealId: {{ $meal['id'] }}, name: '{{ addslashes($meal['name']) }}', price: {{ $effectivePrice }}, image: '{{ addslashes($mealImageUrl) }}' })">
-                                    {{ __('Add to Cart') }}
-                                </button>
+                                @if($isPlaceholderMeal)
+                                    <a href="{{ route('meals.index') }}" class="meal-card__btn products-rail__btn btn btn--primary btn--sm">
+                                        {{ __('Choose from Market') }}
+                                    </a>
+                                @else
+                                    <button type="button"
+                                            class="meal-card__btn products-rail__btn hero-magnetic"
+                                            data-add-to-cart-btn
+                                            data-default-label="{{ __('Add to Cart') }}"
+                                            data-success-label="{{ __('Added') }}"
+                                            onclick="Livewire.dispatch('add-to-cart', { mealId: {{ $meal['id'] }}, name: '{{ addslashes($meal['name']) }}', price: {{ $effectivePrice }}, image: '{{ addslashes($mealImageUrl) }}' })">
+                                        {{ __('Add to Cart') }}
+                                    </button>
+                                @endif
                             </div>
                         </div>
                     </article>
@@ -376,18 +407,8 @@
                 <div class="products-rail__cursor products-rail__cursor--ring" aria-hidden="true">
                     <span>{{ __('Drag') }}</span>
                 </div>
+                <p class="products-rail__hint" aria-hidden="true">{{ __('checkout.duration_swipe_hint') }}</p>
             </div>
-            @else
-            <div class="products-empty-state" data-anim="fade-up">
-                <div class="products-empty-state__icon" aria-hidden="true">
-                    <svg class="h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-                    </svg>
-                </div>
-                <h3 class="products-empty-state__title">{{ __('No meals available') }}</h3>
-                <p class="products-empty-state__desc">{{ __('Check back soon for new meals.') }}</p>
-            </div>
-            @endif
 
             <div class="mt-10 flex items-center justify-center md:mt-20">
                 <a href="{{ route('meals.index') }}" class="btn btn--primary btn--md">{{ __('Choose from Market') }}</a>
@@ -458,7 +479,7 @@
             @php
                 $testimonialHeader = \App\Models\TestimonialSectionHeader::where('is_active', true)->first();
             @endphp
-            <header class="section-header section-header--center testimonials-header" data-anim="fade-up">
+            <header class="section-header section-header--center testimonials-header section-header--always-visible">
                 <h4 class="section-header__subtitle">{{ $testimonialHeader?->badge_title() ?? __('Feedback') }}</h4>
                 <h2 class="section-header__title">{{ $testimonialHeader?->title() ?? __('What our customer say') }}</h2>
                 <p class="section-header__desc">
@@ -466,10 +487,19 @@
                 </p>
             </header>
 
-            <div class="testimonials-rail" data-testimonials-rail>
+            @php
+                $homeTestimonials = $testimonials->isNotEmpty()
+                    ? $testimonials
+                    : collect([
+                        ['content' => __('Real experiences from customers who have made healthy eating part of their everyday lives with Diet Watchers.'), 'rating' => 5, 'author_name' => __('Diet Watchers Customer'), 'author_title' => '', 'author_image_url' => asset('assets/images/Profile.png')],
+                        ['content' => __('The meals are fresh, portions are perfect, and delivery is always on time.'), 'rating' => 5, 'author_name' => __('Diet Watchers Customer'), 'author_title' => '', 'author_image_url' => asset('assets/images/Profile.png')],
+                        ['content' => __('I finally found a plan that fits my lifestyle without sacrificing taste.'), 'rating' => 5, 'author_name' => __('Diet Watchers Customer'), 'author_title' => '', 'author_image_url' => asset('assets/images/Profile.png')],
+                    ]);
+            @endphp
+            <div class="testimonials-rail" data-testimonials-rail data-rail-min-width="280">
                 <div class="testimonials-rail__viewport" data-testimonials-viewport>
                     <div class="testimonials-rail__track" data-testimonials-track>
-                @forelse ($testimonials as $testimonial)
+                @foreach ($homeTestimonials as $testimonial)
                     <article class="hs-carousel-slide testimonials-card-wrap testimonials-rail__item" data-testimonial-item>
                         <div class="review-card testimonials-card">
                             <svg class="review-card__quote">
@@ -477,35 +507,34 @@
                             </svg>
 
                             <p class="review-card__content">
-                                {{ $testimonial->content }}
+                                {{ is_object($testimonial) ? $testimonial->content : ($testimonial['content'] ?? '') }}
                             </p>
 
                             <div class="review-card__rating">
+                                @php $rating = (int) (is_object($testimonial) ? $testimonial->rating : ($testimonial['rating'] ?? 5)); @endphp
                                 @for ($j = 0; $j < 5; $j++)
-                                    <svg class="{{ $j < $testimonial->rating ? '' : 'text-gray-300' }}">
+                                    <svg class="{{ $j < $rating ? '' : 'text-gray-300' }}">
                                         <use href="{{ asset('assets/images/icons/sprite.svg#star') }}"></use>
                                     </svg>
                                 @endfor
                             </div>
 
                             <div class="review-card__author">
-                                <img class="review-card__author-img" src="{{ $testimonial->author_image_url ?? asset('assets/images/Profile.png') }}" alt="{{ $testimonial->author_name }}" />
+                                <img class="review-card__author-img" src="{{ is_object($testimonial) ? ($testimonial->author_image_url ?? asset('assets/images/Profile.png')) : ($testimonial['author_image_url'] ?? asset('assets/images/Profile.png')) }}" alt="{{ is_object($testimonial) ? $testimonial->author_name : ($testimonial['author_name'] ?? '') }}" loading="eager" decoding="async" />
                                 <div>
-                                    <h3 class="review-card__author-name">{{ $testimonial->author_name }}</h3>
-                                    @if($testimonial->author_title)
-                                        <p class="text-sm text-gray-500">{{ $testimonial->author_title }}</p>
+                                    <h3 class="review-card__author-name">{{ is_object($testimonial) ? $testimonial->author_name : ($testimonial['author_name'] ?? '') }}</h3>
+                                    @php $authorTitle = is_object($testimonial) ? $testimonial->author_title : ($testimonial['author_title'] ?? ''); @endphp
+                                    @if($authorTitle)
+                                        <p class="text-sm text-gray-500">{{ $authorTitle }}</p>
                                     @endif
                                 </div>
                             </div>
                         </div>
                     </article>
-                @empty
-                    <div class="text-center text-gray-500">
-                        {{ __('No testimonials available yet.') }}
-                    </div>
-                @endforelse
+                @endforeach
                     </div>
                 </div>
+                <p class="testimonials-rail__hint" aria-hidden="true">{{ __('checkout.duration_swipe_hint') }}</p>
             </div>
         </div>
     </section>
@@ -1076,23 +1105,60 @@
 .products-empty-state__desc {
     color: rgba(15, 23, 42, 0.62);
 }
-.products-rail__viewport {
-    overflow: hidden;
+.products-rail__viewport,
+.testimonials-rail__viewport {
+    overflow-x: auto;
+    overflow-y: hidden;
     border-radius: 16px;
-    mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+    min-height: 300px;
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+}
+.products-rail__viewport::-webkit-scrollbar,
+.testimonials-rail__viewport::-webkit-scrollbar {
+    display: none;
+}
+.products-rail.is-initialized .products-rail__viewport,
+.testimonials-rail.is-initialized .testimonials-rail__viewport {
+    overflow: hidden;
+    cursor: grab;
+    user-select: none;
+    scroll-snap-type: none;
+    mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent);
+}
+.products-rail__viewport {
+    min-height: 300px;
+}
+.products-rail__viewport.is-dragging {
+    cursor: grabbing;
 }
 .products-rail__track {
     display: flex;
+    flex-wrap: nowrap;
     align-items: stretch;
     gap: var(--rail-gap);
     width: max-content;
     padding: .4rem;
-    animation: productsRailScroll var(--rail-duration, 34s) linear infinite;
     will-change: transform;
+    transform: translate3d(0, 0, 0);
 }
-.products-rail.is-paused .products-rail__track {
-    animation-play-state: paused;
+.products-rail__hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    margin: 0.5rem 0 0;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: #9ca3af;
+}
+@media (min-width: 768px) {
+    .products-rail__hint {
+        display: none;
+    }
 }
 .products-rail__card {
     width: var(--card-width);
@@ -1188,10 +1254,6 @@
 .cart-badge-bounce {
     animation: cartBadgeBounce .55s cubic-bezier(.2,1.2,.25,1);
 }
-@keyframes productsRailScroll {
-    from { transform: translate3d(0, 0, 0); }
-    to   { transform: translate3d(calc(-1 * var(--loop-distance, 50%)), 0, 0); }
-}
 @keyframes railBtnSheen {
     from { transform: translateX(-120%); }
     to   { transform: translateX(120%); }
@@ -1257,13 +1319,22 @@
     position: relative;
 }
 .testimonials-rail__viewport {
-    overflow: hidden;
-    border-radius: 16px;
-    touch-action: pan-y;
-    cursor: grab;
-    user-select: none;
-    mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+    min-height: 280px;
+}
+.testimonials-rail__hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    margin: 0.65rem 0 0;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: #9ca3af;
+}
+@media (min-width: 768px) {
+    .testimonials-rail__hint {
+        display: none;
+    }
 }
 .testimonials-rail__viewport.is-dragging {
     cursor: grabbing;
@@ -1286,17 +1357,21 @@
     opacity: 1;
     transform: translateY(0) scale(1);
 }
-.testimonials-rail.is-preparing .testimonials-rail__item:not([data-testimonial-clone="1"]) {
-    opacity: 1;
-    transform: none;
+.testimonials-rail__item,
+.products-rail__card {
+    opacity: 1 !important;
+    visibility: visible !important;
 }
-.testimonials-rail.is-preparing [data-testimonial-clone="1"] {
-    opacity: 0;
+.testimonials-rail [data-rail-clone="1"],
+.products-rail [data-rail-clone="1"] {
     pointer-events: none;
 }
-.testimonials-rail.is-ready .testimonials-rail__item {
-    animation: testimonialCardIn .55s cubic-bezier(.16,1,.3,1) forwards;
-    animation-delay: calc(var(--t-i, 0) * 80ms);
+.section-header--always-visible .section-header__subtitle,
+.section-header--always-visible .section-header__title,
+.section-header--always-visible .section-header__desc {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
 }
 .testimonials-card {
     height: 100%;
@@ -1434,21 +1509,28 @@
     .products-rail {
         --card-width: min(78vw, 280px);
     }
-    .products-rail__viewport {
-        mask-image: none;
-        -webkit-mask-image: none;
-    }
     .testimonials-rail {
         --t-card-w: min(84vw, 340px);
     }
-    .testimonials-rail__viewport {
+    .products-rail.is-initialized .products-rail__viewport,
+    .testimonials-rail.is-initialized .testimonials-rail__viewport {
         mask-image: none;
         -webkit-mask-image: none;
     }
 }
 @media (prefers-reduced-motion: reduce) {
-    .products-rail__track {
-        animation: none !important;
+    .products-rail__track,
+    .testimonials-rail__track {
+        transform: none !important;
+    }
+    .products-rail__viewport,
+    .testimonials-rail__viewport {
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+    }
+    .products-rail__card,
+    .testimonials-rail__item {
+        scroll-snap-align: center;
     }
     .hero-desc-anim,
     .hero-btn-anim,
@@ -1593,7 +1675,6 @@
             var els = document.querySelectorAll('[data-anim]');
             if (!els.length) return;
 
-            // Auto-assign stagger index to children
             document.querySelectorAll('[data-anim-stagger]').forEach(function(parent) {
                 var children = parent.querySelectorAll('[data-anim]');
                 children.forEach(function(child, i) {
@@ -1601,26 +1682,61 @@
                 });
             });
 
+            function revealAnimEl(el) {
+                if (el.classList.contains('is-visible')) {
+                    return;
+                }
+                var delay = parseInt(el.getAttribute('data-anim-delay') || '0', 10);
+                if (delay > 0) {
+                    setTimeout(function() {
+                        el.classList.add('is-visible');
+                    }, delay);
+                } else {
+                    el.classList.add('is-visible');
+                }
+            }
+
+            function isInViewport(el) {
+                var rect = el.getBoundingClientRect();
+                var vh = window.innerHeight || document.documentElement.clientHeight;
+
+                return rect.top < vh * 0.92 && rect.bottom > vh * 0.08;
+            }
+
             var observer = new IntersectionObserver(function(entries) {
                 entries.forEach(function(entry) {
                     if (entry.isIntersecting) {
-                        var delay = parseInt(entry.target.getAttribute('data-anim-delay') || '0', 10);
-                        if (delay > 0) {
-                            setTimeout(function() {
-                                entry.target.classList.add('is-visible');
-                            }, delay);
-                        } else {
-                            entry.target.classList.add('is-visible');
-                        }
+                        revealAnimEl(entry.target);
                         observer.unobserve(entry.target);
                     }
                 });
             }, {
-                rootMargin: '0px 0px -60px 0px',
-                threshold: 0.1
+                rootMargin: '0px 0px -5% 0px',
+                threshold: 0.05
             });
 
-            els.forEach(function(el) { observer.observe(el); });
+            els.forEach(function(el) {
+                if (isInViewport(el)) {
+                    revealAnimEl(el);
+                }
+                observer.observe(el);
+            });
+
+            window.addEventListener('load', function() {
+                els.forEach(function(el) {
+                    if (! el.classList.contains('is-visible') && isInViewport(el)) {
+                        revealAnimEl(el);
+                    }
+                });
+            }, { once: true });
+
+            setTimeout(function() {
+                els.forEach(function(el) {
+                    if (! el.classList.contains('is-visible')) {
+                        revealAnimEl(el);
+                    }
+                });
+            }, 2200);
         })();
 
         /* ─── Hero CTA: lock visible state after entrance animation ─── */
@@ -1650,30 +1766,63 @@
             }
         })();
 
-        /* ─── Premium products rail: infinite scroll + interactions ─── */
-        (function() {
-            var section = document.querySelector('[data-products-rail]');
-            if (!section) return;
+        /* ─── Shared infinite rail (store + testimonials): never empty, seamless loop ─── */
+        function initInfiniteRail(cfg) {
+            var section = cfg.section;
+            var viewport = cfg.viewport;
+            var track = cfg.track;
+            var itemSelector = cfg.itemSelector;
+            if (!section || !viewport || !track) return null;
 
             var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            var viewport = section.querySelector('.products-rail__viewport');
-            var track = section.querySelector('[data-products-track]');
-            if (!viewport || !track) return;
+            var canHoverPause = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+            var minItemWidth = parseInt(section.getAttribute('data-rail-min-width') || '240', 10);
+            var baseItems = Array.from(track.querySelectorAll(itemSelector));
+            if (!baseItems.length) return null;
 
-            var baseItems = Array.from(track.querySelectorAll('[data-rail-item]'));
-            if (!baseItems.length) return;
+            var state = {
+                x: 0,
+                loopWidth: 0,
+                speed: cfg.speed || 0.065,
+                isPaused: false,
+                isDragging: false,
+                dragStartX: 0,
+                dragStartOffset: 0,
+                pointerId: null,
+                resumeTimer: null,
+                forceResumeTimer: null,
+                rafId: null,
+                lastTs: 0,
+                leftView: false,
+            };
 
-            function setupLoop() {
+            function measureWidth() {
+                var gap = parseFloat(getComputedStyle(track).columnGap || getComputedStyle(track).gap || '0') || 0;
+                var total = 0;
+                baseItems.forEach(function(item, idx) {
+                    var w = Math.max(item.offsetWidth, item.getBoundingClientRect().width, minItemWidth);
+                    total += w;
+                    if (idx < baseItems.length - 1) total += gap;
+                });
+
+                return Math.max(total, minItemWidth);
+            }
+
+            function normalizeX() {
+                if (state.loopWidth <= 0) return;
+                while (state.x <= -state.loopWidth) state.x += state.loopWidth;
+                while (state.x > 0) state.x -= state.loopWidth;
+            }
+
+            function render() {
+                track.style.transform = 'translate3d(' + state.x + 'px,0,0)';
+            }
+
+            function appendCloneSets() {
                 Array.from(track.querySelectorAll('[data-rail-clone="1"]')).forEach(function(node) {
                     node.remove();
                 });
-
-                var needsClone = track.scrollWidth <= viewport.clientWidth * 1.65;
-                if (!needsClone) {
-                    needsClone = true;
-                }
-
-                if (needsClone) {
+                for (var pass = 0; pass < 2; pass++) {
                     baseItems.forEach(function(item) {
                         var clone = item.cloneNode(true);
                         clone.setAttribute('data-rail-clone', '1');
@@ -1684,46 +1833,150 @@
                         track.appendChild(clone);
                     });
                 }
-
-                var originalWidth = baseItems.reduce(function(sum, item) {
-                    return sum + item.getBoundingClientRect().width;
-                }, 0);
-                var computedStyle = getComputedStyle(track);
-                var gap = parseFloat(computedStyle.columnGap || computedStyle.gap || '0') || 0;
-                var distance = originalWidth + (Math.max(baseItems.length - 1, 0) * gap);
-                track.style.setProperty('--loop-distance', distance + 'px');
-
-                var speedPxPerSecond = 110;
-                var durationSeconds = Math.max(18, Math.round(distance / speedPxPerSecond));
-                track.style.setProperty('--rail-duration', durationSeconds + 's');
             }
 
-            setupLoop();
+            function buildRail(restartFromStart) {
+                var keep = restartFromStart ? 0 : state.x;
+                appendCloneSets();
+                state.loopWidth = measureWidth();
+                state.x = restartFromStart ? 0 : keep;
+                normalizeX();
+                render();
+            }
+
+            function tick(ts) {
+                if (!state.lastTs) state.lastTs = ts;
+                var dt = Math.min(ts - state.lastTs, 50);
+                state.lastTs = ts;
+                if (!prefersReduced && !state.isPaused && !state.isDragging && state.loopWidth > 0) {
+                    state.x -= state.speed * dt;
+                    normalizeX();
+                    render();
+                }
+                state.rafId = requestAnimationFrame(tick);
+            }
+
+            function pauseRail(forceResumeMs) {
+                state.isPaused = true;
+                clearTimeout(state.resumeTimer);
+                clearTimeout(state.forceResumeTimer);
+                state.forceResumeTimer = setTimeout(function() {
+                    state.isPaused = false;
+                }, forceResumeMs || 3500);
+            }
+
+            function resumeRail(delay) {
+                clearTimeout(state.resumeTimer);
+                clearTimeout(state.forceResumeTimer);
+                state.resumeTimer = setTimeout(function() {
+                    state.isPaused = false;
+                }, delay || 0);
+            }
+
+            function pointerDown(e) {
+                if (prefersReduced) return;
+                if (cfg.ignoreDragSelector && e.target.closest(cfg.ignoreDragSelector)) return;
+                state.isDragging = true;
+                state.pointerId = e.pointerId;
+                state.dragStartX = e.clientX;
+                state.dragStartOffset = state.x;
+                pauseRail(6000);
+                viewport.classList.add('is-dragging');
+                viewport.setPointerCapture(e.pointerId);
+            }
+
+            function pointerMove(e) {
+                if (!state.isDragging || e.pointerId !== state.pointerId) return;
+                state.x = state.dragStartOffset + (e.clientX - state.dragStartX);
+                normalizeX();
+                render();
+            }
+
+            function pointerUp(e) {
+                if (!state.isDragging || e.pointerId !== state.pointerId) return;
+                state.isDragging = false;
+                viewport.classList.remove('is-dragging');
+                try { viewport.releasePointerCapture(e.pointerId); } catch (err) {}
+                resumeRail(400);
+            }
+
+            buildRail(true);
+            section.classList.add('is-initialized');
+
+            track.querySelectorAll('img').forEach(function(img) {
+                if (!img.complete) {
+                    img.addEventListener('load', function() { buildRail(false); }, { once: true });
+                    img.addEventListener('error', function() { buildRail(false); }, { once: true });
+                }
+            });
+
+            window.addEventListener('load', function() {
+                setTimeout(function() { buildRail(false); }, 80);
+            }, { once: true });
 
             var resizeTimer = null;
             window.addEventListener('resize', function() {
                 clearTimeout(resizeTimer);
-                resizeTimer = setTimeout(setupLoop, 200);
+                resizeTimer = setTimeout(function() { buildRail(false); }, 180);
             }, { passive: true });
 
-            if (!prefersReduced) {
-                section.addEventListener('mouseenter', function() {
-                    section.classList.add('is-paused');
-                });
-                section.addEventListener('mouseleave', function() {
-                    section.classList.remove('is-paused');
-                });
-                section.addEventListener('focusin', function() {
-                    section.classList.add('is-paused');
-                });
-                section.addEventListener('focusout', function(e) {
-                    if (!section.contains(e.relatedTarget)) {
-                        section.classList.remove('is-paused');
-                    }
-                });
-            } else {
-                section.classList.add('is-paused');
+            if ('IntersectionObserver' in window) {
+                var visObs = new IntersectionObserver(function(entries) {
+                    entries.forEach(function(entry) {
+                        if (entry.isIntersecting) {
+                            if (state.leftView) {
+                                buildRail(true);
+                            }
+                            state.leftView = false;
+                            state.isPaused = false;
+                        } else {
+                            state.leftView = true;
+                            state.isPaused = true;
+                        }
+                    });
+                }, { threshold: 0.06, rootMargin: '48px 0px' });
+                visObs.observe(section);
             }
+
+            if (!prefersReduced) {
+                if (canHoverPause) {
+                    section.addEventListener('mouseenter', function() { pauseRail(8000); });
+                    section.addEventListener('mouseleave', function() { resumeRail(120); });
+                }
+
+                viewport.addEventListener('pointerdown', pointerDown);
+                viewport.addEventListener('pointermove', pointerMove, { passive: true });
+                viewport.addEventListener('pointerup', pointerUp);
+                viewport.addEventListener('pointercancel', pointerUp);
+                viewport.addEventListener('lostpointercapture', function() {
+                    state.isDragging = false;
+                    viewport.classList.remove('is-dragging');
+                    resumeRail(400);
+                });
+
+                state.rafId = requestAnimationFrame(tick);
+            } else {
+                viewport.style.overflowX = 'auto';
+                track.style.transform = 'none';
+            }
+
+            return { rebuild: function(restart) { buildRail(!!restart); } };
+        }
+
+        (function() {
+            var section = document.querySelector('[data-products-rail]');
+            if (!section) return;
+
+            var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            initInfiniteRail({
+                section: section,
+                viewport: section.querySelector('.products-rail__viewport'),
+                track: section.querySelector('[data-products-track]'),
+                itemSelector: '[data-rail-item]',
+                speed: 0.07,
+                ignoreDragSelector: '[data-add-to-cart-btn]',
+            });
 
             var dot = section.querySelector('.products-rail__cursor--dot');
             var ring = section.querySelector('.products-rail__cursor--ring');
@@ -1853,177 +2106,18 @@
             }
         })();
 
-        /* ─── Testimonials single-row infinite rail (rAF + drag) ─── */
+        /* ─── Testimonials infinite rail ─── */
         (function() {
             var section = document.querySelector('[data-testimonials-rail]');
             if (!section) return;
 
-            var viewport = section.querySelector('[data-testimonials-viewport]');
-            var track = section.querySelector('[data-testimonials-track]');
-            if (!viewport || !track) return;
-
-            var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            var baseItems = Array.from(track.querySelectorAll('[data-testimonial-item]'));
-            if (!baseItems.length) return;
-
-            section.classList.add('is-ready');
-
-            var state = {
-                x: 0,
-                loopWidth: 0,
-                speed: 0.05,
-                isPaused: false,
-                isDragging: false,
-                dragStartX: 0,
-                dragStartOffset: 0,
-                pointerId: null,
-                resumeTimer: null,
-                rafId: null,
-                lastTs: 0,
-                hasEntered: false,
-            };
-
-            function normalizeX() {
-                if (!state.loopWidth) return;
-                while (state.x <= -state.loopWidth) state.x += state.loopWidth;
-                while (state.x > 0) state.x -= state.loopWidth;
-            }
-
-            function render() {
-                track.style.transform = 'translate3d(' + state.x + 'px,0,0)';
-            }
-
-            function buildRail(skipEntrance) {
-                var previousX = state.x;
-                if (! skipEntrance) {
-                    section.classList.add('is-preparing');
-                }
-                Array.from(track.querySelectorAll('[data-testimonial-clone="1"]')).forEach(function(node) {
-                    node.remove();
-                });
-
-                baseItems.forEach(function(item) {
-                    var clone = item.cloneNode(true);
-                    clone.setAttribute('data-testimonial-clone', '1');
-                    clone.setAttribute('aria-hidden', 'true');
-                    clone.querySelectorAll('a, button, input, select, textarea').forEach(function(el) {
-                        el.setAttribute('tabindex', '-1');
-                    });
-                    track.appendChild(clone);
-                });
-
-                var gap = parseFloat(getComputedStyle(track).columnGap || getComputedStyle(track).gap || '0') || 0;
-                var total = 0;
-                baseItems.forEach(function(item, idx) {
-                    total += item.getBoundingClientRect().width;
-                    if (idx < baseItems.length - 1) total += gap;
-                });
-                state.loopWidth = Math.max(1, total);
-                state.x = skipEntrance ? previousX : 0;
-                normalizeX();
-                render();
-
-                if (! skipEntrance) {
-                    section.classList.remove('is-ready');
-                    baseItems.forEach(function(item, idx) {
-                        item.style.setProperty('--t-i', String(idx));
-                    });
-                    requestAnimationFrame(function() {
-                        section.classList.remove('is-preparing');
-                        section.classList.add('is-ready');
-                        state.hasEntered = true;
-                    });
-                }
-            }
-
-            function tick(ts) {
-                if (!state.lastTs) state.lastTs = ts;
-                var dt = ts - state.lastTs;
-                state.lastTs = ts;
-
-                if (!prefersReduced && !state.isPaused && !state.isDragging) {
-                    state.x -= state.speed * dt;
-                    normalizeX();
-                    render();
-                }
-                state.rafId = requestAnimationFrame(tick);
-            }
-
-            function pauseRail() {
-                state.isPaused = true;
-                clearTimeout(state.resumeTimer);
-            }
-
-            function resumeRail(delay) {
-                clearTimeout(state.resumeTimer);
-                state.resumeTimer = setTimeout(function() {
-                    state.isPaused = false;
-                }, delay || 0);
-            }
-
-            function pointerDown(e) {
-                if (prefersReduced) return;
-                state.isDragging = true;
-                state.pointerId = e.pointerId;
-                state.dragStartX = e.clientX;
-                state.dragStartOffset = state.x;
-                pauseRail();
-                viewport.classList.add('is-dragging');
-                viewport.setPointerCapture(e.pointerId);
-            }
-
-            function pointerMove(e) {
-                if (!state.isDragging || e.pointerId !== state.pointerId) return;
-                state.x = state.dragStartOffset + (e.clientX - state.dragStartX);
-                normalizeX();
-                render();
-            }
-
-            function pointerUp(e) {
-                if (!state.isDragging || e.pointerId !== state.pointerId) return;
-                state.isDragging = false;
-                viewport.classList.remove('is-dragging');
-                viewport.classList.add('is-settling');
-                setTimeout(function() { viewport.classList.remove('is-settling'); }, 560);
-                try { viewport.releasePointerCapture(e.pointerId); } catch (err) {}
-                resumeRail(700);
-            }
-
-            buildRail();
-
-            if (!prefersReduced) {
-                section.addEventListener('mouseenter', pauseRail);
-                section.addEventListener('mouseleave', function() { resumeRail(260); });
-                section.addEventListener('focusin', pauseRail);
-                section.addEventListener('focusout', function(e) {
-                    if (!section.contains(e.relatedTarget)) resumeRail(240);
-                });
-
-                viewport.addEventListener('pointerdown', pointerDown);
-                viewport.addEventListener('pointermove', pointerMove, { passive: true });
-                viewport.addEventListener('pointerup', pointerUp);
-                viewport.addEventListener('pointercancel', pointerUp);
-                viewport.addEventListener('lostpointercapture', function() {
-                    state.isDragging = false;
-                    viewport.classList.remove('is-dragging');
-                    viewport.classList.add('is-settling');
-                    setTimeout(function() { viewport.classList.remove('is-settling'); }, 560);
-                    resumeRail(500);
-                });
-            } else {
-                viewport.style.overflowX = 'auto';
-                track.style.transform = 'none';
-            }
-
-            var resizeTimer = null;
-            window.addEventListener('resize', function() {
-                clearTimeout(resizeTimer);
-                resizeTimer = setTimeout(function() {
-                    buildRail(state.hasEntered);
-                }, 200);
-            }, { passive: true });
-
-            state.rafId = requestAnimationFrame(tick);
+            initInfiniteRail({
+                section: section,
+                viewport: section.querySelector('[data-testimonials-viewport]'),
+                track: section.querySelector('[data-testimonials-track]'),
+                itemSelector: '[data-testimonial-item]',
+                speed: 0.06,
+            });
         })();
 
         /* ─── Blog premium interactions: parallax + press feedback ─── */
