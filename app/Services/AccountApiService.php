@@ -202,13 +202,21 @@ class AccountApiService
         }
     }
 
-    public function updateSubscriptionStatus(string $status, ?string $pausedDate = null, ?string $reactivateDate = null): array
-    {
+    public function updateSubscriptionStatus(
+        string $status,
+        ?string $pausedDate = null,
+        ?string $reactivateDate = null,
+        ?int $subscriptionId = null,
+    ): array {
+        if (! $this->hasToken()) {
+            return $this->empty(__('account.login_required'));
+        }
         try {
             $payload = array_filter([
                 'status' => $status,
                 'paused_date' => $pausedDate,
                 'reactivate_date' => $reactivateDate,
+                'subscription_id' => $subscriptionId,
             ], fn ($v) => $v !== null && $v !== '');
 
             return $this->decode(
@@ -221,13 +229,22 @@ class AccountApiService
         }
     }
 
-    public function skipDay(int $dietId, string $dateFrom, string $dateTo): array
+    public function skipDay(int $dietId, string $dateFrom, string $dateTo, ?int $subscriptionId = null): array
     {
+        if (! $this->hasToken()) {
+            return $this->empty(__('account.login_required'));
+        }
         try {
+            $query = http_build_query(array_filter([
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+                'subscription_id' => $subscriptionId,
+            ], fn ($v) => $v !== null && $v !== ''));
+
             return $this->decode(
                 $this->authed()
                     ->asForm()
-                    ->post($this->url('subscriptions/skipDay?date_from='.urlencode($dateFrom).'&date_to='.urlencode($dateTo)), [
+                    ->post($this->url('subscriptions/skipDay?'.$query), [
                         'diet_id' => (string) $dietId,
                     ])
             );
@@ -238,13 +255,21 @@ class AccountApiService
         }
     }
 
-    public function restoreDay(int $dietId, string $date): array
+    public function restoreDay(int $dietId, string $date, ?int $subscriptionId = null): array
     {
+        if (! $this->hasToken()) {
+            return $this->empty(__('account.login_required'));
+        }
         try {
+            $query = http_build_query(array_filter([
+                'date' => $date,
+                'subscription_id' => $subscriptionId,
+            ], fn ($v) => $v !== null && $v !== ''));
+
             return $this->decode(
                 $this->authed()
                     ->asForm()
-                    ->post($this->url('subscriptions/restoreDay?date='.urlencode($date)), [
+                    ->post($this->url('subscriptions/restoreDay?'.$query), [
                         'diet_id' => (string) $dietId,
                     ])
             );
@@ -255,11 +280,17 @@ class AccountApiService
         }
     }
 
-    public function cancelSubscriptionInfo(string $date): array
+    public function cancelSubscriptionInfo(string $date, ?int $subscriptionId = null): array
     {
+        if (! $this->hasToken()) {
+            return $this->empty(__('account.login_required'));
+        }
         try {
             return $this->decode(
-                $this->authed()->get($this->url('subscriptions/cancel'), ['date' => $date])
+                $this->authed()->get($this->url('subscriptions/cancel'), array_filter([
+                    'date' => $date,
+                    'subscription_id' => $subscriptionId,
+                ], fn ($v) => $v !== null && $v !== ''))
             );
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::cancelSubscriptionInfo failed', ['error' => $e->getMessage()]);
@@ -268,14 +299,18 @@ class AccountApiService
         }
     }
 
-    public function cancelSubscription(string $date, string $reason): array
+    public function cancelSubscription(string $date, string $reason, ?int $subscriptionId = null): array
     {
+        if (! $this->hasToken()) {
+            return $this->empty(__('account.login_required'));
+        }
         try {
             return $this->decode(
-                $this->authed()->asForm()->post($this->url('subscriptions/cancel'), [
+                $this->authed()->asForm()->post($this->url('subscriptions/cancel'), array_filter([
                     'date' => $date,
                     'cancel_reason' => $reason,
-                ])
+                    'subscription_id' => $subscriptionId,
+                ], fn ($v) => $v !== null && $v !== ''))
             );
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::cancelSubscription failed', ['error' => $e->getMessage()]);
@@ -297,16 +332,20 @@ class AccountApiService
         }
     }
 
-    public function getReplaceMealOptions(int $planMenuId, string $date, int $dietId, int $mealId): array
+    public function getReplaceMealOptions(int $planMenuId, string $date, int $dietId, int $mealId, ?int $subscriptionId = null): array
     {
+        if (! $this->hasToken()) {
+            return $this->empty(__('account.login_required'));
+        }
         try {
             return $this->decode(
-                $this->authed()->get($this->url('subscriptions/replaceMeal'), [
+                $this->authed()->get($this->url('subscriptions/replaceMeal'), array_filter([
                     'plan_menu_id' => $planMenuId,
                     'date' => $date,
                     'diet_id' => $dietId,
                     'meal_id' => $mealId,
-                ])
+                    'subscription_id' => $subscriptionId,
+                ], fn ($v) => $v !== null && $v !== ''))
             );
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::getReplaceMealOptions failed', ['error' => $e->getMessage()]);
@@ -315,11 +354,19 @@ class AccountApiService
         }
     }
 
-    public function replaceMeal(string $date, int $dietId, int $mealId, int $replacedDietId): array
+    public function replaceMeal(string $date, int $dietId, int $mealId, int $replacedDietId, ?int $subscriptionId = null): array
     {
+        if (! $this->hasToken()) {
+            return $this->empty(__('account.login_required'));
+        }
         try {
+            $query = http_build_query(array_filter([
+                'date' => $date,
+                'subscription_id' => $subscriptionId,
+            ], fn ($v) => $v !== null && $v !== ''));
+
             return $this->decode(
-                $this->authed()->asForm()->post($this->url('subscriptions/replaceMeal?date='.urlencode($date)), [
+                $this->authed()->asForm()->post($this->url('subscriptions/replaceMeal?'.$query), [
                     'diet_id' => (string) $dietId,
                     'meal_id' => (string) $mealId,
                     'replaced_diet_id' => (string) $replacedDietId,

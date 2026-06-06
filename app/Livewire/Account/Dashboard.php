@@ -44,7 +44,11 @@ class Dashboard extends Component
         $active = collect($subscriptions)->first(function (array $s): bool {
             $status = strtolower((string) ($s['status'] ?? $s['state'] ?? ''));
 
-            return in_array($status, ['active', 'running', 'started', 'ongoing', 'current', 'نشط', 'فعال'], true);
+            return in_array($status, [
+                'active', 'running', 'started', 'ongoing', 'current',
+                'paused', 'pausing', 'hold', 'on_hold',
+                'نشط', 'فعال', 'paused',
+            ], true);
         }) ?? ($subscriptions[0] ?? []);
         $this->activeSubscription = is_array($active) ? $active : [];
 

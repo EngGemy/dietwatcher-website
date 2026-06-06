@@ -6,6 +6,7 @@ namespace App\Livewire\Account\Subscriptions;
 
 use App\Livewire\Account\Concerns\NormalizesAccountPayload;
 use App\Services\AccountApiService;
+use App\Support\SubscriptionLifecycle;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -30,17 +31,40 @@ class Show extends Component
 
     public string $notice = '';
 
-    // Cancel modal state
+    // Cancel modal
     public bool $showCancel = false;
 
     public string $cancelReason = '';
 
-    // Pause modal state
+    public string $cancelDate = '';
+
+    public array $cancelPreview = [];
+
+    public bool $cancelPreviewLoading = false;
+
+    // Pause modal
     public bool $showPause = false;
 
     public string $pausedDate = '';
 
     public string $reactivateDate = '';
+
+    // Replace meal modal
+    public bool $showReplace = false;
+
+    public bool $replaceLoading = false;
+
+    public array $replaceOptions = [];
+
+    public ?int $replaceDietId = null;
+
+    public ?int $replaceMealId = null;
+
+    public ?int $replacePlanMenuId = null;
+
+    public string $replaceDate = '';
+
+    public ?int $selectedReplaceDietId = null;
 
     public function mount(AccountApiService $api, int $id): void
     {
@@ -48,6 +72,11 @@ class Show extends Component
         if ($this->focusDate === '') {
             $this->focusDate = now()->format('Y-m-d');
         }
+        $this->load($api);
+    }
+
+    public function updatedFocusDate(AccountApiService $api): void
+    {
         $this->load($api);
     }
 
@@ -62,6 +91,7 @@ class Show extends Component
             $this->subscription = [];
             $this->days = [];
             $this->loading = false;
+
             return;
         }
 
@@ -82,11 +112,19 @@ class Show extends Component
         $this->error = $this->notice = '';
         if ($dietId <= 0 || $date === '') {
             $this->error = __('account.invalid_input');
+
             return;
         }
-        $result = $api->skipDay($dietId, $date, $date);
+        $status = (string) ($this->subscription['status'] ?? '');
+        if (! SubscriptionLifecycle::canSkipOrRestoreDay($status)) {
+            $this->error = __('account.action_not_available');
+
+            return;
+        }
+        $result = $api->skipDay($dietId, $date, $date, $this->subscriptionId);
         if (! ($result['ok'] ?? false)) {
             $this->error = $result['message'] ?: __('account.action_failed');
+
             return;
         }
         $this->notice = __('account.day_skipped');
@@ -98,26 +136,53 @@ class Show extends Component
         $this->error = $this->notice = '';
         if ($dietId <= 0 || $date === '') {
             $this->error = __('account.invalid_input');
+
             return;
         }
-        $result = $api->restoreDay($dietId, $date);
+        $result = $api->restoreDay($dietId, $date, $this->subscriptionId);
         if (! ($result['ok'] ?? false)) {
             $this->error = $result['message'] ?: __('account.action_failed');
+
             return;
         }
         $this->notice = __('account.day_restored');
         $this->load($api);
     }
 
-    public function openCancel(): void
+    public function openCancel(AccountApiService $api): void
     {
         $this->showCancel = true;
         $this->cancelReason = '';
+        $this->cancelDate = $this->focusDate ?: now()->format('Y-m-d');
+        $this->cancelPreview = [];
+        $this->loadCancelPreview($api);
+    }
+
+    public function updatedCancelDate(AccountApiService $api): void
+    {
+        if ($this->showCancel) {
+            $this->loadCancelPreview($api);
+        }
+    }
+
+    protected function loadCancelPreview(AccountApiService $api): void
+    {
+        $this->cancelPreviewLoading = true;
+        $result = $api->cancelSubscriptionInfo($this->cancelDate, $this->subscriptionId);
+        $this->cancelPreviewLoading = false;
+
+        if ($result['ok'] ?? false) {
+            $data = $result['data'] ?? [];
+            $this->cancelPreview = is_array($data) ? $data : [];
+        } else {
+            $this->cancelPreview = [];
+        }
     }
 
     public function closeCancel(): void
     {
         $this->showCancel = false;
+        $this->cancelPreview = [];
     }
 
     public function confirmCancel(AccountApiService $api): void
@@ -126,12 +191,14 @@ class Show extends Component
         $reason = trim($this->cancelReason);
         if ($reason === '') {
             $this->error = __('account.cancel_reason_required');
+
             return;
         }
-        $date = $this->focusDate ?: now()->format('Y-m-d');
-        $result = $api->cancelSubscription($date, $reason);
+        $date = $this->cancelDate ?: now()->format('Y-m-d');
+        $result = $api->cancelSubscription($date, $reason, $this->subscriptionId);
         if (! ($result['ok'] ?? false)) {
             $this->error = $result['message'] ?: __('account.action_failed');
+
             return;
         }
         $this->showCancel = false;
@@ -156,11 +223,18 @@ class Show extends Component
         $this->error = $this->notice = '';
         if ($this->pausedDate === '' || $this->reactivateDate === '') {
             $this->error = __('account.invalid_input');
+
             return;
         }
-        $result = $api->updateSubscriptionStatus('paused', $this->pausedDate, $this->reactivateDate);
+        $result = $api->updateSubscriptionStatus(
+            'paused',
+            $this->pausedDate,
+            $this->reactivateDate,
+            $this->subscriptionId,
+        );
         if (! ($result['ok'] ?? false)) {
             $this->error = $result['message'] ?: __('account.action_failed');
+
             return;
         }
         $this->showPause = false;
@@ -171,12 +245,81 @@ class Show extends Component
     public function resume(AccountApiService $api): void
     {
         $this->error = $this->notice = '';
-        $result = $api->updateSubscriptionStatus('active');
+        $result = $api->updateSubscriptionStatus('active', null, null, $this->subscriptionId);
         if (! ($result['ok'] ?? false)) {
             $this->error = $result['message'] ?: __('account.action_failed');
+
             return;
         }
         $this->notice = __('account.subscription_resumed');
+        $this->load($api);
+    }
+
+    public function openReplace(AccountApiService $api, int $planMenuId, int $dietId, int $mealId, string $date): void
+    {
+        $this->error = $this->notice = '';
+        $status = (string) ($this->subscription['status'] ?? '');
+        if (! SubscriptionLifecycle::canReplaceMeal($status)) {
+            $this->error = __('account.action_not_available');
+
+            return;
+        }
+        $this->replacePlanMenuId = $planMenuId;
+        $this->replaceDietId = $dietId;
+        $this->replaceMealId = $mealId;
+        $this->replaceDate = $date;
+        $this->selectedReplaceDietId = null;
+        $this->replaceOptions = [];
+        $this->showReplace = true;
+        $this->replaceLoading = true;
+
+        $result = $api->getReplaceMealOptions($planMenuId, $date, $dietId, $mealId, $this->subscriptionId);
+        $this->replaceLoading = false;
+
+        if (! ($result['ok'] ?? false)) {
+            $this->error = $result['message'] ?: __('account.load_failed');
+            $this->showReplace = false;
+
+            return;
+        }
+
+        $this->replaceOptions = $this->extractRows($result['data'] ?? null, ['meals', 'options', 'alternatives']);
+    }
+
+    public function closeReplace(): void
+    {
+        $this->showReplace = false;
+        $this->replaceOptions = [];
+    }
+
+    public function confirmReplace(AccountApiService $api): void
+    {
+        $this->error = $this->notice = '';
+        if (
+            ! $this->replaceDietId || ! $this->replaceMealId
+            || ! $this->selectedReplaceDietId || $this->replaceDate === ''
+        ) {
+            $this->error = __('account.select_replacement_meal');
+
+            return;
+        }
+
+        $result = $api->replaceMeal(
+            $this->replaceDate,
+            $this->replaceDietId,
+            $this->replaceMealId,
+            $this->selectedReplaceDietId,
+            $this->subscriptionId,
+        );
+
+        if (! ($result['ok'] ?? false)) {
+            $this->error = $result['message'] ?: __('account.action_failed');
+
+            return;
+        }
+
+        $this->showReplace = false;
+        $this->notice = __('account.meal_replaced');
         $this->load($api);
     }
 

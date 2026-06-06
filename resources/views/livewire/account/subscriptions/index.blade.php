@@ -1,3 +1,7 @@
+@php
+    use App\Support\SubscriptionLifecycle;
+@endphp
+
 <div class="space-y-6">
     <div class="flex items-center justify-between gap-3">
         <div>
@@ -35,36 +39,43 @@
                 @foreach($subscriptions as $s)
                     @php
                         $id = $s['id'] ?? null;
-                        $status = strtolower((string) ($s['status'] ?? ''));
+                        $status = (string) ($s['status'] ?? '');
                         $plan = $s['plan']['name'] ?? $s['program']['name'] ?? $s['name'] ?? '';
-                        if (is_array($plan)) $plan = $plan[app()->getLocale()] ?? $plan['en'] ?? '';
+                        if (is_array($plan)) {
+                            $plan = $plan[app()->getLocale()] ?? $plan['en'] ?? '';
+                        }
                         $startAt = $s['start_at'] ?? $s['started_at'] ?? '';
-                        $endAt   = $s['end_at']   ?? $s['ended_at']   ?? '';
-                        $total   = $s['total']    ?? $s['amount']     ?? null;
-                        $remain  = $s['remaining_days'] ?? $s['days_remaining'] ?? null;
-                        $isActive = in_array($status, ['active','running','started'], true);
-                        $statusKey = 'account.status_'.$status;
+                        $endAt = $s['end_at'] ?? $s['ended_at'] ?? '';
+                        $total = $s['total'] ?? $s['amount'] ?? null;
+                        $remain = $s['remaining_days'] ?? $s['days_remaining'] ?? null;
+                        $statusNorm = SubscriptionLifecycle::normalize($status);
+                        $statusKey = 'account.status_'.$statusNorm;
                         $statusLabel = __($statusKey);
-                        if ($statusLabel === $statusKey) $statusLabel = ucfirst($status);
+                        if ($statusLabel === $statusKey) {
+                            $statusLabel = $status !== '' ? ucfirst($status) : '';
+                        }
+                        $chipClass = SubscriptionLifecycle::isActive($status) ? 'acc-chip--success'
+                            : (SubscriptionLifecycle::isPaused($status) ? 'acc-chip--warn'
+                            : (SubscriptionLifecycle::isTerminal($status) ? 'acc-chip--danger' : 'acc-chip--muted'));
                     @endphp
                     <li class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-4 md:p-5 hover:bg-gray-50 transition">
                         <div class="min-w-0">
                             <div class="flex items-center gap-2">
                                 <span class="font-semibold text-gray-900">{{ $plan ?: (__('account.subscription') . ' #' . ($id ?? '—')) }}</span>
                                 @if($status)
-                                    <span class="acc-chip {{ $isActive ? 'acc-chip--success' : 'acc-chip--muted' }}">{{ $statusLabel }}</span>
+                                    <span class="acc-chip {{ $chipClass }}">{{ $statusLabel }}</span>
                                 @endif
                             </div>
                             <div class="text-xs text-gray-500 mt-1 flex items-center gap-3 flex-wrap">
                                 @if($id) <span>#{{ $id }}</span> @endif
                                 @if($startAt) <span>{{ __('account.starts') }}: {{ $startAt }}</span> @endif
-                                @if($endAt)   <span>{{ __('account.ends') }}: {{ $endAt }}</span> @endif
+                                @if($endAt) <span>{{ __('account.ends') }}: {{ $endAt }}</span> @endif
                                 @if($remain !== null) <span>{{ $remain }} {{ __('days') }}</span> @endif
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
                             @if($total !== null)
-                                <span class="font-semibold text-gray-900"><x-sar :amount="(float)$total" /></span>
+                                <span class="font-semibold text-gray-900"><x-sar :amount="(float) $total" /></span>
                             @endif
                             <a href="{{ $id ? route('account.subscriptions.show', ['id' => $id]) : '#' }}"
                                class="acc-btn acc-btn--ghost acc-btn--sm">

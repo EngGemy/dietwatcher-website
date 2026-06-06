@@ -1,11 +1,19 @@
 @php
+    use App\Support\SubscriptionLifecycle;
+
     $profile = (array) session('external_api_profile', []);
     $displayName = trim((string) ($profile['name'] ?? '')) ?: __('account.customer');
     $sub = $activeSubscription ?? [];
-    $subStatus = strtolower((string) ($sub['status'] ?? ''));
-    $subStatusKey = 'account.status_'.$subStatus;
-    $subStatusLabel = __($subStatusKey);
-    if ($subStatusLabel === $subStatusKey) $subStatusLabel = ucfirst($subStatus);
+    $status = (string) ($sub['status'] ?? '');
+    $statusNorm = SubscriptionLifecycle::normalize($status);
+    $statusKey = 'account.status_'.$statusNorm;
+    $subStatusLabel = __($statusKey);
+    if ($subStatusLabel === $statusKey) {
+        $subStatusLabel = $status !== '' ? ucfirst($status) : '—';
+    }
+    $canManage = ! empty($sub) && ! SubscriptionLifecycle::isTerminal($status);
+    $chipClass = SubscriptionLifecycle::isActive($status) ? 'acc-chip--success'
+        : (SubscriptionLifecycle::isPaused($status) ? 'acc-chip--warn' : 'acc-chip--muted');
     $planName = $sub['plan']['name'] ?? $sub['program']['name'] ?? '';
     if (is_array($planName)) {
         $planName = $planName[app()->getLocale()] ?? $planName['en'] ?? '';
@@ -45,8 +53,8 @@
             @if(!empty($sub))
                 <span class="acc-stat__value text-base md:text-lg" style="font-size:1.1rem;">{{ $planName ?: __('account.current_plan') }}</span>
                 <span class="acc-stat__meta">
-                    @if($subStatus)
-                        <span class="acc-chip {{ in_array($subStatus, ['active','running','started'], true) ? 'acc-chip--success' : 'acc-chip--muted' }}">{{ $subStatusLabel }}</span>
+                    @if($status)
+                        <span class="acc-chip {{ $chipClass }}">{{ $subStatusLabel }}</span>
                     @endif
                     @if($startAt) · {{ $startAt }} @if($endAt) → {{ $endAt }} @endif @endif
                 </span>
@@ -109,7 +117,7 @@
                         <div>
                             <dt class="text-gray-500">{{ __('account.status') }}</dt>
                             <dd class="mt-1">
-                                <span class="acc-chip {{ in_array($subStatus, ['active','running','started'], true) ? 'acc-chip--success' : 'acc-chip--muted' }}">{{ $subStatus ? $subStatusLabel : '—' }}</span>
+                                <span class="acc-chip {{ $chipClass }}">{{ $status ? $subStatusLabel : '—' }}</span>
                             </dd>
                         </div>
                         <div>
@@ -121,6 +129,22 @@
                             <dd class="font-semibold mt-1">{{ $endAt ?: '—' }}</dd>
                         </div>
                     </dl>
+                    @if($canManage && ! empty($sub['id']))
+                        <div class="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
+                            <a href="{{ route('account.subscriptions.show', ['id' => $sub['id']]) }}" class="acc-btn acc-btn--primary acc-btn--sm">
+                                {{ __('account.manage') }}
+                            </a>
+                            @if(SubscriptionLifecycle::canPause($status))
+                                <a href="{{ route('account.subscriptions.show', ['id' => $sub['id']]) }}#manage" class="acc-btn acc-btn--muted acc-btn--sm">
+                                    {{ __('account.pause') }}
+                                </a>
+                            @elseif(SubscriptionLifecycle::canResume($status))
+                                <a href="{{ route('account.subscriptions.show', ['id' => $sub['id']]) }}#manage" class="acc-btn acc-btn--primary acc-btn--sm">
+                                    {{ __('account.resume') }}
+                                </a>
+                            @endif
+                        </div>
+                    @endif
                 @endif
             </div>
         </div>
