@@ -12,19 +12,13 @@ class MarketMealController extends Controller
     public function show(int $meal): View
     {
         $service = app(ExternalDataService::class);
-        $mealData = $service->getMeal($meal);
+        $detail = $service->getMealDetail($meal);
 
-        abort_unless($mealData, 404);
-
-        $relatedMeals = $service->getRelatedMeals(
-            (int) $mealData['id'],
-            $mealData['group_id'] ?? null,
-            8
-        );
+        abort_unless($detail, 404);
 
         return view('pages.meal-detail', [
-            'meal' => $mealData,
-            'relatedMeals' => $relatedMeals,
+            'meal' => $detail['meal'],
+            'relatedMeals' => $detail['related'],
         ]);
     }
 }

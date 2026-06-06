@@ -815,29 +815,100 @@ class ExternalDataService
     }
 
     /**
-     * Fetch a single shop meal by ID. Tries GET /meals/{id}, then scans cached /meals list.
+     * Fetch meal detail + related products from GET /meals/{id}.
+     *
+     * @return array{meal: array<string, mixed>, related: array<int, array<string, mixed>>}|null
+     */
+    public function getMealDetail(int $id): ?array
+    {
+        $empty = null;
+
+        return $this->rememberCatalog("meal_detail_{$id}", 300, function () use ($id): ?array {
+            $json = $this->fetchCatalogGet("/meals/{$id}");
+            if ($json === null) {
+                throw new \RuntimeException("GET /meals/{$id} failed");
+            }
+
+            $payload = is_array($json['data'] ?? null) ? $json['data'] : [];
+            $profile = is_array($payload['profile'] ?? null) ? $payload['profile'] : null;
+
+            if ($profile === null && isset($payload['id'])) {
+                $profile = $payload;
+            }
+
+            if ($profile === null) {
+                foreach ($this->getAllMeals(null) as $meal) {
+                    if ((int) ($meal['id'] ?? 0) === $id) {
+                        return [
+                            'meal' => $meal,
+                            'related' => $this->getRelatedMeals($id, $meal['group_id'] ?? null, 8),
+                        ];
+                    }
+                }
+
+                return null;
+            }
+
+            $meal = $this->transformMeal($profile);
+            $seen = [$id => true];
+            $related = [];
+
+            $pushRelated = function (array $row) use (&$related, &$seen, $id): void {
+                $rid = (int) ($row['id'] ?? 0);
+                if ($rid === 0 || $rid === $id || isset($seen[$rid])) {
+                    return;
+                }
+                $seen[$rid] = true;
+                $related[] = $row;
+            };
+
+            $groupId = $meal['group_id'] ?? null;
+            if ($groupId) {
+                foreach ($this->getMealsByGroup((int) $groupId) as $row) {
+                    $pushRelated($row);
+                    if (count($related) >= 8) {
+                        break;
+                    }
+                }
+            }
+
+            if (count($related) < 8) {
+                $relatedRaw = is_array($payload['related_meals'] ?? null) ? $payload['related_meals'] : [];
+                foreach ($relatedRaw as $row) {
+                    if (! is_array($row)) {
+                        continue;
+                    }
+                    $pushRelated($this->transformMeal($row));
+                    if (count($related) >= 8) {
+                        break;
+                    }
+                }
+            }
+
+            if (count($related) < 4) {
+                foreach ($this->getRelatedMeals($id, $groupId, 8) as $extra) {
+                    $pushRelated($extra);
+                    if (count($related) >= 8) {
+                        break;
+                    }
+                }
+            }
+
+            return [
+                'meal' => $meal,
+                'related' => array_slice($related, 0, 8),
+            ];
+        }, $empty);
+    }
+
+    /**
+     * Fetch a single shop meal by ID.
      */
     public function getMeal(int $id): ?array
     {
-        try {
-            $json = $this->fetchCatalogGet("/meals/{$id}");
-            if ($json !== null) {
-                $data = $json['data'] ?? $json;
-                if (is_array($data) && isset($data['id'])) {
-                    return $this->transformMeal($data);
-                }
-            }
-        } catch (\Exception $e) {
-            Log::debug("External API /meals/{$id} failed: ".$e->getMessage());
-        }
+        $detail = $this->getMealDetail($id);
 
-        foreach ($this->getAllMeals(null) as $meal) {
-            if ((int) ($meal['id'] ?? 0) === $id) {
-                return $meal;
-            }
-        }
-
-        return null;
+        return $detail['meal'] ?? null;
     }
 
     /**
@@ -928,55 +999,86 @@ class ExternalDataService
             ?? ''
         );
 
-        $rawCategories = is_array($meal['categories'] ?? null) ? $meal['categories'] : [];
-        $categories = array_values(array_filter(array_map(function ($cat) {
-            if (! is_array($cat)) {
+        $rawHighlights = is_array($meal['categories'] ?? null) ? $meal['categories'] : [];
+        $highlights = array_values(array_filter(array_map(function ($item) {
+            if (! is_array($item)) {
                 return null;
             }
 
-            $name = $cat['name'] ?? '';
-            if (is_array($name)) {
-                $name = $name[app()->getLocale()] ?? $name['en'] ?? reset($name) ?? '';
+            $name = $this->localizedString($item['name'] ?? '');
+
+            return $name === '' ? null : [
+                'name' => $name,
+                'icon' => $this->absoluteMediaUrl((string) ($item['icon'] ?? '')),
+            ];
+        }, $rawHighlights)));
+
+        $groupName = $this->localizedString(
+            $meal['group']['name'] ?? $meal['menu']['name'] ?? $meal['group_name'] ?? $meal['menu_name'] ?? ''
+        );
+
+        $tags = array_values(array_filter(array_map(function ($tag) {
+            if (! is_array($tag)) {
+                return null;
+            }
+            $name = $this->localizedString($tag['name'] ?? '');
+
+            return [
+                'id' => (int) ($tag['id'] ?? $tag['value'] ?? 0),
+                'name' => $name,
+                'display_name' => $this->translateCatalogLabel($name),
+                'icon' => $this->absoluteMediaUrl((string) ($tag['icon'] ?? '')),
+            ];
+        }, is_array($meal['tags'] ?? null) ? $meal['tags'] : [])));
+
+        $resolvedTagName = $this->localizedString($meal['tag_name'] ?? $meal['tag']['name'] ?? ($tags[0]['name'] ?? ''));
+
+        $allergies = array_values(array_filter(array_map(function ($allergy) {
+            if (! is_array($allergy)) {
+                return null;
+            }
+            $name = $this->localizedString($allergy['name'] ?? '');
+
+            return $name === '' ? null : [
+                'id' => (int) ($allergy['id'] ?? 0),
+                'name' => $name,
+                'icon' => $this->absoluteMediaUrl((string) ($allergy['icon'] ?? '')),
+                'has_allergy' => (bool) ($allergy['has_allergy'] ?? false),
+            ];
+        }, is_array($meal['allergies'] ?? null) ? $meal['allergies'] : [])));
+
+        $ingredients = array_values(array_map(function ($ing) {
+            if (! is_array($ing)) {
+                return ['name' => (string) $ing];
             }
 
             return [
-                'id' => (int) ($cat['id'] ?? 0),
-                'name' => (string) $name,
-                'icon' => (string) ($cat['icon'] ?? ''),
+                'id' => (int) ($ing['id'] ?? 0),
+                'name' => $this->localizedString($ing['name'] ?? ''),
+                'icon' => $this->absoluteMediaUrl((string) ($ing['icon'] ?? '')),
+                'is_main_ingredient' => (bool) ($ing['is_main_ingredient'] ?? false),
             ];
-        }, $rawCategories)));
+        }, is_array($meal['ingredients'] ?? null) ? $meal['ingredients'] : []));
 
-        $groupName = $meal['group']['name'] ?? $meal['menu']['name'] ?? $meal['group_name'] ?? $meal['menu_name'] ?? '';
-        if (is_array($groupName)) {
-            $groupName = $groupName[app()->getLocale()] ?? $groupName['en'] ?? reset($groupName) ?? '';
-        }
-
-        $tags = is_array($meal['tags'] ?? null) ? $meal['tags'] : [];
-        $resolvedTagName = $meal['tag_name'] ?? $meal['tag']['name'] ?? ($tags[0]['name'] ?? '');
-        if (is_array($resolvedTagName)) {
-            $resolvedTagName = $resolvedTagName[app()->getLocale()] ?? $resolvedTagName['en'] ?? reset($resolvedTagName) ?? '';
-        }
-
-        $categoryName = $categories[0]['name'] ?? '';
-        if ($categoryName === '') {
-            $categoryName = (string) $groupName;
-        }
+        $categoryName = $groupName;
 
         return [
             'id' => $meal['id'],
-            'code' => $meal['code'] ?? $meal['sku'] ?? $meal['product_code'] ?? $meal['id'],
-            'name' => $meal['name'] ?? '',
-            'description' => $meal['description'] ?? '',
+            'code' => $meal['code'] ?? $meal['sku'] ?? $meal['product_code'] ?? null,
+            'name' => $this->localizedString($meal['name'] ?? ''),
+            'description' => $this->localizedString($meal['description'] ?? ''),
             'image_url' => $this->absoluteMediaUrl($mealImage),
             'price' => (float) $priceAmount,
             'offer_price' => (float) $offerPriceAmount,
-            'rate' => $meal['rate'] ?? 0,
-            'categories' => $categories,
+            'rate' => (float) ($meal['rate'] ?? 0),
+            'highlights' => $highlights,
+            'categories' => $highlights,
             'category_name' => $categoryName,
             'tags' => $tags,
-            'tag_name' => (string) $resolvedTagName,
-            'ingredients' => $meal['ingredients'] ?? [],
-            'benefits' => $meal['benefits'] ?? $meal['health_benefits'] ?? '',
+            'tag_name' => $this->translateCatalogLabel((string) $resolvedTagName),
+            'allergies' => $allergies,
+            'ingredients' => $ingredients,
+            'benefits' => $this->localizedString($meal['benefits'] ?? $meal['health_benefits'] ?? ''),
             'group_id' => $groupId,
             'group_name' => (string) $groupName,
             'calories' => $this->nutritionFloatAliases($meal, ['calories', 'kcal', 'calorie'], $nutrition),
@@ -984,6 +1086,32 @@ class ExternalDataService
             'carbs' => $this->nutritionFloatAliases($meal, ['carbs', 'carb', 'carbohydrates', 'carbohydrate', 'carbs_g'], $nutrition),
             'fat' => $this->nutritionFloatAliases($meal, ['fat', 'fats', 'fat_g', 'fats_g', 'lipids'], $nutrition),
         ];
+    }
+
+    protected function localizedString(mixed $value): string
+    {
+        if (is_array($value)) {
+            $locale = app()->getLocale();
+
+            return (string) ($value[$locale] ?? $value['en'] ?? reset($value) ?? '');
+        }
+
+        return trim((string) ($value ?? ''));
+    }
+
+    /**
+     * Translate known API catalog labels (tags, groups) when a locale string exists.
+     */
+    protected function translateCatalogLabel(string $label): string
+    {
+        $label = trim($label);
+        if ($label === '') {
+            return '';
+        }
+
+        $translated = __($label);
+
+        return $translated !== $label ? $translated : $label;
     }
 
     /**
