@@ -204,8 +204,12 @@ if ($firstCalRange === '' && isset($calorieOptions[0]['range'])) {
 }
 
 // Calculate earliest allowed start date (48 hours from now)
-$startDate = now()->addHours(48)->format('Y-m-d');
-$startDateDisplay = now()->addHours(48)->format('D d M');
+$startAt = now()->addHours(48);
+$startDate = $startAt->format('Y-m-d');
+$startDateDisplay = $startAt->locale($locale)->translatedFormat('l d F');
+
+$planDescPlain = trim(strip_tags($planDesc));
+$planDescExcerpt = $planDescPlain !== '' ? Str::limit($planDescPlain, 180) : '';
 
 // Prices from API are already VAT-inclusive (like mobile app)
 $planPrice = $plan->price ?? 2200;
@@ -222,10 +226,9 @@ $totalPrice = $planPriceInclVat;
 @section('description', Str::limit(strip_tags($planDesc), 160))
 
 @section('content')
-<section class="bg-gray-200 pt-10 pb-28">
-    <div class="container">
-        {{-- Breadcrumb --}}
-        <ol class="breadcrumb">
+<div class="meal-detail plan-detail bg-gray-200 pt-5 pb-28 md:pt-10" x-data="planDetail()" x-init="init()">
+    <section class="container">
+        <ol class="breadcrumb mb-6 md:mb-8">
             <li class="breadcrumb__item">
                 <a class="breadcrumb__link" href="{{ route('home') }}">{{ __('Home') }}</a>
                 <svg class="breadcrumb__separator" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -243,47 +246,36 @@ $totalPrice = $planPriceInclVat;
             </li>
         </ol>
 
-        <div class="mb-10 grid gap-10 md:mb-16 md:grid-cols-2" x-data="planDetail()" x-init="init()">
-            {{-- Image Gallery --}}
-            <div class="w-full min-w-0">
+        <div class="meal-detail__hero mb-10 md:mb-16">
+            {{-- Hero media --}}
+            <div class="meal-detail__media md-reveal md-reveal--image">
                 @if($hasSubscriptionPlans)
-                    <div class="mb-5 w-full overflow-hidden rounded-md md:mb-6">
-                        <img src="{{ $planImageUrl }}"
-                             x-bind:src="heroImage"
-                             class="h-[400px] size-full object-cover md:h-[600px]"
-                             alt="{{ $planName }}"
-                             referrerpolicy="no-referrer"
-                             decoding="async"
-                             x-on:error="onPlanHeroImageError($event)">
-                    </div>
+                    <img src="{{ $planImageUrl }}"
+                         x-bind:src="heroImage"
+                         class="meal-detail__media-img"
+                         alt="{{ $planName }}"
+                         referrerpolicy="no-referrer"
+                         decoding="async"
+                         loading="eager"
+                         x-on:error="onPlanHeroImageError($event)">
                 @else
-                    <div data-hs-carousel='{ "loadingClasses": "opacity-0", "isInfinite": true }' class="relative">
-                        <div class="hs-carousel relative w-full">
-                            <div class="mb-5 w-full overflow-hidden rounded-md md:mb-6">
-                                <div class="hs-carousel-body flex h-[400px] flex-nowrap overflow-hidden opacity-0 transition-transform duration-700 md:h-[600px]">
-                                    @foreach($images as $index => $image)
-                                        <div class="hs-carousel-slide h-full">
-                                            <img src="{{ $image }}"
-                                                 class="size-full object-cover"
-                                                 alt="{{ $planName }} - {{ $index + 1 }}"
-                                                 onerror="this.src='{{ asset('assets/images/meal-' . (($index % 3) + 1) . '.png') }}'">
-                                        </div>
-                                    @endforeach
-                                </div>
-                            </div>
-
-                            @if(count($images) > 1)
-                                <div class="hs-carousel-pagination mt-0! w-full overflow-x-auto">
-                                    <div class="flex flex-row items-center gap-4">
-                                        @foreach($images as $index => $image)
-                                            <div class="hs-carousel-pagination-item hs-carousel-active:border-primary size-20 shrink-0 cursor-pointer overflow-hidden rounded-md border-2 border-transparent md:size-28">
-                                                <img src="{{ $image }}"
-                                                     class="size-full object-contain object-center"
-                                                     alt=""
-                                                     onerror="this.src='{{ asset('assets/images/meal-' . (($index % 3) + 1) . '.png') }}'">
-                                            </div>
-                                        @endforeach
+                    <div data-hs-carousel='{ "loadingClasses": "opacity-0", "isInfinite": true }' class="relative size-full">
+                        <div class="hs-carousel relative size-full">
+                            <div class="hs-carousel-body flex size-full flex-nowrap overflow-hidden opacity-0 transition-transform duration-700">
+                                @foreach($images as $index => $image)
+                                    <div class="hs-carousel-slide h-full min-w-full">
+                                        <img src="{{ $image }}"
+                                             class="size-full object-cover"
+                                             alt="{{ $planName }} - {{ $index + 1 }}"
+                                             onerror="this.src='{{ asset('assets/images/meal-' . (($index % 3) + 1) . '.png') }}'">
                                     </div>
+                                @endforeach
+                            </div>
+                            @if(count($images) > 1)
+                                <div class="hs-carousel-pagination absolute inset-x-0 bottom-3 z-10 flex justify-center gap-2 px-3">
+                                    @foreach($images as $index => $image)
+                                        <div class="hs-carousel-pagination-item size-2 shrink-0 cursor-pointer rounded-full bg-white/50 transition-all hs-carousel-active:w-6 hs-carousel-active:bg-white"></div>
+                                    @endforeach
                                 </div>
                             @endif
                         </div>
@@ -291,22 +283,40 @@ $totalPrice = $planPriceInclVat;
                 @endif
             </div>
 
-            {{-- Plan Details & Options --}}
-            <div class="w-full space-y-5">
-                {{-- Plan Title --}}
-                <div class="rounded-md border border-gray-200 bg-white p-5">
-                    <h2 class="mb-3 text-2xl font-bold md:text-3xl">{{ $planName }}</h2>
-                    <p class="text-lg text-black/70 md:text-xl">
-                        {{ $planDesc ?: __('Nutritionist-designed meal plans for safe, sustainable weight loss.') }}
-                    </p>
+            {{-- Config panel --}}
+            <div class="meal-detail__panel">
+                <h1 class="meal-detail__title md-reveal" style="--md-i:0">{{ $planName }}</h1>
+
+                @if($planDescExcerpt !== '')
+                    <p class="meal-detail__excerpt md-reveal" style="--md-i:1">{{ $planDescExcerpt }}</p>
+                    <a href="#plan-description" class="plan-detail__read-more md-reveal md:hidden" style="--md-i:1">{{ __('Read More') }}</a>
+                @else
+                    <p class="meal-detail__excerpt md-reveal" style="--md-i:1">{{ __('Nutritionist-designed meal plans for safe, sustainable weight loss.') }}</p>
+                @endif
+
+                <div class="meal-detail__price-row md-reveal" style="--md-i:2">
+                    <p class="meal-detail__price"><x-sar /> <span x-text="displayPrice.toLocaleString()"></span></p>
+                    <template x-if="originalPrice > 0 && originalPrice !== displayPrice">
+                        <span class="meal-detail__price-old"><x-sar /> <span x-text="originalPrice.toLocaleString()"></span></span>
+                    </template>
+                    <span class="meal-detail__per-serving" x-show="selectedDurationDays > 0" x-cloak x-text="avgPerDayAmount() + ' · {{ __('per day') }}'"></span>
                 </div>
 
-                {{-- Plan variant (API menus) or legacy meal type --}}
-                <div class="rounded-md border border-gray-200 bg-white p-5">
-                    @if($hasSubscriptionPlans)
-                        <p class="mb-3 text-lg md:text-xl">{{ __('Choose your plan') }}</p>
+                <div class="plan-detail__start-chip md-reveal" style="--md-i:3">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                    </svg>
+                    <span>
+                        {{ __('Start your plan as soon as') }}
+                        <time datetime="{{ $startDate }}">{{ $startDateDisplay }}</time>
+                    </span>
+                </div>
 
-                        <div class="mb-6 flex flex-wrap gap-3">
+                {{-- Plan variant --}}
+                <div class="plan-detail__block md-reveal" style="--md-i:4">
+                    @if($hasSubscriptionPlans)
+                        <p class="plan-detail__block-head">{{ __('Choose your plan') }}</p>
+                        <div class="choice-group__row">
                             @foreach($subscriptionPlans as $sp)
                                 @php $spId = (int) ($sp['id'] ?? 0); @endphp
                                 <div class="choice-group__item">
@@ -317,26 +327,24 @@ $totalPrice = $planPriceInclVat;
                                            value="{{ $spId }}"
                                            x-model.number="selectedSubscriptionPlanId"
                                            {{ $loop->first ? 'checked' : '' }}>
-                                    <label for="subplan-{{ $spId }}" class="choice-group__label justify-center max-w-full text-center">
+                                    <label for="subplan-{{ $spId }}" class="choice-group__label max-w-full text-center">
                                         <span class="choice-group__icon"></span>
-                                        <span class="text-start">{{ $sp['name'] ?? '' }}</span>
+                                        <span>{{ $sp['name'] ?? '' }}</span>
                                     </label>
                                 </div>
                             @endforeach
                         </div>
-
-                        <div class="rounded-md bg-gray-200 p-5">
-                            <p class="mb-2 text-lg font-semibold">{{ __("What's included") }}</p>
-                            <ul class="list-disc space-y-1.5 ps-6">
+                        <div class="plan-detail__includes">
+                            <p class="plan-detail__includes-title">{{ __("What's included") }}</p>
+                            <ul>
                                 <template x-for="line in activeMenusDisplay" :key="line">
                                     <li x-text="line"></li>
                                 </template>
                             </ul>
                         </div>
                     @else
-                        <p class="mb-3 text-lg md:text-xl">{{ __('Choose your meal type') }}</p>
-
-                        <div class="mb-6 flex flex-wrap gap-3">
+                        <p class="plan-detail__block-head">{{ __('Choose your meal type') }}</p>
+                        <div class="choice-group__row">
                             @foreach($mealTypes as $type)
                                 <div class="choice-group__item">
                                     <input type="radio"
@@ -346,19 +354,18 @@ $totalPrice = $planPriceInclVat;
                                            value="{{ $type['id'] }}"
                                            x-model="selectedMeal"
                                            {{ $loop->first ? 'checked' : '' }}>
-                                    <label for="meal-{{ $type['id'] }}" class="choice-group__label justify-center">
+                                    <label for="meal-{{ $type['id'] }}" class="choice-group__label">
                                         <span class="choice-group__icon"></span>
                                         {{ $type['name'] }}
                                     </label>
                                 </div>
                             @endforeach
                         </div>
-
-                        <div class="rounded-md bg-gray-200 p-5">
+                        <div class="plan-detail__includes">
                             <template x-for="(items, type) in {{ json_encode($mealIncludes) }}" :key="type">
                                 <div x-show="selectedMeal === type" x-transition>
-                                    <p class="mb-2 text-lg font-semibold" x-text="selectedMeal.charAt(0).toUpperCase() + selectedMeal.slice(1) + ' {{ __('Includes') }}'"></p>
-                                    <ul class="list-disc space-y-1.5 ps-6">
+                                    <p class="plan-detail__includes-title" x-text="selectedMeal.charAt(0).toUpperCase() + selectedMeal.slice(1) + ' {{ __('Includes') }}'"></p>
+                                    <ul>
                                         <template x-for="item in items" :key="item">
                                             <li x-text="item"></li>
                                         </template>
@@ -369,23 +376,9 @@ $totalPrice = $planPriceInclVat;
                     @endif
                 </div>
 
-                {{-- Start Date --}}
-                <div class="rounded-md border border-gray-200 bg-white p-5">
-                    <div class="flex items-center gap-4">
-                        <svg class="size-8">
-                            <use href="{{ asset('assets/images/icons/sprite.svg#calendar') }}"></use>
-                        </svg>
-                        <p class="text-lg">
-                            {{ __('Start your plan as soon as') }}
-                            <time datetime="{{ $startDate }}" class="font-semibold">{{ $startDateDisplay }}</time>
-                        </p>
-                    </div>
-                </div>
-
-                {{-- Calories Selection --}}
-                <div class="rounded-md border border-gray-200 bg-white p-5">
-                    <p class="mb-3 text-lg md:text-xl">{{ __('Choose calories') }}</p>
-
+                {{-- Calories --}}
+                <div class="plan-detail__block md-reveal" style="--md-i:5">
+                    <p class="plan-detail__block-head">{{ __('Choose calories') }}</p>
                     <div class="selection-group">
                         <template x-for="(opt, index) in calories" :key="opt.id || opt.range || index">
                             <div class="selection-group__item">
@@ -401,102 +394,43 @@ $totalPrice = $planPriceInclVat;
                     </div>
                 </div>
 
-                {{-- Nutritional Info (dynamic based on selected calorie) --}}
-                <div class="rounded-md border border-gray-200 bg-white p-5">
-                    <div class="mb-4 flex items-center justify-between gap-3">
-                        <p class="text-lg font-bold md:text-xl">{{ __('Nutritional info') }}</p>
-                        <span class="nutrition-chip">{{ __('Min - Max') }}</span>
+                {{-- Nutrition --}}
+                <div class="plan-detail__block md-reveal" style="--md-i:6">
+                    <div class="plan-detail__nutrition-head">
+                        <p class="plan-detail__block-head !mb-0">{{ __('Nutritional info') }}</p>
+                        <span>{{ __('Min - Max') }}</span>
                     </div>
-
-                    <div class="nutrition-grid">
-                        <div class="nutrition-card">
-                            <div class="mb-3 flex items-center justify-between">
-                                <p class="font-bold">{{ __('Carbs') }}</p>
-                                <p class="nutrition-value" x-show="!hasRangeValue(currentNutrition.carbs)" x-text="currentNutrition.carbs" x-cloak></p>
-                            </div>
-                            <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-zinc-200" role="progressbar">
-                                <div class="bg-green flex flex-col justify-center overflow-hidden rounded-full text-center text-xs whitespace-nowrap transition duration-500" :style="'width:' + currentNutrition.carbsPercent + '%'"></div>
-                            </div>
-                            <div class="nutrition-range-pair"
-                                 x-show="hasRangeValue(currentNutrition.carbs)"
-                                 x-transition:enter="transition ease-out duration-300"
-                                 x-transition:enter-start="opacity-0 translate-y-1 scale-95"
-                                 x-transition:enter-end="opacity-100 translate-y-0 scale-100"
-                                 x-transition:leave="transition ease-in duration-150"
-                                 x-transition:leave-start="opacity-100 translate-y-0 scale-100"
-                                 x-transition:leave-end="opacity-0 -translate-y-1 scale-95"
-                                 x-cloak>
-                                <span class="nutrition-range-pill">
-                                    <strong>{{ __('Min') }}:</strong>
-                                    <span x-text="nutritionRangeMin(currentNutrition.carbs)"></span>
-                                </span>
-                                <span class="nutrition-range-pill">
-                                    <strong>{{ __('Max') }}:</strong>
-                                    <span x-text="nutritionRangeMax(currentNutrition.carbs)"></span>
-                                </span>
+                    <div class="meal-detail__nutrition" aria-label="{{ __('Nutritional info') }}">
+                        <div class="meal-detail__stat meal-detail__stat--carbs">
+                            <span class="meal-detail__stat-value" x-text="nutritionDisplayShort(currentNutrition.carbs)"></span>
+                            <span class="meal-detail__stat-label">{{ __('Carbs') }}</span>
+                            <span class="plan-detail__stat-pct" x-text="currentNutrition.carbsPercent + '%'"></span>
+                            <div class="plan-detail__macro-bar plan-detail__macro-bar--carbs" role="progressbar" :aria-valuenow="currentNutrition.carbsPercent">
+                                <span :style="'width:' + currentNutrition.carbsPercent + '%'"></span>
                             </div>
                         </div>
-                        <div class="nutrition-card">
-                            <div class="mb-3 flex items-center justify-between">
-                                <p class="font-bold">{{ __('Protein') }}</p>
-                                <p class="nutrition-value" x-show="!hasRangeValue(currentNutrition.protein)" x-text="currentNutrition.protein" x-cloak></p>
-                            </div>
-                            <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-zinc-200" role="progressbar">
-                                <div class="bg-yellow flex flex-col justify-center overflow-hidden rounded-full text-center text-xs whitespace-nowrap transition duration-500" :style="'width:' + currentNutrition.proteinPercent + '%'"></div>
-                            </div>
-                            <div class="nutrition-range-pair"
-                                 x-show="hasRangeValue(currentNutrition.protein)"
-                                 x-transition:enter="transition ease-out duration-300"
-                                 x-transition:enter-start="opacity-0 translate-y-1 scale-95"
-                                 x-transition:enter-end="opacity-100 translate-y-0 scale-100"
-                                 x-transition:leave="transition ease-in duration-150"
-                                 x-transition:leave-start="opacity-100 translate-y-0 scale-100"
-                                 x-transition:leave-end="opacity-0 -translate-y-1 scale-95"
-                                 x-cloak>
-                                <span class="nutrition-range-pill">
-                                    <strong>{{ __('Min') }}:</strong>
-                                    <span x-text="nutritionRangeMin(currentNutrition.protein)"></span>
-                                </span>
-                                <span class="nutrition-range-pill">
-                                    <strong>{{ __('Max') }}:</strong>
-                                    <span x-text="nutritionRangeMax(currentNutrition.protein)"></span>
-                                </span>
+                        <div class="meal-detail__stat meal-detail__stat--protein">
+                            <span class="meal-detail__stat-value" x-text="nutritionDisplayShort(currentNutrition.protein)"></span>
+                            <span class="meal-detail__stat-label">{{ __('Protein') }}</span>
+                            <span class="plan-detail__stat-pct" x-text="currentNutrition.proteinPercent + '%'"></span>
+                            <div class="plan-detail__macro-bar plan-detail__macro-bar--protein" role="progressbar" :aria-valuenow="currentNutrition.proteinPercent">
+                                <span :style="'width:' + currentNutrition.proteinPercent + '%'"></span>
                             </div>
                         </div>
-                        <div class="nutrition-card">
-                            <div class="mb-3 flex items-center justify-between">
-                                <p class="font-bold">{{ __('Fat') }}</p>
-                                <p class="nutrition-value" x-show="!hasRangeValue(currentNutrition.fat)" x-text="currentNutrition.fat" x-cloak></p>
-                            </div>
-                            <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-zinc-200" role="progressbar">
-                                <div class="bg-red flex flex-col justify-center overflow-hidden rounded-full text-center text-xs whitespace-nowrap transition duration-500" :style="'width:' + currentNutrition.fatPercent + '%'"></div>
-                            </div>
-                            <div class="nutrition-range-pair"
-                                 x-show="hasRangeValue(currentNutrition.fat)"
-                                 x-transition:enter="transition ease-out duration-300"
-                                 x-transition:enter-start="opacity-0 translate-y-1 scale-95"
-                                 x-transition:enter-end="opacity-100 translate-y-0 scale-100"
-                                 x-transition:leave="transition ease-in duration-150"
-                                 x-transition:leave-start="opacity-100 translate-y-0 scale-100"
-                                 x-transition:leave-end="opacity-0 -translate-y-1 scale-95"
-                                 x-cloak>
-                                <span class="nutrition-range-pill">
-                                    <strong>{{ __('Min') }}:</strong>
-                                    <span x-text="nutritionRangeMin(currentNutrition.fat)"></span>
-                                </span>
-                                <span class="nutrition-range-pill">
-                                    <strong>{{ __('Max') }}:</strong>
-                                    <span x-text="nutritionRangeMax(currentNutrition.fat)"></span>
-                                </span>
+                        <div class="meal-detail__stat meal-detail__stat--fat">
+                            <span class="meal-detail__stat-value" x-text="nutritionDisplayShort(currentNutrition.fat)"></span>
+                            <span class="meal-detail__stat-label">{{ __('Fat') }}</span>
+                            <span class="plan-detail__stat-pct" x-text="currentNutrition.fatPercent + '%'"></span>
+                            <div class="plan-detail__macro-bar plan-detail__macro-bar--fat" role="progressbar" :aria-valuenow="currentNutrition.fatPercent">
+                                <span :style="'width:' + currentNutrition.fatPercent + '%'"></span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {{-- Duration Selection --}}
-                <div class="rounded-md border border-gray-200 bg-white p-5" x-show="durations.length > 0" x-cloak>
-                    <p class="mb-3 text-lg md:text-xl">{{ __('Choose Duration') }}</p>
-
+                {{-- Duration --}}
+                <div class="plan-detail__block md-reveal" style="--md-i:7" x-show="durations.length > 0" x-cloak>
+                    <p class="plan-detail__block-head">{{ __('Choose Duration') }}</p>
                     <x-duration-carousel>
                         <template x-for="(dur, index) in durations" :key="dur.id">
                             <div class="duration-pills__item">
@@ -519,95 +453,80 @@ $totalPrice = $planPriceInclVat;
                     </x-duration-carousel>
                 </div>
 
-                {{-- Payment Summary --}}
-                <div class="rounded-md border border-gray-200 bg-white p-5">
-                    <p class="mb-3 text-lg md:text-xl">{{ __('Payment Summary') }}</p>
-
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <p class="text-gray-600">{{ __('Plan Price') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></p>
-                            <p><x-sar /> <span x-text="displayPrice.toLocaleString()"></span></p>
-                        </div>
-                        <div class="flex items-center justify-between text-sm text-gray-600" x-show="selectedDurationDays > 0" x-cloak>
-                            <p>{{ __('Avg. per day') }} <span class="text-xs text-gray-400">({{ __('Incl. VAT') }})</span></p>
-                            <p class="font-semibold text-gray-800" x-text="avgPerDayAmount()"></p>
-                        </div>
-                        <template x-if="originalPrice > 0 && originalPrice !== displayPrice">
-                            <div class="flex items-center justify-between">
-                                <p class="text-gray-400 line-through text-sm">{{ __('Original Price') }}</p>
-                                <p class="text-gray-400 line-through text-sm"><x-sar /> <span x-text="originalPrice.toLocaleString()"></span></p>
-                            </div>
-                        </template>
-                        <div class="flex items-center justify-between text-sm text-gray-400">
-                            <p>{{ __('VAT included') }} ({{ (int)(\App\Models\Settings\Setting::getValue('vat_rate', 15)) }}%)</p>
-                            <p><x-sar /> <span x-text="vatAmount.toFixed(2)"></span></p>
-                        </div>
-
-                        <div class="my-3 h-px bg-gray-300"></div>
-
-                        <div class="flex items-center justify-between">
-                            <p class="text-xl font-semibold">{{ __('Total') }}</p>
-                            <p class="text-green text-xl"><x-sar /> <span x-text="displayPrice.toLocaleString()"></span></p>
-                        </div>
-
-                        <button type="button"
-                                class="btn btn--primary btn--lg mt-3 w-full"
-                                @click="subscribeNow()">
-                            {{ __('Subscribe Now') }}
-                        </button>
+                {{-- Payment summary (desktop) --}}
+                <div class="meal-detail__purchase hidden md:block md-reveal" style="--md-i:8">
+                    <p class="plan-detail__block-head mb-3">{{ __('Payment Summary') }}</p>
+                    <div class="plan-detail__summary-row">
+                        <p>{{ __('Plan Price') }} <span class="text-xs">({{ __('Incl. VAT') }})</span></p>
+                        <p><x-sar /> <span x-text="displayPrice.toLocaleString()"></span></p>
                     </div>
+                    <div class="plan-detail__summary-row text-sm" x-show="selectedDurationDays > 0" x-cloak>
+                        <p>{{ __('Avg. per day') }} <span class="text-xs text-gray-400">({{ __('Incl. VAT') }})</span></p>
+                        <p class="font-semibold text-gray-800" x-text="avgPerDayAmount()"></p>
+                    </div>
+                    <template x-if="originalPrice > 0 && originalPrice !== displayPrice">
+                        <div class="plan-detail__summary-row text-sm">
+                            <p class="text-gray-400 line-through">{{ __('Original Price') }}</p>
+                            <p class="text-gray-400 line-through"><x-sar /> <span x-text="originalPrice.toLocaleString()"></span></p>
+                        </div>
+                    </template>
+                    <div class="plan-detail__summary-row text-sm text-gray-400">
+                        <p>{{ __('VAT included') }} ({{ (int)(\App\Models\Settings\Setting::getValue('vat_rate', 15)) }}%)</p>
+                        <p><x-sar /> <span x-text="vatAmount.toFixed(2)"></span></p>
+                    </div>
+                    <div class="plan-detail__summary-divider"></div>
+                    <div class="plan-detail__summary-row plan-detail__summary-row--total">
+                        <p>{{ __('Total') }}</p>
+                        <p class="plan-detail__price-total"><x-sar /> <span x-text="displayPrice.toLocaleString()"></span></p>
+                    </div>
+                    <button type="button" class="btn btn--primary btn--lg mt-4 w-full" @click="subscribeNow()">
+                        {{ __('Subscribe Now') }}
+                    </button>
                 </div>
             </div>
         </div>
 
-        {{-- Accordions --}}
-        <div class="hs-accordion-group accordion-group mt-10 space-y-5 md:mt-16">
-            {{-- Description --}}
-            <div class="hs-accordion active rounded-md border border-gray-200 bg-white" id="hs-description">
-                <button class="hs-accordion-toggle flex w-full items-center justify-between px-5 py-4 text-start text-2xl font-bold text-gray-800 transition-colors focus:outline-hidden md:p-6" aria-controls="hs-description-content">
-                    {{ __('Description') }}
-                    <svg class="hs-accordion-active:rotate-180 size-5 text-gray-500 transition-transform duration-300">
-                        <use href="{{ asset('assets/images/icons/sprite.svg#chevron-down') }}"></use>
-                    </svg>
-                </button>
-                <div id="hs-description-content" class="hs-accordion-content w-full overflow-hidden transition-[height] duration-300" aria-labelledby="hs-description">
-                    <div class="p-5 pt-0! md:p-6">
-                        <div class="prose prose-lg max-w-none">
-                            @if($planDesc)
-                                {!! nl2br(e($planDesc)) !!}
-                            @else
-                                <p>{{ __('A calorie-controlled meal plan designed by nutritionists to support safe, sustainable weight loss. Enjoy balanced, portioned meals delivered daily to help you stay consistent and reach your goals with ease.') }}</p>
-                            @endif
-                        </div>
-                    </div>
+        {{-- Description & ingredients --}}
+        <div class="meal-detail__sections md-reveal" style="--md-i:9">
+            <div class="meal-detail__section" id="plan-description">
+                <h2 class="meal-detail__section-head">{{ __('Description') }}</h2>
+                <div class="meal-detail__section-body">
+                    @if($planDescPlain !== '')
+                        {!! nl2br(e($planDescPlain)) !!}
+                    @else
+                        <p>{{ __('A calorie-controlled meal plan designed by nutritionists to support safe, sustainable weight loss. Enjoy balanced, portioned meals delivered daily to help you stay consistent and reach your goals with ease.') }}</p>
+                    @endif
                 </div>
             </div>
 
-            {{-- Ingredients --}}
-            <div class="hs-accordion rounded-md border border-gray-200 bg-white" id="hs-ingredients">
-                <button class="hs-accordion-toggle flex w-full items-center justify-between px-5 py-4 text-start text-2xl font-bold text-gray-800 transition-colors focus:outline-hidden md:p-6" aria-controls="hs-ingredients-content">
-                    {{ __('Ingredients') }}
-                    <svg class="hs-accordion-active:rotate-180 size-5 text-gray-500 transition-transform duration-300">
-                        <use href="{{ asset('assets/images/icons/sprite.svg#chevron-down') }}"></use>
-                    </svg>
-                </button>
-                <div id="hs-ingredients-content" class="hs-accordion-content hidden w-full overflow-hidden transition-[height] duration-300" aria-labelledby="hs-ingredients">
-                    <div class="p-5 pt-0! md:p-6">
-                        <p>{{ $plan->ingredients ?? __('Fresh vegetables, whole grains, lean proteins, and natural seasonings.') }}</p>
-                    </div>
+            <div class="meal-detail__section">
+                <h2 class="meal-detail__section-head">{{ __('Ingredients') }}</h2>
+                <div class="meal-detail__section-body">
+                    <p>{{ $plan->ingredients ?? __('Fresh vegetables, whole grains, lean proteins, and natural seasonings.') }}</p>
                 </div>
             </div>
-
         </div>
+    </section>
+
+    {{-- Mobile sticky bar --}}
+    <div class="plan-detail__mobile-bar md:hidden">
+        <div class="plan-detail__mobile-meta">
+            <span class="plan-detail__mobile-price"><x-sar /> <span x-text="displayPrice.toLocaleString()"></span></span>
+            <span class="plan-detail__mobile-per-day" x-show="selectedDurationDays > 0" x-cloak x-text="avgPerDayAmount()"></span>
+        </div>
+        <button type="button" class="btn btn--primary btn--md" @click="subscribeNow()">
+            {{ __('Subscribe Now') }}
+        </button>
     </div>
-</section>
+</div>
 @endsection
 
 @push('styles')
+<link rel="stylesheet" href="{{ asset('assets/styles/meal-detail.css') }}" />
+<link rel="stylesheet" href="{{ asset('assets/styles/meal-plan-detail.css') }}" />
 <style>
-    /* Breadcrumb styles */
     .breadcrumb {
-        @apply flex flex-wrap items-center gap-1 text-sm text-gray-600 mb-6;
+        @apply flex flex-wrap items-center gap-1 text-sm text-gray-600;
     }
     .breadcrumb__item {
         @apply flex items-center;
@@ -620,131 +539,6 @@ $totalPrice = $planPriceInclVat;
     }
     .breadcrumb__item--active {
         @apply text-gray-900 font-medium;
-    }
-
-    /* Choice group (radio buttons as cards) */
-    .choice-group__item {
-        @apply relative;
-    }
-    .choice-group__input {
-        @apply absolute opacity-0 w-0 h-0;
-    }
-    .choice-group__label {
-        @apply flex items-center gap-2 px-4 py-2.5 border-2 border-gray-200 rounded-lg cursor-pointer transition-all hover:border-gray-300;
-    }
-    .choice-group__input:checked + .choice-group__label {
-        @apply border-blue bg-blue-50 text-blue;
-    }
-    .choice-group__icon {
-        @apply size-4 rounded-full border-2 border-gray-300 flex items-center justify-center;
-    }
-    .choice-group__input:checked + .choice-group__label .choice-group__icon {
-        @apply border-blue bg-blue;
-    }
-    .choice-group__icon::after {
-        content: '';
-        @apply size-2 rounded-full bg-white opacity-0;
-    }
-    .choice-group__input:checked + .choice-group__label .choice-group__icon::after {
-        @apply opacity-100;
-    }
-
-    /* Selection group (calorie options) */
-    .selection-group {
-        @apply flex flex-wrap gap-3;
-    }
-    .selection-group__item {
-        @apply relative;
-    }
-    .selection-group__input {
-        @apply absolute opacity-0 w-0 h-0;
-    }
-    .selection-group__label {
-        @apply flex items-center justify-center px-6 py-3 border-2 border-gray-200 rounded-lg cursor-pointer transition-all hover:border-gray-300 font-medium min-w-[100px];
-    }
-    .selection-group__input:checked + .selection-group__label {
-        @apply border-blue bg-blue-50 text-blue;
-    }
-
-    /* Progress bar colors */
-    .bg-green {
-        background-color: #22c55e;
-    }
-    .bg-yellow {
-        background-color: #eab308;
-    }
-    .bg-red {
-        background-color: #ef4444;
-    }
-    .text-green {
-        color: #22c55e;
-    }
-    .nutrition-chip {
-        @apply inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700;
-    }
-    .nutrition-grid {
-        @apply grid gap-3 md:grid-cols-3;
-    }
-    .nutrition-card {
-        @apply rounded-xl border border-slate-200 bg-slate-50/70 p-3;
-        transition: transform .3s cubic-bezier(.16, 1, .3, 1), box-shadow .3s ease, border-color .25s ease;
-    }
-    .nutrition-card:hover {
-        transform: translateY(-2px);
-        border-color: #bfdbfe;
-        box-shadow: 0 12px 24px rgba(15, 23, 42, .08);
-    }
-    .nutrition-value {
-        @apply text-lg font-black text-slate-800;
-    }
-    .nutrition-range-pair {
-        @apply mt-3 flex items-center gap-2;
-    }
-    .nutrition-range-pill {
-        @apply inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600;
-        animation: nutritionPillIn .35s cubic-bezier(.16, 1, .3, 1);
-    }
-    .nutrition-range-pill strong {
-        @apply font-semibold text-slate-700;
-    }
-    .nutrition-grid [role="progressbar"] > div {
-        position: relative;
-        overflow: hidden;
-    }
-    .nutrition-grid [role="progressbar"] > div::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(110deg, transparent 0%, rgba(255,255,255,.25) 40%, transparent 80%);
-        transform: translateX(-120%);
-        animation: nutritionBarSheen 2.8s ease-in-out infinite;
-    }
-    @keyframes nutritionPillIn {
-        0% {
-            opacity: 0;
-            transform: translateY(4px) scale(.95);
-        }
-        100% {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-        }
-    }
-    @keyframes nutritionBarSheen {
-        0%, 55% {
-            transform: translateX(-120%);
-        }
-        100% {
-            transform: translateX(120%);
-        }
-    }
-    @media (prefers-reduced-motion: reduce) {
-        .nutrition-card,
-        .nutrition-range-pill,
-        .nutrition-grid [role="progressbar"] > div::after {
-            animation: none !important;
-            transition: none !important;
-            transform: none !important;
-        }
     }
 </style>
 @endpush
@@ -872,9 +666,23 @@ function planDetail() {
         },
 
         durationViewportScrollLeft(vp) {
-            const isRtl = document.documentElement.dir === 'rtl';
+            const max = Math.max(0, vp.scrollWidth - vp.clientWidth);
+            if (max <= 1) {
+                return 0;
+            }
+            const isRtl = getComputedStyle(vp).direction === 'rtl'
+                || document.documentElement.dir === 'rtl';
+            if (! isRtl) {
+                return vp.scrollLeft;
+            }
+            if (vp.scrollLeft < 0) {
+                return Math.abs(vp.scrollLeft);
+            }
+            if (vp.scrollLeft > 0) {
+                return max - vp.scrollLeft;
+            }
 
-            return isRtl ? Math.abs(vp.scrollLeft) : vp.scrollLeft;
+            return 0;
         },
 
         onDurationViewportScroll() {
@@ -896,9 +704,15 @@ function planDetail() {
                 return;
             }
             const max = Math.max(0, vp.scrollWidth - vp.clientWidth);
+            if (max <= 1) {
+                this.durationScrollAtStart = true;
+                this.durationScrollAtEnd = true;
+
+                return;
+            }
             const pos = this.durationViewportScrollLeft(vp);
             this.durationScrollAtStart = pos <= 8;
-            this.durationScrollAtEnd = max <= 8 || pos >= max - 8;
+            this.durationScrollAtEnd = pos >= max - 8;
         },
 
         scrollDurationBy(dir) {
@@ -1041,6 +855,11 @@ function planDetail() {
             this.$nextTick(() => {
                 this.refreshDurationScrollState();
                 this.scrollDurationToSelected();
+            });
+            setTimeout(() => this.refreshDurationScrollState(), 150);
+            setTimeout(() => this.refreshDurationScrollState(), 600);
+            requestAnimationFrame(() => {
+                this.$el.classList.add('is-ready');
             });
         },
 
@@ -1220,6 +1039,19 @@ function planDetail() {
 
         nutritionRangeMax(value) {
             return this.nutritionRangeParts(value).max;
+        },
+
+        nutritionDisplayShort(value) {
+            const text = String(value || '').trim();
+            if (text === '' || text === '—') {
+                return '—';
+            }
+            const parts = this.nutritionRangeParts(value);
+            if (parts.min !== '—' && parts.max !== '—' && parts.min !== parts.max) {
+                return parts.min + '–' + parts.max;
+            }
+
+            return text;
         },
 
         parseCaloriesRange(range) {

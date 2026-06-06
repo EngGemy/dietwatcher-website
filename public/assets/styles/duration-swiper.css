@@ -7,31 +7,7 @@
 
 .duration-swiper::before,
 .duration-swiper::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 2rem;
-  z-index: 4;
-  width: 2.5rem;
-  pointer-events: none;
-}
-
-.duration-swiper::before {
-  inset-inline-start: 2.25rem;
-  background: linear-gradient(90deg, #fff 0%, rgba(255, 255, 255, 0.92) 40%, rgba(255, 255, 255, 0) 100%);
-}
-
-.duration-swiper::after {
-  inset-inline-end: 2.25rem;
-  background: linear-gradient(270deg, #fff 0%, rgba(255, 255, 255, 0.92) 40%, rgba(255, 255, 255, 0) 100%);
-}
-
-[dir='rtl'] .duration-swiper::before {
-  background: linear-gradient(270deg, #fff 0%, rgba(255, 255, 255, 0.92) 40%, rgba(255, 255, 255, 0) 100%);
-}
-
-[dir='rtl'] .duration-swiper::after {
-  background: linear-gradient(90deg, #fff 0%, rgba(255, 255, 255, 0.92) 40%, rgba(255, 255, 255, 0) 100%);
+  display: none;
 }
 
 @media (min-width: 640px) {
@@ -107,8 +83,8 @@
 }
 
 .duration-pills--carousel .duration-pills__input:checked + .duration-pills__face {
-  transform: scale(1.02);
-  box-shadow: 0 8px 24px rgba(39, 159, 249, 0.38);
+  transform: none;
+  box-shadow: 0 0 0 2px #279ff9, 0 2px 8px rgba(15, 23, 42, 0.08);
 }
 
 .duration-pills--carousel .duration-pills__face:active {
@@ -131,12 +107,11 @@
   margin-top: -1.35rem;
   border-radius: 9999px;
   border: 1px solid rgba(39, 159, 249, 0.2);
-  background: rgba(255, 255, 255, 0.96);
+  background: #fff;
   color: #279ff9;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
   cursor: pointer;
-  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-  backdrop-filter: blur(8px);
+  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 
 .duration-swiper__nav svg {
@@ -147,8 +122,8 @@
 .duration-swiper__nav:hover:not(:disabled) {
   background: #279ff9;
   color: #fff;
-  box-shadow: 0 6px 18px rgba(39, 159, 249, 0.35);
-  transform: scale(1.06);
+  box-shadow: 0 4px 12px rgba(39, 159, 249, 0.22);
+  transform: scale(1.04);
 }
 
 .duration-swiper__nav:active:not(:disabled) {

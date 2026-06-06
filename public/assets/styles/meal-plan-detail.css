@@ -1,0 +1,314 @@
+/* ─── Meal plan detail (extends meal-detail tokens) ─── */
+.plan-detail {
+    --pd-accent: #279ff9;
+    --pd-green: #3fb536;
+    --pd-surface: #fff;
+    --pd-muted: rgba(15, 23, 42, 0.62);
+    --pd-border: rgba(148, 163, 184, 0.28);
+    --pd-radius: 1rem;
+}
+
+.plan-detail__block {
+    padding: 1.15rem 1.25rem;
+    border-radius: var(--pd-radius);
+    background: var(--pd-surface);
+    border: 1px solid var(--pd-border);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.plan-detail__block-head {
+    margin-bottom: 0.85rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.plan-detail__start-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.65rem 1rem;
+    border-radius: 0.75rem;
+    background: rgba(39, 159, 249, 0.08);
+    border: 1px solid rgba(39, 159, 249, 0.18);
+    font-size: 0.9375rem;
+    color: #1e3a5f;
+}
+
+.plan-detail__start-chip svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    flex-shrink: 0;
+    color: var(--pd-accent);
+}
+
+.plan-detail__start-chip time {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.plan-detail__includes {
+    margin-top: 0.85rem;
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    background: #f1f5f9;
+}
+
+.plan-detail__includes-title {
+    margin-bottom: 0.45rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #334155;
+}
+
+.plan-detail__includes ul {
+    margin: 0;
+    padding-inline-start: 1.15rem;
+    font-size: 0.875rem;
+    color: #475569;
+    line-height: 1.55;
+}
+
+.plan-detail__includes li + li {
+    margin-top: 0.2rem;
+}
+
+/* Choice + calorie selectors */
+.plan-detail .choice-group__item,
+.plan-detail .selection-group__item {
+    position: relative;
+}
+
+.plan-detail .choice-group__input,
+.plan-detail .selection-group__input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.plan-detail .choice-group__label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 0.65rem;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.plan-detail .choice-group__input:checked + .choice-group__label {
+    border-color: var(--pd-accent);
+    background: rgba(39, 159, 249, 0.08);
+    color: var(--pd-accent);
+}
+
+.plan-detail .choice-group__icon {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 999px;
+    border: 2px solid #d1d5db;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.plan-detail .choice-group__input:checked + .choice-group__label .choice-group__icon {
+    border-color: var(--pd-accent);
+    background: var(--pd-accent);
+}
+
+.plan-detail .choice-group__icon::after {
+    content: '';
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 999px;
+    background: #fff;
+    opacity: 0;
+}
+
+.plan-detail .choice-group__input:checked + .choice-group__label .choice-group__icon::after {
+    opacity: 1;
+}
+
+.plan-detail .selection-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.plan-detail .selection-group__label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem 0.85rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 0.65rem;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    min-width: 5.5rem;
+}
+
+.plan-detail .selection-group__input:checked + .selection-group__label {
+    border-color: var(--pd-accent);
+    background: rgba(39, 159, 249, 0.08);
+    color: var(--pd-accent);
+}
+
+.plan-detail .choice-group__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+/* Nutrition stat cards */
+.plan-detail__nutrition-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.65rem;
+}
+
+.plan-detail__nutrition-head span {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(39, 159, 249, 0.08);
+    color: var(--pd-accent);
+    border: 1px solid rgba(39, 159, 249, 0.15);
+}
+
+.plan-detail__stat-pct {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--pd-muted);
+}
+
+.plan-detail__macro-bar {
+    margin-top: 0.65rem;
+    height: 4px;
+    width: 100%;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+}
+
+.plan-detail__macro-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.plan-detail__macro-bar--carbs > span { background: #22c55e; }
+.plan-detail__macro-bar--protein > span { background: #eab308; }
+.plan-detail__macro-bar--fat > span { background: #ef4444; }
+
+/* Payment summary */
+.plan-detail__summary-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.9375rem;
+    color: #64748b;
+}
+
+.plan-detail__summary-row--total {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.plan-detail__summary-row--total .plan-detail__price-total {
+    color: var(--pd-green);
+    font-size: 1.25rem;
+}
+
+.plan-detail__summary-divider {
+    margin: 0.75rem 0;
+    height: 1px;
+    background: #e2e8f0;
+}
+
+.plan-detail .text-green {
+    color: var(--pd-green);
+}
+
+/* Mobile sticky bar */
+.plan-detail__mobile-bar {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+    background: rgba(255, 255, 255, 0.96);
+    border-top: 1px solid var(--pd-border);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
+}
+
+@media (min-width: 768px) {
+    .plan-detail__mobile-bar {
+        display: none;
+    }
+}
+
+.plan-detail__mobile-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.plan-detail__mobile-price {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--pd-green);
+    white-space: nowrap;
+}
+
+.plan-detail__mobile-per-day {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: var(--pd-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.plan-detail__mobile-bar .btn {
+    flex: 1;
+    min-width: 0;
+}
+
+.plan-detail__read-more {
+    display: inline-block;
+    margin-top: 0.35rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--pd-accent);
+    text-decoration: none;
+}
+
+.plan-detail__read-more:hover {
+    text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .plan-detail__macro-bar > span {
+        transition: none;
+    }
+}
