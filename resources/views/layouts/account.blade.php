@@ -90,6 +90,12 @@
             box-shadow:inset -3px 0 0 #3B82F6;
         }
         .acc-nav svg { width:18px; height:18px; flex-shrink:0; opacity:.85; }
+        .acc-nav__badge {
+            margin-inline-start:auto;
+            min-width:1.25rem; height:1.25rem; padding:0 .35rem;
+            border-radius:999px; background:#EF4444; color:#fff;
+            font-size:.68rem; font-weight:800; line-height:1.25rem; text-align:center;
+        }
 
         .acc-main { min-width:0; display:flex; flex-direction:column; }
         .acc-topbar {
@@ -216,11 +222,14 @@
      @keydown.escape.window="sidebarOpen = false">
 
     @php
+        use App\Services\AccountApiService;
+
         $active = trim((string) request()->route()?->getName());
         $isActive = fn(string $name) => $active === $name;
         $profile = (array) session('external_api_profile', []);
         $displayName = trim((string) ($profile['name'] ?? '')) ?: __('account.customer');
         $initial = mb_strtoupper(mb_substr($displayName, 0, 1));
+        $unreadNotifications = app(AccountApiService::class)->unreadNotificationCount();
     @endphp
 
     {{-- Sidebar --}}
@@ -254,8 +263,16 @@
                 <svg fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3"/></svg>
                 {{ __('account.wallet') }}
             </a>
+            <a href="{{ route('account.invoices.index') }}" class="{{ str_starts_with($active, 'account.invoices') ? 'is-active' : '' }}">
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+                {{ __('account.invoices') }}
+            </a>
 
             <div class="acc-nav__group-title">{{ __('account.group_settings') }}</div>
+            <a href="{{ route('account.addresses.index') }}" class="{{ str_starts_with($active, 'account.addresses') ? 'is-active' : '' }}">
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
+                {{ __('account.my_addresses') }}
+            </a>
             <a href="{{ route('account.profile') }}" class="{{ $isActive('account.profile') ? 'is-active' : '' }}">
                 <svg fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
                 {{ __('account.profile') }}

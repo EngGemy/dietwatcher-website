@@ -47,7 +47,7 @@
     </section>
 
     {{-- Stat cards --}}
-    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="acc-stat">
             <span class="acc-stat__label">{{ __('account.active_subscription') }}</span>
             @if(!empty($sub))
@@ -87,6 +87,51 @@
                 <a href="{{ route('account.orders.index') }}" class="text-blue-600 font-semibold text-xs">{{ __('account.view_all') }}</a>
             </span>
         </div>
+
+        <div class="acc-stat">
+            <span class="acc-stat__label">{{ __('account.notifications') }}</span>
+            <span class="acc-stat__value">{{ $unreadNotifications }}</span>
+            <span class="acc-stat__meta">
+                @if($unreadNotifications > 0)
+                    <span class="acc-chip acc-chip--warn">{{ __('account.unread') }}</span>
+                @endif
+                <a href="{{ route('account.notifications.index') }}" class="text-blue-600 font-semibold text-xs">{{ __('account.view_all') }}</a>
+            </span>
+        </div>
+    </section>
+
+    {{-- Quick links --}}
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <a href="{{ route('account.invoices.index') }}" class="acc-card p-4 flex items-center gap-3 hover:border-blue-200 transition group">
+            <span class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+            </span>
+            <div>
+                <p class="font-semibold text-gray-900 group-hover:text-blue-700">{{ __('account.invoices') }}</p>
+                <p class="text-xs text-gray-500">{{ __('account.invoices_hint_short') }}</p>
+            </div>
+        </a>
+        <a href="{{ route('account.addresses.index') }}" class="acc-card p-4 flex items-center gap-3 hover:border-blue-200 transition group">
+            <span class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
+            </span>
+            <div>
+                <p class="font-semibold text-gray-900 group-hover:text-blue-700">{{ __('account.my_addresses') }}</p>
+                <p class="text-xs text-gray-500">{{ __('account.addresses_hint_short') }}</p>
+            </div>
+        </a>
+        <a href="{{ route('account.notifications.index') }}" class="acc-card p-4 flex items-center gap-3 hover:border-blue-200 transition group">
+            <span class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 relative">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/></svg>
+                @if($unreadNotifications > 0)
+                    <span class="absolute -top-1 -end-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">{{ $unreadNotifications > 9 ? '9+' : $unreadNotifications }}</span>
+                @endif
+            </span>
+            <div>
+                <p class="font-semibold text-gray-900 group-hover:text-blue-700">{{ __('account.notifications') }}</p>
+                <p class="text-xs text-gray-500">{{ __('account.notifications_hint_short') }}</p>
+            </div>
+        </a>
     </section>
 
     {{-- Two-col: subscription at-a-glance + recent orders --}}

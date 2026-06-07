@@ -22,6 +22,8 @@ class Dashboard extends Component
 
     public ?float $walletBalance = null;
 
+    public int $unreadNotifications = 0;
+
     public bool $loading = true;
 
     public string $error = '';
@@ -71,6 +73,8 @@ class Dashboard extends Component
         if ($walletData !== []) {
             $this->walletBalance = $this->extractAmount($walletData);
         }
+
+        $this->unreadNotifications = $api->unreadNotificationCount();
 
         if ($this->activeSubscription === [] && $this->recentOrders === [] && $this->walletBalance === null) {
             $this->error = ($subs['message'] ?? '') ?: ($orders['message'] ?? '') ?: ($wallet['message'] ?? '') ?: __('account.load_failed');

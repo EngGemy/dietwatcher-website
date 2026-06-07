@@ -8,6 +8,7 @@
     'initialLng'  => 46.6753,
     'districts'   => [],
     'variant'     => 'modal',
+    'showTrigger' => true,
 ])
 
 @php
@@ -15,6 +16,7 @@
     $mapsKey = config('services.google_maps.key', '');
     $uid = 'gmp_' . uniqid();
     $isInline = ($variant ?? 'modal') === 'inline';
+    $showTrigger = filter_var($showTrigger ?? true, FILTER_VALIDATE_BOOLEAN);
 @endphp
 
 <div
@@ -33,7 +35,7 @@
         'gmp-wrapper--missing-api-key' => $isInline && ! filled($mapsKey),
     ])
 >
-    @if(!$isInline)
+    @if(!$isInline && $showTrigger)
     <div class="gmp-trigger" @click="openModal()">
         <span class="gmp-trigger__icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20" style="width:20px;height:20px;flex-shrink:0">

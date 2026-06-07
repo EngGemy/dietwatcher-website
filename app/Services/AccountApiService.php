@@ -319,16 +319,93 @@ class AccountApiService
         }
     }
 
-    public function listInvoices(): array
+    public function listInvoices(?int $subscriptionId = null): array
     {
+        if (! $this->hasToken()) {
+            return $this->empty(__('account.login_required'));
+        }
         try {
+            $params = array_filter([
+                'subscription_id' => $subscriptionId,
+            ], fn ($v) => $v !== null && $v !== '');
+
             return $this->decode(
-                $this->authed()->get($this->url('subscriptions/invoices/index'))
+                $this->authed()->get($this->url('subscriptions/invoices/index'), $params)
             );
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::listInvoices failed', ['error' => $e->getMessage()]);
 
             return $this->empty();
+        }
+    }
+
+    public function subscriptionInvoicePdfUrl(int $invoiceId): string
+    {
+        return $this->url('subscriptions/invoices/'.$invoiceId.'/pdf');
+    }
+
+    /**
+     * Resolve a downloadable invoice URL from an API invoice row.
+     *
+     * @param  array<string, mixed>  $invoice
+     */
+    public function resolveInvoiceDownloadUrl(array $invoice): ?string
+    {
+        foreach (['pdf_url', 'invoice_url', 'url', 'file', 'link', 'download_url'] as $key) {
+            $url = trim((string) ($invoice[$key] ?? ''));
+            if ($url !== '') {
+                if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+                    return $url;
+                }
+                if (str_starts_with($url, '/')) {
+                    return rtrim(preg_replace('#/api/?$#i', '', $this->baseUrl), '/').$url;
+                }
+            }
+        }
+
+        $id = (int) ($invoice['id'] ?? $invoice['invoice_id'] ?? 0);
+
+        return $id > 0 ? $this->subscriptionInvoicePdfUrl($id) : null;
+    }
+
+    public function fetchInvoicePdf(string $url): ?string
+    {
+        if (! $this->hasToken()) {
+            return null;
+        }
+
+        $url = trim($url);
+        if ($url === '') {
+            return null;
+        }
+
+        try {
+            $response = $this->authed()
+                ->withOptions(['timeout' => 30, 'connect_timeout' => 10])
+                ->get($url);
+
+            if (! $response->successful()) {
+                Log::warning('AccountApiService::fetchInvoicePdf HTTP error', [
+                    'status' => $response->status(),
+                    'url' => $url,
+                ]);
+
+                return null;
+            }
+
+            $body = $response->body();
+            if ($body === '' || strlen($body) < 64) {
+                return null;
+            }
+
+            return $body;
+        } catch (\Throwable $e) {
+            Log::warning('AccountApiService::fetchInvoicePdf failed', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
         }
     }
 
@@ -1825,15 +1902,37 @@ class AccountApiService
 
     public function notificationCount(): array
     {
+        if (! $this->hasToken()) {
+            return $this->empty(__('account.login_required'));
+        }
         try {
             return $this->decode($this->authed()->get($this->url('notifications/count')));
         } catch (\Throwable $e) {
+            Log::warning('AccountApiService::notificationCount failed', ['error' => $e->getMessage()]);
+
             return $this->empty();
         }
     }
 
+    public function unreadNotificationCount(): int
+    {
+        $result = $this->notificationCount();
+        if (! ($result['ok'] ?? false)) {
+            return 0;
+        }
+        $data = $result['data'] ?? [];
+        if (! is_array($data)) {
+            return is_numeric($data) ? (int) $data : 0;
+        }
+
+        return (int) ($data['count'] ?? $data['unread'] ?? $data['unread_count'] ?? $data['total'] ?? 0);
+    }
+
     public function notifications(int $page = 1): array
     {
+        if (! $this->hasToken()) {
+            return $this->empty(__('account.login_required'));
+        }
         try {
             return $this->decode(
                 $this->authed()->get($this->url('notifications'), ['page' => $page])
@@ -1847,9 +1946,14 @@ class AccountApiService
 
     public function markNotificationsRead(): array
     {
+        if (! $this->hasToken()) {
+            return $this->empty(__('account.login_required'));
+        }
         try {
             return $this->decode($this->authed()->get($this->url('notifications/read-all')));
         } catch (\Throwable $e) {
+            Log::warning('AccountApiService::markNotificationsRead failed', ['error' => $e->getMessage()]);
+
             return $this->empty();
         }
     }

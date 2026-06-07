@@ -186,6 +186,8 @@
                 </div>
             </div>
 
+            <livewire:header.notification-bell />
+
             <div class="header__action-chip header__action-chip--cart" style="--ha-i:1">
             {{-- Cart Component --}}
             <livewire:cart.cart-manager />
@@ -296,6 +298,15 @@
                                     </svg>
                                 </span>
                                 <span>{{ __('account.orders') }}</span>
+                            </a>
+
+                            <a href="{{ route('account.notifications.index') }}" class="header__profile-item" role="menuitem">
+                                <span class="header__profile-item-icon" aria-hidden="true">
+                                    <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/>
+                                    </svg>
+                                </span>
+                                <span>{{ __('account.notifications') }}</span>
                             </a>
 
                             <a href="{{ route('account.wallet') }}" class="header__profile-item" role="menuitem">
@@ -723,6 +734,46 @@
         width: 0.65rem;
         height: 0.65rem;
         opacity: 0.55;
+    }
+
+    .header__notif-btn {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.375rem;
+        height: 2.375rem;
+        border-radius: 999px;
+        color: #334155;
+        text-decoration: none;
+        transition: background 0.22s ease, color 0.22s ease;
+    }
+
+    .header__notif-btn svg {
+        width: 1.25rem;
+        height: 1.25rem;
+    }
+
+    .header__notif-btn:hover {
+        background: rgba(39, 159, 249, 0.1);
+        color: #279ff9;
+    }
+
+    .header__notif-badge {
+        position: absolute;
+        top: 0.15rem;
+        inset-inline-end: 0.1rem;
+        min-width: 1.05rem;
+        height: 1.05rem;
+        padding: 0 0.25rem;
+        border-radius: 999px;
+        background: #ef4444;
+        color: #fff;
+        font-size: 0.625rem;
+        font-weight: 800;
+        line-height: 1.05rem;
+        text-align: center;
+        border: 2px solid #fff;
     }
 
     .header__profile-btn {

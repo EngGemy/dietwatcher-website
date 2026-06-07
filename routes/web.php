@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Account\AccountAuthController;
+use App\Http\Controllers\Account\InvoiceExportController;
 use App\Http\Controllers\BlogController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\ContactController;
@@ -13,7 +14,10 @@ use App\Http\Controllers\OtpController;
 use App\Http\Controllers\PageContentController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SubscriptionController;
+use App\Livewire\Account\Addresses;
 use App\Livewire\Account\Dashboard;
+use App\Livewire\Account\Invoices;
+use App\Livewire\Account\Notifications;
 use App\Livewire\Account\Profile;
 use App\Livewire\Account\Subscriptions\Index;
 use App\Livewire\Account\Subscriptions\Show;
@@ -207,6 +211,10 @@ Route::prefix('account')->group(function () {
         Route::get('/orders', App\Livewire\Account\Orders\Index::class)->name('account.orders.index');
         Route::get('/orders/{id}', App\Livewire\Account\Orders\Show::class)->whereNumber('id')->name('account.orders.show');
         Route::get('/wallet', Wallet::class)->name('account.wallet');
+        Route::get('/invoices', Invoices::class)->name('account.invoices.index');
+        Route::get('/invoices/export', InvoiceExportController::class)->name('account.invoices.export');
+        Route::get('/notifications', Notifications::class)->name('account.notifications.index');
+        Route::get('/addresses', Addresses::class)->name('account.addresses.index');
         Route::get('/profile', Profile::class)->name('account.profile');
     });
 });
