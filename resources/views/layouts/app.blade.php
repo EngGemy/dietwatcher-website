@@ -343,6 +343,9 @@
     {{-- Page scripts first so globals (e.g. checkoutPage) exist before Alpine boots via Livewire --}}
     @stack('scripts')
 
+    {{-- Floating AI Meal Assistant --}}
+    <x-ai-assistant-fab />
+
     {{-- Livewire (includes Alpine.js) --}}
     @livewireScripts
 </body>

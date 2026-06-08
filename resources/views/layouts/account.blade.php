@@ -330,6 +330,8 @@
     </div>
 </div>
 
+<x-ai-assistant-fab />
+
 @livewireScripts
 @stack('scripts')
 </body>
