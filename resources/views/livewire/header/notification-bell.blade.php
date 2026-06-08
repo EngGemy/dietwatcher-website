@@ -1,5 +1,5 @@
-@if($visible)
-    <div class="header__action-chip header__action-chip--notif" style="--ha-i:0.5">
+<div class="header__action-chip header__action-chip--notif @unless($visible) hidden @endunless" style="--ha-i:0.5" @unless($visible) aria-hidden="true" @endunless>
+    @if($visible)
         <a
             href="{{ route('account.notifications.index') }}"
             class="header__notif-btn"
@@ -13,5 +13,5 @@
                 <span class="header__notif-badge">{{ $unreadCount > 99 ? '99+' : $unreadCount }}</span>
             @endif
         </a>
-    </div>
-@endif
+    @endif
+</div>
