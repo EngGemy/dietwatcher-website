@@ -106,6 +106,7 @@
             @php
                 // Full-card artwork (text baked into PNG). English: meal-plan-{1..3}.png.
                 // Arabic: meal-plan-{1..3}-ar.png (same layout as English cards).
+                // 1 = Lifestyle, 2 = Medical condition, 3 = Weight management.
                 $__homepageMealPlanCardImage = static function (int $imgIdx): string {
                     $locale = strtok((string) app()->getLocale(), '_') ?: app()->getLocale();
                     $localizedRel = 'assets/images/meal-plan-' . $imgIdx . '-' . $locale . '.png';
@@ -115,31 +116,60 @@
 
                     return asset('assets/images/meal-plan-' . $imgIdx . '.png');
                 };
+
+                $__localizedCategoryField = static function (mixed $value): string {
+                    if (is_array($value)) {
+                        $locale = app()->getLocale();
+
+                        return (string) ($value[$locale] ?? $value['ar'] ?? $value['en'] ?? reset($value) ?: '');
+                    }
+
+                    return (string) ($value ?? '');
+                };
+
+                $__mealPlanCardImageForCategory = static function (array $category) use ($__homepageMealPlanCardImage, $__localizedCategoryField): string {
+                    $haystack = mb_strtolower(implode(' ', array_filter([
+                        $__localizedCategoryField($category['name'] ?? ''),
+                        $__localizedCategoryField($category['description'] ?? ''),
+                    ])));
+
+                    if (preg_match('/وزن|weight\s*manag|weight\s*loss|healthy\s*weight/u', $haystack)) {
+                        return $__homepageMealPlanCardImage(3);
+                    }
+
+                    if (preg_match('/طب|medical|health\s*condition/u', $haystack)) {
+                        return $__homepageMealPlanCardImage(2);
+                    }
+
+                    if (preg_match('/نمط|حياة|lifestyle|everyday\s*wellness/u', $haystack)) {
+                        return $__homepageMealPlanCardImage(1);
+                    }
+
+                    return $__homepageMealPlanCardImage(1);
+                };
             @endphp
 
             <div class="mb-10 grid grid-cols-1 gap-6 md:mb-14 md:grid-cols-2 lg:grid-cols-3" data-anim-stagger>
                 @forelse($mealPlanCategories as $category)
                     @php
-                        $descRaw = $category['description'] ?? '';
-                        $catDesc = is_array($descRaw)
-                            ? (string) ($descRaw[app()->getLocale()] ?? $descRaw['en'] ?? $descRaw['ar'] ?? reset($descRaw) ?: '')
-                            : (string) $descRaw;
-                        $imgIdx = $loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3;
-                        $cardImg = $__homepageMealPlanCardImage($imgIdx);
+                        $catName = $__localizedCategoryField($category['name'] ?? '');
+                        $catDesc = $__localizedCategoryField($category['description'] ?? '');
+                        $catLabel = $catName !== '' ? $catName : $catDesc;
+                        $cardImg = $__mealPlanCardImageForCategory($category);
                     @endphp
                     <a href="{{ route('meal-plans.index', ['category' => $category['id']]) }}"
                        class="block rounded-xl border border-gray-300 p-3 transition hover:border-blue/40 hover:shadow-md"
                        data-anim="fade-up">
-                        <img src="{{ $cardImg }}" class="mb-4 w-full rounded-lg" alt="" />
+                        <img src="{{ $cardImg }}" class="mb-4 w-full rounded-lg" alt="{{ $catLabel }}" />
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
-                            {{ $catDesc ?: '' }}
+                            {{ $catLabel }}
                         </p>
                     </a>
                 @empty
                     {{-- Fallback static content when no categories from external DB --}}
                     <a href="{{ route('meal-plans.index') }}"
                        class="block rounded-xl border border-gray-300 p-3 transition hover:border-blue/40 hover:shadow-md">
-                        <img src="{{ $__homepageMealPlanCardImage(1) }}" class="mb-4 w-full rounded-lg" alt="" />
+                        <img src="{{ $__homepageMealPlanCardImage(3) }}" class="mb-4 w-full rounded-lg" alt="" />
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
                             {{ __('Provides balanced, portion-controlled meals to support healthy weight goals.') }}
                         </p>
@@ -153,7 +183,7 @@
                     </a>
                     <a href="{{ route('meal-plans.index') }}"
                        class="block rounded-xl border border-gray-300 p-3 transition hover:border-blue/40 hover:shadow-md">
-                        <img src="{{ $__homepageMealPlanCardImage(3) }}" class="mb-4 w-full rounded-lg" alt="" />
+                        <img src="{{ $__homepageMealPlanCardImage(1) }}" class="mb-4 w-full rounded-lg" alt="" />
                         <p class="px-2 text-center text-lg text-black/70 md:text-xl">
                             {{ __('Focuses on balanced, nutritious eating for everyday wellness.') }}
                         </p>
@@ -1145,6 +1175,9 @@
     will-change: transform;
     transform: translate3d(0, 0, 0);
 }
+.products-rail.is-initialized .products-rail__track {
+    direction: ltr;
+}
 .products-rail__hint {
     display: flex;
     align-items: center;
@@ -1163,6 +1196,7 @@
 .products-rail__card {
     width: var(--card-width);
     min-width: var(--card-width);
+    flex: 0 0 var(--card-width);
     transform: translateY(0) scale(1);
     transition: transform .36s cubic-bezier(.16,1,.3,1), box-shadow .36s ease;
 }
@@ -1348,6 +1382,9 @@
     will-change: transform;
     transform: translate3d(0,0,0);
     padding: .5rem .25rem;
+}
+.testimonials-rail.is-initialized .testimonials-rail__track {
+    direction: ltr;
 }
 .testimonials-rail__item {
     width: var(--t-card-w);
@@ -1766,7 +1803,7 @@
             }
         })();
 
-        /* ─── Shared infinite rail (store + testimonials): never empty, seamless loop ─── */
+        /* ─── Shared infinite rail (store + testimonials): seamless loop, no empty gaps ─── */
         function initInfiniteRail(cfg) {
             var section = cfg.section;
             var viewport = cfg.viewport;
@@ -1777,35 +1814,79 @@
             var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             var canHoverPause = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
             var minItemWidth = parseInt(section.getAttribute('data-rail-min-width') || '240', 10);
-            var baseItems = Array.from(track.querySelectorAll(itemSelector));
-            if (!baseItems.length) return null;
+            var originals = Array.from(track.querySelectorAll(itemSelector + ':not([data-rail-clone="1"])'));
+            if (!originals.length) {
+                originals = Array.from(track.querySelectorAll(itemSelector));
+            }
+            if (!originals.length) return null;
 
             var state = {
                 x: 0,
                 loopWidth: 0,
-                speed: cfg.speed || 0.065,
+                speed: cfg.speed || 0.08,
                 isPaused: false,
                 isDragging: false,
                 dragStartX: 0,
                 dragStartOffset: 0,
                 pointerId: null,
                 resumeTimer: null,
-                forceResumeTimer: null,
                 rafId: null,
                 lastTs: 0,
-                leftView: false,
+                rebuildTimer: null,
             };
 
-            function measureWidth() {
-                var gap = parseFloat(getComputedStyle(track).columnGap || getComputedStyle(track).gap || '0') || 0;
-                var total = 0;
-                baseItems.forEach(function(item, idx) {
-                    var w = Math.max(item.offsetWidth, item.getBoundingClientRect().width, minItemWidth);
-                    total += w;
-                    if (idx < baseItems.length - 1) total += gap;
-                });
+            function measureLoopWidth() {
+                var gap = parseFloat(getComputedStyle(track).gap || getComputedStyle(track).columnGap || '0') || 0;
 
-                return Math.max(total, minItemWidth);
+                if (originals.length === 1) {
+                    return Math.max(originals[0].offsetWidth, minItemWidth);
+                }
+
+                var first = originals[0];
+                var last = originals[originals.length - 1];
+                var span = (last.offsetLeft + last.offsetWidth) - first.offsetLeft;
+
+                return Math.max(span + gap, minItemWidth);
+            }
+
+            function cloneItem(item) {
+                var clone = item.cloneNode(true);
+                clone.setAttribute('data-rail-clone', '1');
+                clone.setAttribute('aria-hidden', 'true');
+                clone.querySelectorAll('a, button, input, select, textarea').forEach(function(el) {
+                    el.setAttribute('tabindex', '-1');
+                });
+                return clone;
+            }
+
+            function removeClones() {
+                track.querySelectorAll('[data-rail-clone="1"]').forEach(function(node) {
+                    node.remove();
+                });
+            }
+
+            function getRequiredClonePasses(loopWidth) {
+                var viewportWidth = viewport.clientWidth || section.clientWidth || window.innerWidth;
+                if (loopWidth <= 0) return 3;
+
+                return Math.max(3, Math.ceil(viewportWidth / loopWidth) + 2);
+            }
+
+            function ensureClones(loopWidth) {
+                removeClones();
+
+                var prependFrag = document.createDocumentFragment();
+                originals.forEach(function(item) {
+                    prependFrag.appendChild(cloneItem(item));
+                });
+                track.insertBefore(prependFrag, originals[0]);
+
+                var passes = getRequiredClonePasses(loopWidth);
+                for (var pass = 0; pass < passes; pass++) {
+                    originals.forEach(function(item) {
+                        track.appendChild(cloneItem(item));
+                    });
+                }
             }
 
             function normalizeX() {
@@ -1818,35 +1899,25 @@
                 track.style.transform = 'translate3d(' + state.x + 'px,0,0)';
             }
 
-            function appendCloneSets() {
-                Array.from(track.querySelectorAll('[data-rail-clone="1"]')).forEach(function(node) {
-                    node.remove();
-                });
-                for (var pass = 0; pass < 2; pass++) {
-                    baseItems.forEach(function(item) {
-                        var clone = item.cloneNode(true);
-                        clone.setAttribute('data-rail-clone', '1');
-                        clone.setAttribute('aria-hidden', 'true');
-                        clone.querySelectorAll('a, button, input, select, textarea').forEach(function(el) {
-                            el.setAttribute('tabindex', '-1');
-                        });
-                        track.appendChild(clone);
-                    });
-                }
-            }
-
-            function buildRail(restartFromStart) {
-                var keep = restartFromStart ? 0 : state.x;
-                appendCloneSets();
-                state.loopWidth = measureWidth();
-                state.x = restartFromStart ? 0 : keep;
+            function buildRail(resetPosition) {
+                var keepX = resetPosition ? 0 : state.x;
+                state.loopWidth = measureLoopWidth();
+                ensureClones(state.loopWidth);
+                state.x = keepX;
                 normalizeX();
                 render();
             }
 
+            function scheduleRebuild(resetPosition) {
+                clearTimeout(state.rebuildTimer);
+                state.rebuildTimer = setTimeout(function() {
+                    buildRail(resetPosition);
+                }, 50);
+            }
+
             function tick(ts) {
                 if (!state.lastTs) state.lastTs = ts;
-                var dt = Math.min(ts - state.lastTs, 50);
+                var dt = Math.min(ts - state.lastTs, 32);
                 state.lastTs = ts;
                 if (!prefersReduced && !state.isPaused && !state.isDragging && state.loopWidth > 0) {
                     state.x -= state.speed * dt;
@@ -1859,15 +1930,13 @@
             function pauseRail(forceResumeMs) {
                 state.isPaused = true;
                 clearTimeout(state.resumeTimer);
-                clearTimeout(state.forceResumeTimer);
-                state.forceResumeTimer = setTimeout(function() {
+                state.resumeTimer = setTimeout(function() {
                     state.isPaused = false;
-                }, forceResumeMs || 3500);
+                }, forceResumeMs || 1200);
             }
 
             function resumeRail(delay) {
                 clearTimeout(state.resumeTimer);
-                clearTimeout(state.forceResumeTimer);
                 state.resumeTimer = setTimeout(function() {
                     state.isPaused = false;
                 }, delay || 0);
@@ -1880,7 +1949,7 @@
                 state.pointerId = e.pointerId;
                 state.dragStartX = e.clientX;
                 state.dragStartOffset = state.x;
-                pauseRail(6000);
+                pauseRail(2500);
                 viewport.classList.add('is-dragging');
                 viewport.setPointerCapture(e.pointerId);
             }
@@ -1897,51 +1966,53 @@
                 state.isDragging = false;
                 viewport.classList.remove('is-dragging');
                 try { viewport.releasePointerCapture(e.pointerId); } catch (err) {}
-                resumeRail(400);
+                resumeRail(200);
             }
 
             buildRail(true);
             section.classList.add('is-initialized');
 
-            track.querySelectorAll('img').forEach(function(img) {
-                if (!img.complete) {
-                    img.addEventListener('load', function() { buildRail(false); }, { once: true });
-                    img.addEventListener('error', function() { buildRail(false); }, { once: true });
-                }
+            originals.forEach(function(item) {
+                item.querySelectorAll('img').forEach(function(img) {
+                    if (!img.complete) {
+                        img.addEventListener('load', function() { scheduleRebuild(false); }, { once: true });
+                        img.addEventListener('error', function() { scheduleRebuild(false); }, { once: true });
+                    }
+                });
             });
 
+            if (typeof ResizeObserver !== 'undefined') {
+                var resizeObserver = new ResizeObserver(function() {
+                    scheduleRebuild(false);
+                });
+                originals.forEach(function(item) {
+                    resizeObserver.observe(item);
+                });
+            }
+
             window.addEventListener('load', function() {
-                setTimeout(function() { buildRail(false); }, 80);
+                scheduleRebuild(false);
             }, { once: true });
 
             var resizeTimer = null;
             window.addEventListener('resize', function() {
                 clearTimeout(resizeTimer);
-                resizeTimer = setTimeout(function() { buildRail(false); }, 180);
+                resizeTimer = setTimeout(function() { buildRail(false); }, 150);
             }, { passive: true });
 
             if ('IntersectionObserver' in window) {
                 var visObs = new IntersectionObserver(function(entries) {
                     entries.forEach(function(entry) {
-                        if (entry.isIntersecting) {
-                            if (state.leftView) {
-                                buildRail(true);
-                            }
-                            state.leftView = false;
-                            state.isPaused = false;
-                        } else {
-                            state.leftView = true;
-                            state.isPaused = true;
-                        }
+                        state.isPaused = !entry.isIntersecting;
                     });
-                }, { threshold: 0.06, rootMargin: '48px 0px' });
+                }, { threshold: 0.05, rootMargin: '80px 0px' });
                 visObs.observe(section);
             }
 
             if (!prefersReduced) {
                 if (canHoverPause) {
-                    section.addEventListener('mouseenter', function() { pauseRail(8000); });
-                    section.addEventListener('mouseleave', function() { resumeRail(120); });
+                    section.addEventListener('mouseenter', function() { pauseRail(1500); });
+                    section.addEventListener('mouseleave', function() { resumeRail(80); });
                 }
 
                 viewport.addEventListener('pointerdown', pointerDown);
@@ -1951,7 +2022,7 @@
                 viewport.addEventListener('lostpointercapture', function() {
                     state.isDragging = false;
                     viewport.classList.remove('is-dragging');
-                    resumeRail(400);
+                    resumeRail(200);
                 });
 
                 state.rafId = requestAnimationFrame(tick);
@@ -1974,7 +2045,7 @@
                 viewport: section.querySelector('.products-rail__viewport'),
                 track: section.querySelector('[data-products-track]'),
                 itemSelector: '[data-rail-item]',
-                speed: 0.07,
+                speed: 0.1,
                 ignoreDragSelector: '[data-add-to-cart-btn]',
             });
 

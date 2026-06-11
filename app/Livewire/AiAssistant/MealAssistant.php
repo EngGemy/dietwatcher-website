@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Livewire\AiAssistant;
 
 use App\Models\Faq;
-use App\Models\Meal;
 use App\Models\Settings\Setting;
 use App\Models\WhyChooseSection;
+use App\Services\ExternalDataService;
 use App\Services\GeminiService;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\On;
@@ -73,12 +73,20 @@ class MealAssistant extends Component
 
     public string $recommendationSource = '';
 
+    public bool $catalogUnavailable = false;
+
     public string $supportInput = '';
 
     /** @var array<int, array{role: string, content: string}> */
     public array $supportMessages = [];
 
     public bool $loadingSupport = false;
+
+    /** @var array<int, array<string, mixed>> */
+    public array $supportMealPicks = [];
+
+    /** @var array<int, array<string, mixed>> */
+    public array $supportPlanPicks = [];
 
     public bool $geminiConfigured = false;
 
@@ -329,9 +337,11 @@ class MealAssistant extends Component
         $this->loadingRecommendations = true;
         $this->recommendations = [];
         $this->recommendationSource = '';
+        $this->catalogUnavailable = false;
 
-        $meals = $this->activeMeals();
+        $meals = $this->catalogMeals();
         if ($meals->isEmpty()) {
+            $this->catalogUnavailable = true;
             $this->loadingRecommendations = false;
 
             return;
@@ -375,24 +385,14 @@ class MealAssistant extends Component
         $this->supportMessages[] = ['role' => 'user', 'content' => $question];
         $this->supportInput = '';
         $this->loadingSupport = true;
+        $this->supportMealPicks = [];
+        $this->supportPlanPicks = [];
 
-        $gemini = app(GeminiService::class);
-        $answer = null;
+        $response = $this->buildSupportResponse($question);
 
-        if ($gemini->isConfigured()) {
-            $answer = $gemini->generate(
-                $this->buildAdvisorSystemPrompt(),
-                $this->supportMessages,
-                false,
-                0.65
-            );
-        }
-
-        if ($answer === null) {
-            $answer = $this->fallbackSupportAnswer($question);
-        }
-
-        $this->supportMessages[] = ['role' => 'assistant', 'content' => $answer];
+        $this->supportMessages[] = ['role' => 'assistant', 'content' => $response['text']];
+        $this->supportMealPicks = $response['meals'];
+        $this->supportPlanPicks = $response['plans'];
         session([self::SESSION_SUPPORT => $this->supportMessages]);
         $this->loadingSupport = false;
     }
@@ -400,30 +400,49 @@ class MealAssistant extends Component
     public function clearSupportChat(): void
     {
         $this->supportMessages = [];
+        $this->supportMealPicks = [];
+        $this->supportPlanPicks = [];
         session()->forget(self::SESSION_SUPPORT);
         $this->ensureSupportWelcome();
     }
 
-    public function addMealToCart(int $mealId): void
+    public function addMealToCart(int $mealId, string $name = '', float $price = 0, string $image = ''): void
     {
         if ($mealId <= 0) {
             return;
         }
 
-        $meal = Meal::query()->active()->storeProduct()->find($mealId);
-        if ($meal === null) {
-            return;
+        if ($name === '') {
+            foreach ($this->recommendations as $rec) {
+                if ((int) ($rec['meal_id'] ?? 0) === $mealId) {
+                    $name = (string) ($rec['name'] ?? '');
+                    $price = (float) ($rec['price'] ?? $price);
+                    $image = (string) ($rec['image'] ?? $image);
+                    break;
+                }
+            }
         }
 
-        $locale = app()->getLocale();
-        $name = (string) ($meal->translate($locale)?->name ?? $meal->name ?? '');
-        $image = (string) ($meal->cover_image ?? '');
+        if ($name === '') {
+            $meal = $this->catalogMeals()->firstWhere('id', $mealId);
+            if (! is_array($meal)) {
+                return;
+            }
+
+            $name = (string) ($meal['name'] ?? '');
+            $price = (float) ($meal['price'] ?? $price);
+            $image = (string) ($meal['image_url'] ?? $image);
+        }
+
+        if ($name === '') {
+            return;
+        }
 
         $this->dispatch(
             'add-to-cart',
             mealId: $mealId,
             name: $name,
-            price: (float) $meal->price,
+            price: $price,
             image: $image,
         );
     }
@@ -514,17 +533,22 @@ class MealAssistant extends Component
     }
 
     /**
-     * @return Collection<int, Meal>
+     * Store catalog meals from the external API (same source as /store).
+     *
+     * @return Collection<int, array<string, mixed>>
      */
-    private function activeMeals(): Collection
+    private function catalogMeals(): Collection
     {
-        return Meal::query()
-            ->active()
-            ->storeProduct()
-            ->orderByDesc('is_active')
-            ->orderBy('id')
-            ->limit(60)
-            ->get();
+        try {
+            $meals = app(ExternalDataService::class)->getAllMeals();
+        } catch (\Throwable) {
+            $meals = [];
+        }
+
+        return collect($meals)
+            ->filter(fn (mixed $meal): bool => is_array($meal) && (int) ($meal['id'] ?? 0) > 0)
+            ->unique(fn (array $meal): int => (int) $meal['id'])
+            ->values();
     }
 
     private function fetchGeminiReport(GeminiService $gemini): array
@@ -651,21 +675,26 @@ PROMPT;
     }
 
     /**
-     * @param  Collection<int, Meal>  $meals
+     * @param  Collection<int, array<string, mixed>>  $meals
      * @return array<int, array<string, mixed>>
      */
     private function fetchGeminiRecommendations(GeminiService $gemini, Collection $meals): array
     {
-        $locale = app()->getLocale();
-        $catalog = $meals->map(fn (Meal $meal) => [
-            'id' => $meal->id,
-            'name' => (string) ($meal->translate($locale)?->name ?? $meal->name),
-            'calories' => (int) $meal->calories,
-            'protein' => (float) $meal->protein,
-            'carbs' => (float) $meal->carbs,
-            'fat' => (float) $meal->fat,
-            'price' => (float) $meal->price,
-        ])->values()->all();
+        $catalog = $meals
+            ->take(80)
+            ->map(fn (array $meal): array => [
+                'id' => (int) ($meal['id'] ?? 0),
+                'name' => (string) ($meal['name'] ?? ''),
+                'calories' => (int) ($meal['calories'] ?? 0),
+                'protein' => (float) ($meal['protein'] ?? 0),
+                'carbs' => (float) ($meal['carbs'] ?? 0),
+                'fat' => (float) ($meal['fat'] ?? 0),
+                'price' => (float) ($meal['price'] ?? 0),
+                'group_name' => (string) ($meal['group_name'] ?? ''),
+                'tags' => array_column($meal['tags'] ?? [], 'name'),
+            ])
+            ->values()
+            ->all();
 
         $lang = $locale === 'ar' ? 'Arabic' : 'English';
 
@@ -702,14 +731,14 @@ PROMPT;
             return [];
         }
 
-        $mealMap = $meals->keyBy('id');
+        $mealMap = $meals->keyBy(fn (array $meal): int => (int) ($meal['id'] ?? 0));
 
         return collect($rows)
             ->filter(fn ($row) => is_array($row))
             ->map(function (array $row) use ($mealMap, $locale): ?array {
                 $mealId = (int) ($row['meal_id'] ?? 0);
                 $meal = $mealMap->get($mealId);
-                if ($meal === null) {
+                if (! is_array($meal)) {
                     return null;
                 }
 
@@ -731,39 +760,59 @@ PROMPT;
     }
 
     /**
-     * @param  Collection<int, Meal>  $meals
+     * @param  Collection<int, array<string, mixed>>  $meals
      * @return array<int, array<string, mixed>>
      */
     private function localRecommendations(Collection $meals): array
     {
+        $mealsPerDay = max(1, $this->mealsPerDay);
         $targetCal = (float) ($this->targetCalories ?? 0);
-        $targetProtein = (float) ($this->macroTargets['protein_g'] ?? 0);
-        $targetCarbs = (float) ($this->macroTargets['carbs_g'] ?? 0);
-        $targetFat = (float) ($this->macroTargets['fat_g'] ?? 0);
+        $perMealCal = max(120, $targetCal / $mealsPerDay);
+        $perMealProtein = max(5, (float) ($this->macroTargets['protein_g'] ?? 0) / $mealsPerDay);
+        $perMealCarbs = max(5, (float) ($this->macroTargets['carbs_g'] ?? 0) / $mealsPerDay);
+        $perMealFat = max(2, (float) ($this->macroTargets['fat_g'] ?? 0) / $mealsPerDay);
         $locale = app()->getLocale();
 
-        return $meals
-            ->map(function (Meal $meal) use ($targetCal, $targetProtein, $targetCarbs, $targetFat): array {
-                $cal = max(1, (int) $meal->calories);
+        $ranked = $meals
+            ->map(function (array $meal) use ($perMealCal, $perMealProtein, $perMealCarbs, $perMealFat): array {
+                $cal = (int) ($meal['calories'] ?? 0);
+                $protein = (float) ($meal['protein'] ?? 0);
+                $carbs = (float) ($meal['carbs'] ?? 0);
+                $fat = (float) ($meal['fat'] ?? 0);
+
+                if ($cal <= 0) {
+                    return ['meal' => $meal, 'distance' => 0.75];
+                }
+
                 $score = (
-                    abs($cal - $targetCal) / max($targetCal, 1) * 0.45
-                    + abs((float) $meal->protein - $targetProtein) / max($targetProtein, 1) * 0.25
-                    + abs((float) $meal->carbs - $targetCarbs) / max($targetCarbs, 1) * 0.15
-                    + abs((float) $meal->fat - $targetFat) / max($targetFat, 1) * 0.15
+                    abs($cal - $perMealCal) / $perMealCal * 0.5
+                    + abs($protein - $perMealProtein) / $perMealProtein * 0.25
+                    + abs($carbs - $perMealCarbs) / max($perMealCarbs, 1) * 0.15
+                    + abs($fat - $perMealFat) / max($perMealFat, 1) * 0.1
                 );
 
                 return ['meal' => $meal, 'distance' => $score];
             })
             ->sortBy('distance')
-            ->take(8)
-            ->map(function (array $row) use ($locale, $targetCal): array {
-                /** @var Meal $meal */
+            ->take(8);
+
+        if ($ranked->isEmpty()) {
+            $ranked = $meals->take(8)->map(fn (array $meal): array => ['meal' => $meal, 'distance' => 0.5]);
+        }
+
+        return $ranked
+            ->map(function (array $row) use ($locale, $perMealCal): array {
                 $meal = $row['meal'];
-                $fit = (int) max(55, min(98, round(100 - ($row['distance'] * 100))));
+                $fit = (int) max(58, min(98, round(100 - ($row['distance'] * 55))));
+                $mealCal = (int) ($meal['calories'] ?? 0);
 
                 $reason = $locale === 'ar'
-                    ? sprintf('سعرات %d قريبة من هدفك (%d سعرة) مع توازن مناسب للبروتين والكارب.', (int) $meal->calories, (int) $targetCal)
-                    : sprintf('%d kcal aligns with your %d kcal target with balanced macros.', (int) $meal->calories, (int) $targetCal);
+                    ? ($mealCal > 0
+                        ? sprintf('وجبة من متجرنا بـ %d سعرة — قريبة من هدفك لكل وجبة (~%d سعرة).', $mealCal, (int) round($perMealCal))
+                        : 'وجبة من متجرنا تناسب أهدافك الغذائية — اضغط لعرض التفاصيل.')
+                    : ($mealCal > 0
+                        ? sprintf('Store meal at %d kcal — close to your per-meal target (~%d kcal).', $mealCal, (int) round($perMealCal))
+                        : 'A store meal that fits your nutrition goals — tap to view details.');
 
                 return $this->formatRecommendationCard($meal, $reason, $fit);
             })
@@ -772,21 +821,25 @@ PROMPT;
     }
 
     /**
+     * @param  array<string, mixed>  $meal
      * @return array<string, mixed>
      */
-    private function formatRecommendationCard(Meal $meal, string $reason, int $fitScore): array
+    private function formatRecommendationCard(array $meal, string $reason, int $fitScore): array
     {
-        $locale = app()->getLocale();
+        $mealId = (int) ($meal['id'] ?? 0);
+        $price = (float) ($meal['price'] ?? 0);
+        $offerPrice = (float) ($meal['offer_price'] ?? 0);
 
         return [
-            'meal_id' => $meal->id,
-            'name' => (string) ($meal->translate($locale)?->name ?? $meal->name),
-            'calories' => (int) $meal->calories,
-            'protein' => (float) $meal->protein,
-            'carbs' => (float) $meal->carbs,
-            'fat' => (float) $meal->fat,
-            'price' => (float) $meal->price,
-            'image' => (string) ($meal->cover_image ?? ''),
+            'meal_id' => $mealId,
+            'name' => (string) ($meal['name'] ?? ''),
+            'calories' => (int) ($meal['calories'] ?? 0),
+            'protein' => (float) ($meal['protein'] ?? 0),
+            'carbs' => (float) ($meal['carbs'] ?? 0),
+            'fat' => (float) ($meal['fat'] ?? 0),
+            'price' => $offerPrice > 0 && $offerPrice < $price ? $offerPrice : $price,
+            'image' => (string) ($meal['image_url'] ?? ''),
+            'url' => $mealId > 0 ? route('store.show', $mealId) : '',
             'reason' => $reason,
             'fit_score' => max(0, min(100, $fitScore)),
         ];
@@ -818,21 +871,30 @@ PROMPT;
             ->implode("\n\n");
 
         $profileJson = json_encode($this->userProfilePayload(), JSON_UNESCAPED_UNICODE);
+        $catalogJson = json_encode($this->catalogSummaryForPrompt(), JSON_UNESCAPED_UNICODE);
+        $storeUrl = route('store.index');
+        $plansUrl = route('meal-plans.index');
+        $checkoutUrl = route('checkout.index');
 
         $langInstruction = $locale === 'ar'
-            ? 'رد بالعربية ما لم يكتب العميل بالإنجليزية. كن ودوداً ومحترفاً مثل أفضل مستشار مبيعات.'
-            : 'Reply in English unless the user writes in Arabic. Be warm and professional like a top sales advisor.';
+            ? 'رد بالعربية ما لم يكتب العميل بالإنجليزية. كن ودوداً ومحترفاً مثل أفضل مستشار مبيعات. اذكر أسماء وجبات أو باقات محددة من الكتالوج عند التوصية.'
+            : 'Reply in English unless the user writes in Arabic. Be warm and professional like a top sales advisor. Name specific meals or plans from the catalog when recommending.';
 
         return <<<PROMPT
 You are the AI nutrition consultant and customer success advisor for {$siteName}, a premium healthy meal subscription and store in Saudi Arabia.
-Your job: answer questions, recommend meal plans or store products, handle objections, and guide the customer to the best next step (subscribe, browse store, or contact support).
-Use the customer profile when relevant. Ask one follow-up question when information is missing.
-Keep answers concise (3-6 sentences) unless the user asks for a detailed report.
+Your job: answer ANY customer question — plans, store meals, delivery, pricing, weight loss, subscription steps, or general nutrition.
+Recommend specific meals or subscription plans from the catalog below when relevant. Mention real product names.
+Use the customer profile when available. Ask one short follow-up only when critical info is missing.
+Keep answers helpful and concise (3-8 sentences) unless the user asks for detail.
 {$langInstruction}
 
-Customer profile (if available):
+Customer profile:
 {$profileJson}
 
+Store catalog (meals + subscription plans):
+{$catalogJson}
+
+Useful links: Store {$storeUrl} | Meal plans {$plansUrl} | Checkout {$checkoutUrl}
 Company context: {$footer}
 Delivery fee (SAR): {$deliveryFee}. VAT: {$vat}%.
 
@@ -841,10 +903,120 @@ FAQ knowledge base:
 PROMPT;
     }
 
-    private function fallbackSupportAnswer(string $question): string
+    /**
+     * @return array{text: string, meals: array<int, array<string, mixed>>, plans: array<int, array<string, mixed>>}
+     */
+    private function buildSupportResponse(string $question): array
+    {
+        $intent = $this->detectSupportIntent($question);
+        $meals = $this->topMealPicksForUser(4);
+        $plans = $this->rankedPlansForUser(3);
+
+        $gemini = app(GeminiService::class);
+        if ($gemini->isConfigured()) {
+            $answer = $gemini->generate(
+                $this->buildAdvisorSystemPrompt(),
+                $this->supportMessages,
+                false,
+                0.65
+            );
+
+            if ($answer !== null && trim($answer) !== '') {
+                return [
+                    'text' => trim($answer),
+                    'meals' => in_array($intent, ['meals', 'plan', 'weight_loss', 'general'], true) ? $meals : [],
+                    'plans' => in_array($intent, ['plan', 'subscription', 'weight_loss', 'store_diff', 'general'], true) ? $plans : [],
+                ];
+            }
+        }
+
+        return $this->localSupportAnswer($question, $intent, $meals, $plans);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $meals
+     * @param  array<int, array<string, mixed>>  $plans
+     * @return array{text: string, meals: array<int, array<string, mixed>>, plans: array<int, array<string, mixed>>}
+     */
+    private function localSupportAnswer(string $question, string $intent, array $meals, array $plans): array
     {
         $locale = app()->getLocale();
-        $needle = mb_strtolower($question);
+        $faqAnswer = $this->matchFaqAnswer($question);
+        if ($faqAnswer !== null) {
+            return [
+                'text' => $faqAnswer,
+                'meals' => in_array($intent, ['meals', 'plan', 'weight_loss'], true) ? $meals : [],
+                'plans' => in_array($intent, ['plan', 'subscription', 'weight_loss'], true) ? $plans : [],
+            ];
+        }
+
+        $siteName = $this->siteName;
+        $targetCal = (int) ($this->targetCalories ?? 0);
+        $goalLabel = (string) __('ai.goal_'.$this->goal);
+        $plansUrl = route('meal-plans.index');
+        $storeUrl = route('store.index');
+        $checkoutUrl = route('checkout.index');
+        $deliveryFee = (string) Setting::getValue('delivery_fee', '25');
+        $vat = (string) Setting::getValue('vat_rate', '15');
+
+        $text = match ($intent) {
+            'plan' => $this->buildPlanAdviceText($locale, $siteName, $targetCal, $goalLabel, $plans, $plansUrl, $checkoutUrl),
+            'subscription' => $locale === 'ar'
+                ? "لبدء الاشتراك مع {$siteName}:\n1) اختر باقة من صفحة الباقات: {$plansUrl}\n2) حدّد السعرات والمدة المناسبة لك\n3) أكمل الدفع من: {$checkoutUrl}\n\n".($targetCal > 0 ? "بناءً على تحليلك، هدفك حوالي {$targetCal} سعرة يومياً — اختر باقة قريبة من هذا الرقم." : 'أكمل التحليل الذكي في التبويب الأول لأحدد لك السعرات المناسبة.')
+                : "To start your {$siteName} subscription:\n1) Pick a plan: {$plansUrl}\n2) Choose calories and duration\n3) Complete checkout: {$checkoutUrl}\n\n".($targetCal > 0 ? "Based on your analysis, your target is about {$targetCal} kcal/day." : 'Complete the smart analysis tab for a calorie target.'),
+            'store_diff' => $locale === 'ar'
+                ? "الفرق باختصار:\n• الاشتراك ({$plansUrl}): وجبات يومية محسوبة حسب سعراتك وهدفك — مثالي للالتزام طويل المدى.\n• المتجر ({$storeUrl}): طلب وجبات منفردة بدون اشتراك — مثالي للتجربة أو الطلبات العرضية.\n\n".($this->goal === 'lose' ? 'لخسارة الوزن أنصح بالاشتراك لضبط السعرات يومياً.' : 'يمكنك الجمع بينهما حسب أسلوب حياتك.')
+                : "Quick difference:\n• Subscription ({$plansUrl}): daily calculated meals for your goal.\n• Store ({$storeUrl}): one-off meals without a plan.\n\n".($this->goal === 'lose' ? 'For weight loss, subscription helps you stay on calories daily.' : 'You can use both depending on your lifestyle.'),
+            'delivery' => $locale === 'ar'
+                ? "رسوم التوصيل تقريباً {$deliveryFee} ريال، والضريبة {$vat}% تُضاف حسب النظام السعودي. التفاصيل الدقيقة تظهر عند إتمام الطلب في صفحة الدفع: {$checkoutUrl}"
+                : "Delivery is about {$deliveryFee} SAR; VAT is {$vat}% per Saudi regulations. Exact totals appear at checkout: {$checkoutUrl}",
+            'weight_loss' => $this->buildWeightLossAdviceText($locale, $targetCal, $goalLabel, $plans, $meals, $plansUrl, $storeUrl),
+            'meals' => $this->buildMealAdviceText($locale, $meals, $storeUrl, $targetCal),
+            default => $this->buildGeneralAdviceText($locale, $siteName, $question, $meals, $plans, $storeUrl, $plansUrl),
+        };
+
+        return [
+            'text' => $text,
+            'meals' => in_array($intent, ['meals', 'plan', 'weight_loss', 'general'], true) ? $meals : [],
+            'plans' => in_array($intent, ['plan', 'subscription', 'weight_loss', 'store_diff', 'general'], true) ? $plans : [],
+        ];
+    }
+
+    private function detectSupportIntent(string $question): string
+    {
+        $q = mb_strtolower(trim($question));
+
+        $patterns = [
+            'plan' => ['باقة', 'باقات', 'برنامج', 'خطة', 'plan', 'package', 'program', 'تناسبني', 'fits me', 'best plan'],
+            'subscription' => ['اشتراك', 'أبدأ', 'ابدأ', 'خطوة', 'كيف', 'subscribe', 'start', 'step', 'sign up'],
+            'store_diff' => ['فرق', 'متجر', 'difference', 'store vs', 'اشتراك والمتجر'],
+            'delivery' => ['توصيل', 'ضريبة', 'رسوم', 'delivery', 'vat', 'tax', 'fee'],
+            'weight_loss' => ['خسارة', 'تنحيف', 'وزن', 'رجيم', 'lose weight', 'weight loss', 'fat loss', 'دايت'],
+            'meals' => ['وجبة', 'وجبات', 'اقتراح', 'meal', 'suggest', 'menu', 'أكل'],
+        ];
+
+        $scores = [];
+        foreach ($patterns as $intent => $keywords) {
+            $scores[$intent] = 0;
+            foreach ($keywords as $keyword) {
+                if (str_contains($q, mb_strtolower($keyword))) {
+                    $scores[$intent]++;
+                }
+            }
+        }
+
+        arsort($scores);
+        $top = array_key_first($scores);
+
+        return ($top !== null && $scores[$top] > 0) ? $top : 'general';
+    }
+
+    private function matchFaqAnswer(string $question): ?string
+    {
+        $locale = app()->getLocale();
+        $needle = mb_strtolower(trim($question));
+        $bestScore = 0;
+        $bestAnswer = null;
 
         $faqs = Faq::query()
             ->where('is_active', true)
@@ -854,14 +1026,275 @@ PROMPT;
 
         foreach ($faqs as $faq) {
             $q = mb_strtolower((string) ($faq->translate($locale)?->question ?? ''));
-            if ($q !== '' && (str_contains($needle, $q) || str_contains($q, $needle))) {
-                return strip_tags((string) ($faq->translate($locale)?->answer ?? ''));
+            if ($q === '') {
+                continue;
+            }
+
+            $score = 0;
+            if ($needle === $q) {
+                $score = 100;
+            } elseif (str_contains($needle, $q) || str_contains($q, $needle)) {
+                $score = 80;
+            } else {
+                foreach (preg_split('/\s+/u', $q) as $word) {
+                    if (mb_strlen($word) >= 3 && str_contains($needle, $word)) {
+                        $score += 10;
+                    }
+                }
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestAnswer = strip_tags((string) ($faq->translate($locale)?->answer ?? ''));
             }
         }
 
-        return $locale === 'ar'
-            ? 'شكراً لسؤالك. للمساعدة التفصيلية يُرجى زيارة صفحة الأسئلة الشائعة أو التواصل مع فريق الدعم — أو أكمل تحليلك في تبويب «تحليل الوجبة» لأعطيك توصية أدق.'
-            : 'Thanks for your question. For detailed help, visit our FAQ or contact support — or complete your analysis tab for a more tailored recommendation.';
+        return $bestScore >= 20 ? $bestAnswer : null;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $plans
+     */
+    private function buildPlanAdviceText(
+        string $locale,
+        string $siteName,
+        int $targetCal,
+        string $goalLabel,
+        array $plans,
+        string $plansUrl,
+        string $checkoutUrl
+    ): string {
+        if ($plans === []) {
+            return $locale === 'ar'
+                ? "تصفّح باقات {$siteName} من هنا: {$plansUrl} — وأكمل التحليل الذكي لأحدد السعرات الأنسب لك."
+                : "Browse {$siteName} plans here: {$plansUrl} — complete the smart analysis for a calorie match.";
+        }
+
+        $lines = $locale === 'ar'
+            ? ["بناءً على هدفك ({$goalLabel})".($targetCal > 0 ? " وسعراتك المستهدفة (~{$targetCal})" : '').", هذه أقرب الباقات لك من {$siteName}:"]
+            : ["Based on your goal ({$goalLabel})".($targetCal > 0 ? " and ~{$targetCal} kcal target" : '').", these plans fit best:"];
+
+        foreach ($plans as $plan) {
+            $name = (string) ($plan['name'] ?? '');
+            $cal = (int) ($plan['calories_per_day'] ?? 0);
+            $price = (int) ($plan['min_price'] ?? $plan['price'] ?? 0);
+            $url = (string) ($plan['url'] ?? '');
+            $lines[] = $locale === 'ar'
+                ? "• {$name}".($cal > 0 ? " — ~{$cal} سعرة/يوم" : '').($price > 0 ? " — يبدأ من {$price} ر.س" : '').($url !== '' ? "\n  {$url}" : '')
+                : "• {$name}".($cal > 0 ? " — ~{$cal} kcal/day" : '').($price > 0 ? " — from {$price} SAR" : '').($url !== '' ? "\n  {$url}" : '');
+        }
+
+        $lines[] = $locale === 'ar'
+            ? "للاشتراك: {$checkoutUrl}"
+            : "Subscribe: {$checkoutUrl}";
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $plans
+     * @param  array<int, array<string, mixed>>  $meals
+     */
+    private function buildWeightLossAdviceText(
+        string $locale,
+        int $targetCal,
+        string $goalLabel,
+        array $plans,
+        array $meals,
+        string $plansUrl,
+        string $storeUrl
+    ): string {
+        $intro = $locale === 'ar'
+            ? 'نعم — وجباتنا مصممة لدعم خسارة الوزن عبر ضبط السعرات والبروتين.'.($targetCal > 0 ? " هدفك الحالي ~{$targetCal} سعرة يومياً." : ' أكمل التحليل الذكي لحساب سعراتك.')
+            : 'Yes — our meals support weight loss through calorie and protein control.'.($targetCal > 0 ? " Your current target is ~{$targetCal} kcal/day." : ' Complete the analysis for your calorie target.');
+
+        $parts = [$intro];
+
+        if ($plans !== []) {
+            $parts[] = $locale === 'ar' ? 'أقرب الباقات:' : 'Closest plans:';
+            foreach (array_slice($plans, 0, 2) as $plan) {
+                $parts[] = '• '.($plan['name'] ?? '').' — '.($plan['url'] ?? $plansUrl);
+            }
+        }
+
+        if ($meals !== []) {
+            $parts[] = $locale === 'ar' ? 'وجبات من المتجر تناسبك:' : 'Store picks for you:';
+            foreach (array_slice($meals, 0, 2) as $meal) {
+                $parts[] = '• '.($meal['name'] ?? '').' — '.($meal['url'] ?? $storeUrl);
+            }
+        }
+
+        return implode("\n", $parts);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $meals
+     */
+    private function buildMealAdviceText(string $locale, array $meals, string $storeUrl, int $targetCal): string
+    {
+        if ($meals === []) {
+            return $locale === 'ar'
+                ? "تصفّح متجر الوجبات: {$storeUrl}"
+                : "Browse our meal store: {$storeUrl}";
+        }
+
+        $lines = $locale === 'ar'
+            ? ['هذه وجبات من متجرنا قريبة من احتياجك'.($targetCal > 0 ? " (~{$targetCal} سعرة/يوم)" : '').':']
+            : ['Store meals that match your needs'.($targetCal > 0 ? " (~{$targetCal} kcal/day)" : '').':'];
+
+        foreach ($meals as $meal) {
+            $cal = (int) ($meal['calories'] ?? 0);
+            $lines[] = $locale === 'ar'
+                ? '• '.($meal['name'] ?? '').($cal > 0 ? " ({$cal} سعرة)" : '').' — '.($meal['url'] ?? $storeUrl)
+                : '• '.($meal['name'] ?? '').($cal > 0 ? " ({$cal} kcal)" : '').' — '.($meal['url'] ?? $storeUrl);
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $meals
+     * @param  array<int, array<string, mixed>>  $plans
+     */
+    private function buildGeneralAdviceText(
+        string $locale,
+        string $siteName,
+        string $question,
+        array $meals,
+        array $plans,
+        string $storeUrl,
+        string $plansUrl
+    ): string {
+        if (! $this->metricsReady) {
+            $this->calculateMetrics();
+        }
+
+        $targetCal = (int) ($this->targetCalories ?? 0);
+        $intro = $locale === 'ar'
+            ? "سؤالك: «{$question}»\n\nأنا مستشار {$siteName} — أساعدك في الباقات، الوجبات، التوصيل، والتغذية."
+            : "Your question: \"{$question}\"\n\nI'm the {$siteName} advisor — I can help with plans, meals, delivery, and nutrition.";
+
+        $parts = [$intro];
+
+        if ($targetCal > 0) {
+            $parts[] = $locale === 'ar'
+                ? "من تحليلك: هدفك ~{$targetCal} سعرة يومياً."
+                : "From your profile: ~{$targetCal} kcal/day target.";
+        }
+
+        if ($plans !== []) {
+            $parts[] = $locale === 'ar' ? 'باقة مقترحة: '.($plans[0]['name'] ?? '').' — '.($plans[0]['url'] ?? $plansUrl) : 'Suggested plan: '.($plans[0]['name'] ?? '').' — '.($plans[0]['url'] ?? $plansUrl);
+        }
+
+        if ($meals !== []) {
+            $parts[] = $locale === 'ar' ? 'وجبة مقترحة: '.($meals[0]['name'] ?? '').' — '.($meals[0]['url'] ?? $storeUrl) : 'Suggested meal: '.($meals[0]['name'] ?? '').' — '.($meals[0]['url'] ?? $storeUrl);
+        }
+
+        $parts[] = $locale === 'ar'
+            ? "للمزيد: الباقات {$plansUrl} | المتجر {$storeUrl} | أو أكمل التحليل الذكي لتقرير أدق."
+            : "More: plans {$plansUrl} | store {$storeUrl} | or complete smart analysis for a detailed report.";
+
+        return implode("\n\n", $parts);
+    }
+
+    /**
+     * @return array{meals: array<int, array<string, mixed>>, plans: array<int, array<string, mixed>>}
+     */
+    private function catalogSummaryForPrompt(): array
+    {
+        $meals = $this->catalogMeals()
+            ->take(25)
+            ->map(fn (array $meal): array => [
+                'id' => (int) ($meal['id'] ?? 0),
+                'name' => (string) ($meal['name'] ?? ''),
+                'calories' => (int) ($meal['calories'] ?? 0),
+                'protein' => (float) ($meal['protein'] ?? 0),
+                'price' => (float) ($meal['price'] ?? 0),
+            ])
+            ->values()
+            ->all();
+
+        $plans = collect($this->catalogPlans())
+            ->take(12)
+            ->map(fn (array $plan): array => [
+                'id' => (int) ($plan['id'] ?? 0),
+                'name' => (string) ($plan['name'] ?? ''),
+                'calories_per_day' => (int) ($plan['calories_per_day'] ?? 0),
+                'min_price' => (int) ($plan['min_price'] ?? 0),
+            ])
+            ->values()
+            ->all();
+
+        return ['meals' => $meals, 'plans' => $plans];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function catalogPlans(): array
+    {
+        try {
+            return app(ExternalDataService::class)->getPrograms();
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function rankedPlansForUser(int $limit = 3): array
+    {
+        $targetCal = (int) ($this->targetCalories ?? 0);
+        if ($targetCal <= 0 && $this->metricsReady) {
+            $targetCal = (int) ($this->tdee ?? 0);
+        }
+
+        return collect($this->catalogPlans())
+            ->filter(fn (array $plan): bool => (int) ($plan['id'] ?? 0) > 0)
+            ->map(function (array $plan) use ($targetCal): array {
+                $cal = (int) ($plan['calories_per_day'] ?? 0);
+                $distance = $targetCal > 0 && $cal > 0 ? abs($cal - $targetCal) / $targetCal : 0.5;
+
+                return [
+                    'plan' => $plan,
+                    'distance' => $distance,
+                ];
+            })
+            ->sortBy('distance')
+            ->take($limit)
+            ->map(function (array $row): array {
+                $plan = $row['plan'];
+                $id = (int) ($plan['id'] ?? 0);
+
+                return [
+                    'id' => $id,
+                    'name' => (string) ($plan['name'] ?? ''),
+                    'calories_per_day' => (int) ($plan['calories_per_day'] ?? 0),
+                    'min_price' => (int) ($plan['min_price'] ?? $plan['price'] ?? 0),
+                    'image' => (string) ($plan['image_url'] ?? ''),
+                    'url' => $id > 0 ? route('meal-plans.show', $id) : '',
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function topMealPicksForUser(int $limit = 4): array
+    {
+        $meals = $this->catalogMeals();
+        if ($meals->isEmpty()) {
+            return [];
+        }
+
+        if (! $this->metricsReady) {
+            $this->calculateMetrics();
+        }
+
+        return array_slice($this->localRecommendations($meals), 0, $limit);
     }
 
     private function loadAboutContent(): void

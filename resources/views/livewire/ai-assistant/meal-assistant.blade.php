@@ -294,32 +294,64 @@
 
                         @if($loadingRecommendations)
                             <p class="ai-loading">{{ __('ai.loading') }}</p>
+                        @elseif($catalogUnavailable)
+                            <p class="ai-empty">{{ __('ai.catalog_unavailable') }}</p>
                         @elseif($recommendations === [])
                             <p class="ai-empty">{{ __('ai.no_recommendations') }}</p>
                         @else
                             <ul class="ai-meal-list">
                                 @foreach($recommendations as $rec)
-                                    <li class="ai-meal-card">
-                                        <div class="ai-meal-card__top">
-                                            <div>
-                                                <h4 class="ai-meal-card__name">{{ $rec['name'] }}</h4>
-                                                <p class="ai-meal-card__macros">
-                                                    {{ (int) $rec['calories'] }} {{ __('ai.kcal') }}
-                                                    · P {{ $rec['protein'] }}g
-                                                    · C {{ $rec['carbs'] }}g
-                                                    · F {{ $rec['fat'] }}g
-                                                </p>
+                                    <li class="ai-meal-card" wire:key="ai-rec-{{ (int) $rec['meal_id'] }}">
+                                        <div class="ai-meal-card__layout">
+                                            @if(!empty($rec['image']))
+                                                <a href="{{ $rec['url'] ?? '#' }}" class="ai-meal-card__thumb" target="_blank" rel="noopener">
+                                                    <img src="{{ $rec['image'] }}" alt="{{ $rec['name'] }}" loading="lazy">
+                                                </a>
+                                            @endif
+                                            <div class="ai-meal-card__body">
+                                                <div class="ai-meal-card__top">
+                                                    <div>
+                                                        <h4 class="ai-meal-card__name">
+                                                            @if(!empty($rec['url']))
+                                                                <a href="{{ $rec['url'] }}" target="_blank" rel="noopener">{{ $rec['name'] }}</a>
+                                                            @else
+                                                                {{ $rec['name'] }}
+                                                            @endif
+                                                        </h4>
+                                                        <p class="ai-meal-card__macros">
+                                                            @if((int) $rec['calories'] > 0)
+                                                                {{ (int) $rec['calories'] }} {{ __('ai.kcal') }}
+                                                                · P {{ $rec['protein'] }}g
+                                                                · C {{ $rec['carbs'] }}g
+                                                                · F {{ $rec['fat'] }}g
+                                                            @else
+                                                                {{ __('ai.macros_unavailable') }}
+                                                            @endif
+                                                        </p>
+                                                    </div>
+                                                    <span class="ai-fit-badge">{{ (int) $rec['fit_score'] }}%</span>
+                                                </div>
+                                                @if(!empty($rec['reason']))
+                                                    <p class="ai-meal-card__reason">{{ $rec['reason'] }}</p>
+                                                @endif
+                                                <div class="ai-meal-card__foot">
+                                                    <span class="ai-meal-card__price">{{ number_format((float) $rec['price'], 2) }} {{ __('SAR') }}</span>
+                                                    <div class="ai-meal-card__actions">
+                                                        @if(!empty($rec['url']))
+                                                            <a href="{{ $rec['url'] }}" class="ai-btn ai-btn--ghost ai-btn--sm" target="_blank" rel="noopener">
+                                                                {{ __('ai.view_meal_details') }}
+                                                            </a>
+                                                        @endif
+                                                        <button
+                                                            type="button"
+                                                            class="ai-btn ai-btn--dark ai-btn--sm"
+                                                            wire:click="addMealToCart({{ (int) $rec['meal_id'] }}, @js($rec['name']), {{ (float) $rec['price'] }}, @js($rec['image'] ?? ''))"
+                                                        >
+                                                            {{ __('ai.add_to_cart') }}
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <span class="ai-fit-badge">{{ (int) $rec['fit_score'] }}%</span>
-                                        </div>
-                                        @if(!empty($rec['reason']))
-                                            <p class="ai-meal-card__reason">{{ $rec['reason'] }}</p>
-                                        @endif
-                                        <div class="ai-meal-card__foot">
-                                            <span class="ai-meal-card__price">{{ number_format((float) $rec['price'], 2) }} {{ __('SAR') }}</span>
-                                            <button type="button" class="ai-btn ai-btn--dark ai-btn--sm" wire:click="addMealToCart({{ (int) $rec['meal_id'] }})">
-                                                {{ __('ai.add_to_cart') }}
-                                            </button>
                                         </div>
                                     </li>
                                 @endforeach
@@ -362,6 +394,60 @@
                             <p class="ai-loading">{{ __('ai.typing') }}</p>
                         @endif
                     </div>
+
+                    @if($supportPlanPicks !== [])
+                        <div class="ai-support-picks">
+                            <p class="ai-support-picks__title">{{ __('ai.support_plans_label') }}</p>
+                            <ul class="ai-support-picks__list">
+                                @foreach($supportPlanPicks as $plan)
+                                    <li class="ai-support-pick" wire:key="ai-plan-pick-{{ (int) $plan['id'] }}">
+                                        @if(!empty($plan['url']))
+                                            <a href="{{ $plan['url'] }}" class="ai-support-pick__link" target="_blank" rel="noopener">
+                                                <strong>{{ $plan['name'] }}</strong>
+                                                @if((int) ($plan['calories_per_day'] ?? 0) > 0)
+                                                    <span>· {{ (int) $plan['calories_per_day'] }} {{ __('ai.kcal') }}</span>
+                                                @endif
+                                            </a>
+                                        @else
+                                            <strong>{{ $plan['name'] }}</strong>
+                                        @endif
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
+                    @if($supportMealPicks !== [])
+                        <div class="ai-support-picks">
+                            <p class="ai-support-picks__title">{{ __('ai.support_meals_label') }}</p>
+                            <ul class="ai-meal-list">
+                                @foreach($supportMealPicks as $rec)
+                                    <li class="ai-meal-card ai-meal-card--compact" wire:key="ai-support-meal-{{ (int) $rec['meal_id'] }}">
+                                        <div class="ai-meal-card__layout">
+                                            @if(!empty($rec['image']))
+                                                <a href="{{ $rec['url'] ?? '#' }}" class="ai-meal-card__thumb" target="_blank" rel="noopener">
+                                                    <img src="{{ $rec['image'] }}" alt="{{ $rec['name'] }}" loading="lazy">
+                                                </a>
+                                            @endif
+                                            <div class="ai-meal-card__body">
+                                                <h4 class="ai-meal-card__name">
+                                                    @if(!empty($rec['url']))
+                                                        <a href="{{ $rec['url'] }}" target="_blank" rel="noopener">{{ $rec['name'] }}</a>
+                                                    @else
+                                                        {{ $rec['name'] }}
+                                                    @endif
+                                                </h4>
+                                                <div class="ai-meal-card__foot">
+                                                    <span class="ai-meal-card__price">{{ number_format((float) $rec['price'], 2) }} {{ __('SAR') }}</span>
+                                                    <a href="{{ $rec['url'] ?? '#' }}" class="ai-btn ai-btn--ghost ai-btn--sm" target="_blank" rel="noopener">{{ __('ai.view_meal_details') }}</a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
 
                     <form class="ai-chat-form" wire:submit.prevent="sendSupportMessage">
                         <input type="text" wire:model="supportInput" class="ai-input" placeholder="{{ __('ai.support_placeholder') }}" maxlength="500" />
@@ -589,9 +675,24 @@
 .ai-note, .ai-loading, .ai-empty { font-size: .8rem; color: var(--ai-muted); margin: .75rem 0 0; }
 .ai-meal-list { list-style: none; margin: .85rem 0 0; padding: 0; display: grid; gap: .65rem; }
 .ai-meal-card { border: 1px solid var(--ai-blue-border); border-radius: 12px; padding: .75rem; background: #fff; }
+.ai-meal-card__layout { display: flex; gap: .65rem; align-items: flex-start; }
+.ai-meal-card__thumb { flex: 0 0 72px; width: 72px; height: 72px; border-radius: 10px; overflow: hidden; border: 1px solid var(--ai-blue-border); }
+.ai-meal-card__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ai-meal-card__body { flex: 1; min-width: 0; }
 .ai-meal-card__top { display: flex; justify-content: space-between; gap: .5rem; }
 .ai-meal-card__name { margin: 0; font-size: .9rem; font-weight: 800; color: var(--ai-text); }
+.ai-meal-card__name a { color: inherit; text-decoration: none; }
+.ai-meal-card__name a:hover { color: var(--ai-blue); text-decoration: underline; }
 .ai-meal-card__macros { margin: .2rem 0 0; font-size: .72rem; color: var(--ai-muted); }
+.ai-meal-card__actions { display: flex; flex-wrap: wrap; gap: .35rem; justify-content: flex-end; }
+.ai-meal-card--compact { padding: .55rem; }
+.ai-support-picks { margin-top: .65rem; }
+.ai-support-picks__title { margin: 0 0 .4rem; font-size: .78rem; font-weight: 800; color: var(--ai-blue); }
+.ai-support-picks__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+.ai-support-pick { font-size: .78rem; color: #374151; }
+.ai-support-pick__link { color: inherit; text-decoration: none; }
+.ai-support-pick__link:hover { color: var(--ai-blue); text-decoration: underline; }
+.ai-chat__bubble a { color: var(--ai-blue); word-break: break-word; }
 .ai-fit-badge {
     font-size: .72rem; font-weight: 800;
     background: linear-gradient(120deg, var(--ai-green) 0%, #059669 100%);

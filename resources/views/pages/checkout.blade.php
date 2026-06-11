@@ -573,7 +573,12 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         </div>
 
                         <div x-show="moyasarError" x-cloak class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" x-text="moyasarError"></div>
-                        <div x-show="syncAddressError && deliveryType === 'home'" x-cloak class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" x-text="syncAddressError"></div>
+                        <div
+                            x-show="syncAddressError && deliveryType === 'home' && syncAddressError !== @json(__('checkout.area_not_served'))"
+                            x-cloak
+                            class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+                            x-text="syncAddressError"
+                        ></div>
 
                         <div class="relative min-h-[160px] rounded-xl border border-gray-200 bg-gray-50 p-4">
                             <div
@@ -1384,7 +1389,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             scheduleReady: @json($scheduleReady ?? false),
             startDateNotice: '',
             startDateTouched: false,
-            coverageOk: @json(old('delivery_type', 'home') === 'pickup'),
+            coverageOk: @json(old('delivery_type', 'home') === 'pickup' ? true : null),
             coverageMessage: '',
             inlineMapLat: '',
             inlineMapLng: '',
@@ -1978,8 +1983,13 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
             handleCoverageChanged(event) {
                 const d = event.detail || {};
-                this.coverageOk = !!d.ok;
-                this.coverageMessage = d.ok ? '' : @json(__('checkout.area_not_served'));
+                if (d.ok) {
+                    this.coverageOk = true;
+                    this.coverageMessage = '';
+                } else if (d.userInitiated) {
+                    this.coverageOk = false;
+                    this.coverageMessage = @json(__('checkout.area_not_served'));
+                }
                 this.inlineMapLat = d.lat != null && d.lat !== '' ? String(d.lat) : '';
                 this.inlineMapLng = d.lng != null && d.lng !== '' ? String(d.lng) : '';
                 this.inlineMapDistrictId = d.districtId ? String(d.districtId) : '';
@@ -2220,7 +2230,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     return;
                 }
                 if (! district) {
-                    this.syncAddressError = @json(__('checkout.area_not_served'));
+                    this.coverageOk = false;
+                    this.coverageMessage = @json(__('checkout.area_not_served'));
 
                     return;
                 }
@@ -2897,11 +2908,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (this.deliveryType === 'pickup') {
                     return @json(__('checkout.payment_blocker_pickup'));
                 }
-                if (this.coverageMessage && ! this.selectedAddressId) {
-                    return this.coverageMessage;
-                }
                 if (this.syncAddressError && ! this.selectedAddressId) {
-                    return this.syncAddressError;
+                    const areaMsg = @json(__('checkout.area_not_served'));
+                    if (this.syncAddressError !== areaMsg) {
+                        return this.syncAddressError;
+                    }
                 }
 
                 return @json(__('checkout.confirm_saved_address_before_payment'));
@@ -3661,7 +3672,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         this.coverageMessage = '';
                         this.syncAddressError = '';
                     } else {
-                        this.coverageOk = !!this.selectedAddressId;
+                        this.coverageOk = this.selectedAddressId ? true : null;
+                        this.coverageMessage = '';
                         setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 300);
                     }
                     if (this.canProceedToPayment()) {

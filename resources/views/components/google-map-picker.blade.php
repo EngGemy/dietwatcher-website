@@ -493,7 +493,7 @@ function googleMapPicker(opts) {
             this.form.building_num = '';
             this.form.floor = '';
             this.form.door = '';
-            this.applyMapCenter({ lat, lng });
+            this.applyMapCenter({ lat, lng }, { userInitiated: false });
             const building_notes = this.buildingLine();
             this.confirmedAddressText = this.form.description;
             this.confirmedBuildingLine = building_notes;
@@ -639,13 +639,14 @@ function googleMapPicker(opts) {
                 this._geocoder = new google.maps.Geocoder();
                 if (this._pendingCenter) {
                     const pending = this._pendingCenter;
+                    const pendingUserInitiated = !!pending.userInitiated;
                     this._pendingCenter = null;
-                    this._center = pending;
-                    this._map.setCenter(pending);
+                    this._center = { lat: pending.lat, lng: pending.lng };
+                    this._map.setCenter(this._center);
                     this._map.setZoom(16);
-                    this.reverseGeocode(pending);
+                    this.reverseGeocode(this._center, { userInitiated: pendingUserInitiated });
                 } else {
-                    this.reverseGeocode(this._center);
+                    this.reverseGeocode(this._center, { userInitiated: false });
                 }
 
                 const resizeMap = () => {
@@ -728,8 +729,9 @@ function googleMapPicker(opts) {
             });
         },
 
-        reverseGeocode(latlng) {
+        reverseGeocode(latlng, opts = {}) {
             if (!this._geocoder) return;
+            const userInitiated = opts.userInitiated === true;
             this.geocoding = true;
             const lat = typeof latlng.lat === 'function' ? latlng.lat() : latlng.lat;
             const lng = typeof latlng.lng === 'function' ? latlng.lng() : latlng.lng;
@@ -767,21 +769,27 @@ function googleMapPicker(opts) {
                             districts_count: (this.districts || []).length,
                         });
                     }
-                    this.notifyCoverage(inferredDistrictId);
+                    this.notifyCoverage(inferredDistrictId, userInitiated);
                     this.dispatchAddressDraft();
                     return;
                 }
                 this.form.district_id = '';
-                this.notifyCoverage('');
-                this.sheetError = @json(__('google_maps.geocode_failed'));
+                this.notifyCoverage('', userInitiated);
+                if (userInitiated) {
+                    this.sheetError = @json(__('google_maps.geocode_failed'));
+                }
             });
         },
 
-        notifyCoverage(districtId) {
+        notifyCoverage(districtId, userInitiated = false) {
             const ok = !!districtId;
+            if (! ok && ! userInitiated) {
+                return;
+            }
             window.dispatchEvent(new CustomEvent('checkout-coverage-changed', {
                 detail: {
                     ok,
+                    userInitiated,
                     districtId: districtId ? String(districtId) : '',
                     lat: this.form.latitude,
                     lng: this.form.longitude,
@@ -918,7 +926,7 @@ function googleMapPicker(opts) {
                 }
                 const resizeAndGeocode = () => {
                     window.google.maps.event.trigger(this._map, 'resize');
-                    this.reverseGeocode(this._center);
+                    this.reverseGeocode(this._center, { userInitiated: opts.userInitiated !== false });
                 };
                 if (window.google.maps.event) {
                     window.google.maps.event.addListenerOnce(this._map, 'idle', resizeAndGeocode);
@@ -929,7 +937,7 @@ function googleMapPicker(opts) {
                     window.dispatchEvent(new CustomEvent('checkout-home-map-refresh'));
                 });
             } else {
-                this._pendingCenter = { lat, lng };
+                this._pendingCenter = { lat, lng, userInitiated: opts.userInitiated !== false };
                 this.initMap();
             }
         },
