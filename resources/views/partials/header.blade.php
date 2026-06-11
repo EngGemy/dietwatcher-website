@@ -209,7 +209,17 @@
             <div
                 class="hs-dropdown relative inline-flex header__action-chip header__action-chip--profile"
                 style="--ha-i:0"
-                x-data="{ open: false }"
+                x-data="{
+                    open: false,
+                    loggedIn: @json($isLoggedIn),
+                    customerName: @json($customerName),
+                    customerInitial: @json($customerInitial),
+                }"
+                @checkout-session-updated.window="
+                    loggedIn = !!$event.detail.loggedIn;
+                    customerName = $event.detail.customerName || '';
+                    customerInitial = customerName ? customerName.trim().charAt(0).toUpperCase() : '';
+                "
                 @keydown.escape.window="open = false"
             >
                 {{-- Trigger button --}}
@@ -223,17 +233,14 @@
                     class="header__profile-btn"
                     :class="{ 'header__profile-btn--active': open }"
                 >
-                    @if($isLoggedIn && $customerInitial)
-                        {{-- Avatar with initial --}}
-                        <span class="header__profile-avatar" aria-hidden="true">
-                            {{ $customerInitial }}
-                        </span>
-                    @else
-                        {{-- Generic icon --}}
+                    <template x-if="loggedIn && customerInitial">
+                        <span class="header__profile-avatar" aria-hidden="true" x-text="customerInitial"></span>
+                    </template>
+                    <template x-if="!loggedIn || !customerInitial">
                         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
                         </svg>
-                    @endif
+                    </template>
                     {{-- Subtle caret --}}
                     <svg class="header__profile-caret" :class="{ 'rotate-180': open }" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
@@ -254,22 +261,18 @@
                     role="menu"
                     aria-orientation="vertical"
                 >
-                    @if($isLoggedIn)
-                        {{-- Welcome header --}}
+                    <div x-show="loggedIn" x-cloak>
                         <div class="header__profile-welcome">
                             <div class="header__profile-welcome-avatar" aria-hidden="true">
-                                {{ $customerInitial ?: '👤' }}
+                                <span x-text="customerInitial || '👤'"></span>
                             </div>
                             <div class="header__profile-welcome-text">
                                 <p class="header__profile-name">
                                     @if(app()->getLocale() === 'ar')
-                                        أهلاً@if($customerName !== '')، {{ $customerName }}@endif
+                                        <span>أهلاً<span x-show="customerName" x-cloak>، <span x-text="customerName"></span></span></span>
                                     @else
-                                        @if($customerName !== '')
-                                            Welcome, {{ $customerName }}
-                                        @else
-                                            Welcome
-                                        @endif
+                                        <span x-show="customerName" x-cloak>Welcome, <span x-text="customerName"></span></span>
+                                        <span x-show="!customerName" x-cloak>Welcome</span>
                                     @endif
                                 </p>
                             </div>
@@ -277,7 +280,6 @@
 
                         <div class="header__profile-divider" role="separator"></div>
 
-                        {{-- Navigation links --}}
                         <nav class="header__profile-nav" aria-label="{{ __('Account navigation') }}">
                             <a href="{{ route('account.dashboard') }}" class="header__profile-item" role="menuitem">
                                 <span class="header__profile-item-icon" aria-hidden="true">
@@ -349,9 +351,9 @@
                                 <span>{{ __('account.logout') }}</span>
                             </button>
                         </form>
+                    </div>
 
-                    @else
-                        {{-- Guest: login link --}}
+                    <div x-show="!loggedIn" x-cloak>
                         <div class="header__profile-welcome">
                             <div class="header__profile-welcome-avatar" aria-hidden="true">👤</div>
                             <div class="header__profile-welcome-text">
@@ -372,7 +374,7 @@
                             </span>
                             <span>{{ __('account.login') }}</span>
                         </a>
-                    @endif
+                    </div>
                 </div>
             </div>
             </div>{{-- /.header__actions-bar --}}

@@ -352,11 +352,11 @@
                         '_placeholder' => true,
                     ])->all();
             @endphp
-            <div class="products-rail" data-products-rail data-rail-min-width="240">
+            <div class="products-rail" data-products-rail data-rail-min-width="240" data-rail-speed="0.12">
                 <div class="products-rail__viewport">
                     <div class="products-rail__track" data-products-track>
-                @foreach (['original', 'clone', 'clone'] as $railSegmentType)
-                    @php $isRailCloneSegment = $railSegmentType !== 'original'; @endphp
+                @foreach (['original', 'clone'] as $railSegmentType)
+                    @php $isRailCloneSegment = $railSegmentType === 'clone'; @endphp
                     <div class="infinite-rail__segment"
                          data-rail-segment="{{ $railSegmentType }}"
                          @if($isRailCloneSegment) aria-hidden="true" data-rail-clone="1" @endif>
@@ -1185,10 +1185,15 @@
 }
 .products-rail.is-initialized .products-rail__viewport,
 .testimonials-rail.is-initialized .testimonials-rail__viewport {
-    overflow: hidden;
     cursor: grab;
     user-select: none;
     scroll-snap-type: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+}
+.products-rail.is-marquee-active .products-rail__viewport,
+.testimonials-rail.is-marquee-active .testimonials-rail__viewport {
+    overflow: hidden;
 }
 .products-rail__viewport.is-dragging {
     cursor: grabbing;
@@ -1203,6 +1208,17 @@
     will-change: transform;
     transform: translate3d(0, 0, 0);
     direction: ltr;
+    backface-visibility: hidden;
+}
+.products-rail__track.is-rail-running {
+    animation: infinite-rail-marquee var(--rail-duration, 35s) linear infinite;
+}
+.products-rail__track.is-rail-running.is-rail-paused {
+    animation-play-state: paused;
+}
+@keyframes infinite-rail-marquee {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(-50%, 0, 0); }
 }
 .infinite-rail__segment {
     display: flex;
@@ -1454,6 +1470,13 @@
     transform: translate3d(0,0,0);
     padding: .5rem .25rem;
     direction: ltr;
+    backface-visibility: hidden;
+}
+.testimonials-rail__track.is-rail-running {
+    animation: infinite-rail-marquee var(--rail-duration, 35s) linear infinite;
+}
+.testimonials-rail__track.is-rail-running.is-rail-paused {
+    animation-play-state: paused;
 }
 .testimonials-rail__item {
     width: var(--t-card-w);
@@ -1628,6 +1651,7 @@
     .products-rail__track,
     .testimonials-rail__track {
         transform: none !important;
+        animation: none !important;
     }
     .products-rail__viewport,
     .testimonials-rail__viewport {
@@ -1940,10 +1964,9 @@
         }
 
         function initInfiniteRail(cfg) {
-            var section = cfg.section;
+            var section  = cfg.section;
             var viewport = cfg.viewport;
-            var track = cfg.track;
-            var itemSelector = cfg.itemSelector;
+            var track    = cfg.track;
             if (!section || !viewport || !track) return null;
 
             if (section._railApi && typeof section._railApi.destroy === 'function') {
@@ -1951,439 +1974,242 @@
             }
 
             var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            var canHoverPause = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-            var minItemWidth = parseInt(section.getAttribute('data-rail-min-width') || '240', 10);
-            var originalSegment = track.querySelector('[data-rail-segment="original"]');
-            var originals = originalSegment
-                ? Array.from(originalSegment.querySelectorAll(itemSelector))
-                : Array.from(track.querySelectorAll(itemSelector + ':not([data-rail-clone="1"])'));
-            if (!originals.length) {
-                originals = Array.from(track.querySelectorAll(itemSelector));
-            }
-            if (!originals.length) return null;
+            var canHoverPause  = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+            var speed = parseFloat(section.getAttribute('data-rail-speed') || '') || cfg.speed || 0.12;
+            if (isNaN(speed) || speed <= 0) speed = 0.12;
 
-            track.style.direction = 'ltr';
-
-            var listeners = [];
-            var resizeObserver = null;
-            var visObs = null;
+            var listeners  = [];
+            var visObs     = null;
+            var resizeTimer = null;
+            var state = {
+                animating:     false,
+                isDragging:    false,
+                isPaused:      false,
+                hasBeenVisible: false,
+                pointerId:     null,
+                dragStartX:    0,
+                dragOffsetX:   0,
+                resumeTimer:   null,
+            };
 
             function on(el, evt, fn, opts) {
                 el.addEventListener(evt, fn, opts);
                 listeners.push({ el: el, evt: evt, fn: fn, opts: opts });
             }
 
-            var state = {
-                loopWidth: 0,
-                cachedItemWidth: 0,
-                speed: cfg.speed || 0.08,
-                isPaused: false,
-                isDragging: false,
-                dragStartX: 0,
-                dragOffsetX: 0,
-                pointerId: null,
-                resumeTimer: null,
-                rebuildTimer: null,
-                revealed: false,
-                animating: false,
-                booting: true,
-                waAnim: null,
-            };
-
+            // Track must always be LTR; card direction handled by CSS [dir=rtl] selector
+            track.style.direction = 'ltr';
             track.style.transform = 'translate3d(0,0,0)';
 
-            function itemWidth(item) {
-                var w = item.getBoundingClientRect().width;
-                if (w > 0) return w;
-                w = item.offsetWidth;
-                if (w > 0) return w;
-                return minItemWidth;
-            }
-
-            function segmentGapPx() {
-                var cs = getComputedStyle(section);
-                var gap = parseFloat(cs.getPropertyValue('--rail-gap'));
-                if (isNaN(gap) || gap <= 0) {
-                    gap = parseFloat(cs.getPropertyValue('--t-gap'));
+            /* ── Measurement ─────────────────────────────── */
+            function getSegmentWidth() {
+                var orig  = track.querySelector('[data-rail-segment="original"]');
+                var clone = track.querySelector('[data-rail-segment="clone"]');
+                // Prefer distance between segment starts (excludes track padding correctly)
+                if (orig && clone) {
+                    var d = clone.offsetLeft - orig.offsetLeft;
+                    if (d > 0) return d;
                 }
-                return (!isNaN(gap) && gap > 0) ? gap : 16;
+                if (orig && orig.offsetWidth > 0) return orig.offsetWidth;
+                return 0;
             }
 
-            function applySegmentLayout(seg) {
-                seg.className = 'infinite-rail__segment';
-                seg.style.display = 'flex';
-                seg.style.flexShrink = '0';
-                seg.style.flexWrap = 'nowrap';
-                seg.style.alignItems = 'stretch';
-                seg.style.gap = segmentGapPx() + 'px';
+            function getDuration() {
+                var w = getSegmentWidth();
+                return w > 0 ? w / (speed * 1000) : 35;
             }
 
-            function wrapOriginalsInSegment() {
-                var existing = track.querySelector('[data-rail-segment="original"]');
-                if (existing) return existing;
-
-                var seg = document.createElement('div');
-                seg.setAttribute('data-rail-segment', 'original');
-                seg.setAttribute('data-rail-segment-js', '1');
-                applySegmentLayout(seg);
-                originals.forEach(function(item) {
-                    seg.appendChild(item);
-                });
-                track.appendChild(seg);
-                return seg;
+            /* ── Animation control ───────────────────────── */
+            function stopAnim() {
+                track.classList.remove('is-rail-running', 'is-rail-paused');
+                track.style.animationDelay = '';
+                section.classList.remove('is-marquee-active');
             }
 
-            function decorateCloneSegment(cloneSeg, isExtra) {
-                cloneSeg.setAttribute('data-rail-segment', 'clone');
-                cloneSeg.setAttribute('data-rail-clone', '1');
-                if (isExtra) {
-                    cloneSeg.setAttribute('data-rail-segment-extra', '1');
-                }
-                cloneSeg.setAttribute('aria-hidden', 'true');
-                cloneSeg.querySelectorAll(itemSelector).forEach(function(item) {
-                    item.setAttribute('data-rail-clone', '1');
-                });
-                cloneSeg.querySelectorAll('a, button, input, select, textarea').forEach(function(el) {
-                    el.setAttribute('tabindex', '-1');
-                });
-                cloneSeg.querySelectorAll('img').forEach(function(img) {
-                    img.loading = 'eager';
-                    img.removeAttribute('fetchpriority');
-                });
+            function startAnim(negDelaySec) {
+                stopAnim();
+                var dur = getDuration();
+                track.style.setProperty('--rail-duration', dur.toFixed(3) + 's');
+                track.style.transform = 'translate3d(0,0,0)';
+                track.style.animationDelay =
+                    (typeof negDelaySec === 'number' && isFinite(negDelaySec) && negDelaySec < 0)
+                        ? negDelaySec.toFixed(4) + 's'
+                        : '0s';
+                // Force reflow so removing+re-adding class restarts the animation from scratch
+                void track.offsetWidth;
+                track.classList.add('is-rail-running');
+                section.classList.add('is-marquee-active');
+                state.animating = true;
+                if (state.isPaused) track.classList.add('is-rail-paused');
             }
 
-            function removeExtraCloneSegments() {
-                track.querySelectorAll('[data-rail-segment="clone"][data-rail-segment-extra="1"]').forEach(function(node) {
-                    node.remove();
-                });
+            function syncPause() {
+                track.classList.toggle('is-rail-paused', state.isPaused || state.isDragging);
             }
 
-            function unwrapJsOriginalSegment() {
-                var seg = track.querySelector('[data-rail-segment="original"][data-rail-segment-js="1"]');
-                if (!seg) return;
-                while (seg.firstChild) {
-                    track.insertBefore(seg.firstChild, seg);
-                }
-                seg.remove();
-            }
-
-            function measureSegmentWidth(seg) {
-                if (!seg) return minItemWidth;
-                var w = seg.offsetWidth;
-                return w > 0 ? w : minItemWidth;
-            }
-
-            function measureLoopWidth() {
-                var originalSeg = track.querySelector('[data-rail-segment="original"]');
-                if (originalSeg) {
-                    return measureSegmentWidth(originalSeg);
-                }
-                if (!originals.length) return minItemWidth;
-                var gap = segmentGapPx();
-                if (originals.length === 1) {
-                    return Math.max(itemWidth(originals[0]), minItemWidth);
-                }
-                var first = originals[0];
-                var last = originals[originals.length - 1];
-                return Math.max((last.offsetLeft + itemWidth(last)) - first.offsetLeft, minItemWidth);
-            }
-
-            function readLoopWidth() {
-                var originalSeg = track.querySelector('[data-rail-segment="original"]');
-                var firstCloneSeg = track.querySelector('[data-rail-segment="clone"]');
-                if (!originalSeg || !firstCloneSeg) return measureLoopWidth();
-                var offset = firstCloneSeg.offsetLeft - originalSeg.offsetLeft;
-                if (offset > 0) return offset;
-                return measureSegmentWidth(originalSeg);
-            }
-
-            function calibrateLoopWidth() {
-                return readLoopWidth();
-            }
-
-            function getTrackTranslateX() {
-                var style = window.getComputedStyle(track);
-                var transform = style.transform;
-                if (!transform || transform === 'none') return 0;
-                if (typeof DOMMatrixReadOnly !== 'undefined') {
-                    return new DOMMatrixReadOnly(transform).m41;
-                }
-                var match = transform.match(/matrix(3d)?\(([^)]+)\)/);
-                if (!match) return 0;
-                var parts = match[2].split(',').map(function(v) { return parseFloat(v.trim()); });
-                return match[1] === '3d' ? (parts[12] || 0) : (parts[4] || 0);
-            }
-
-            function wrapTranslateX(x) {
-                var lw = state.loopWidth;
-                if (lw <= 0) return x;
-                x = x % lw;
-                if (x > 0) x -= lw;
-                return Math.round(x * 100) / 100;
-            }
-
-            function stopRailAnimation() {
-                if (state.waAnim) {
-                    state.waAnim.cancel();
-                    state.waAnim = null;
-                }
-            }
-
-            function syncRailPause() {
-                if (!state.waAnim) return;
-                if (state.isPaused || state.isDragging) {
-                    state.waAnim.pause();
-                } else {
-                    state.waAnim.play();
-                }
-            }
-
-            function startRailAnimation(fromX) {
-                stopRailAnimation();
-                state.loopWidth = readLoopWidth();
-                if (state.loopWidth <= 0) return;
-
-                var startX = typeof fromX === 'number' ? wrapTranslateX(fromX) : 0;
-                var endX = startX - state.loopWidth;
-                var duration = state.loopWidth / state.speed;
-
-                track.style.transform = '';
-                state.waAnim = track.animate(
-                    [
-                        { transform: 'translate3d(' + startX + 'px, 0, 0)' },
-                        { transform: 'translate3d(' + endX + 'px, 0, 0)' },
-                    ],
-                    {
-                        duration: duration,
-                        iterations: Infinity,
-                        easing: 'linear',
-                        fill: 'both',
+            /* ── Read current animated X in px ──────────── */
+            function readAnimatedX() {
+                var t = window.getComputedStyle(track).transform;
+                if (!t || t === 'none') return 0;
+                try {
+                    if (typeof DOMMatrixReadOnly !== 'undefined') {
+                        return new DOMMatrixReadOnly(t).m41;
                     }
-                );
-                syncRailPause();
+                    var m = t.match(/matrix(3d)?\(([^)]+)\)/);
+                    if (!m) return 0;
+                    var p = m[2].split(',').map(Number);
+                    return m[1] === '3d' ? (p[12] || 0) : (p[4] || 0);
+                } catch (e) { return 0; }
             }
 
-            function getRequiredCloneCount(loopWidth) {
-                var viewportWidth = viewport.clientWidth || section.clientWidth || window.innerWidth;
-                if (loopWidth <= 0) return 2;
-                return Math.max(2, Math.ceil(viewportWidth / loopWidth) + 1);
+            /* ── Drag ────────────────────────────────────── */
+            function pointerDown(e) {
+                if (cfg.ignoreDragSelector && e.target.closest(cfg.ignoreDragSelector)) return;
+                // Capture current pixel position BEFORE stopping animation
+                state.dragOffsetX = readAnimatedX();
+                state.isDragging  = true;
+                state.pointerId   = e.pointerId;
+                state.dragStartX  = e.clientX;
+                stopAnim();
+                track.style.transform = 'translate3d(' + state.dragOffsetX + 'px,0,0)';
+                viewport.classList.add('is-dragging');
+                try { viewport.setPointerCapture(e.pointerId); } catch (err) {}
             }
 
-            function ensureSegmentClones() {
-                var originalSeg = track.querySelector('[data-rail-segment="original"]');
-                if (!originalSeg) return;
-
-                var loopWidth = state.loopWidth > 0 ? state.loopWidth : measureSegmentWidth(originalSeg);
-                var neededClones = getRequiredCloneCount(loopWidth);
-                var existingClones = track.querySelectorAll('[data-rail-segment="clone"]').length;
-
-                if (existingClones === 0) {
-                    var firstClone = originalSeg.cloneNode(true);
-                    decorateCloneSegment(firstClone, false);
-                    track.appendChild(firstClone);
-                    existingClones = 1;
-                }
-
-                var toAdd = neededClones - existingClones;
-                if (toAdd <= 0) return;
-
-                for (var p = 0; p < toAdd; p++) {
-                    var cloneSeg = originalSeg.cloneNode(true);
-                    decorateCloneSegment(cloneSeg, true);
-                    track.appendChild(cloneSeg);
-                }
-            }
-
-            function buildSegments() {
-                wrapOriginalsInSegment();
-                state.loopWidth = calibrateLoopWidth();
-                ensureSegmentClones();
-                state.loopWidth = calibrateLoopWidth();
-            }
-
-            function renderDrag(x) {
+            function pointerMove(e) {
+                if (!state.isDragging || e.pointerId !== state.pointerId) return;
+                var x = state.dragOffsetX + (e.clientX - state.dragStartX);
                 track.style.transform = 'translate3d(' + x + 'px,0,0)';
             }
 
-            function getAboveFoldImages() {
-                var count = Math.min(4, originals.length);
-                var imgs = [];
-                for (var i = 0; i < count; i++) {
-                    var img = originals[i].querySelector('img');
-                    if (img) imgs.push(img);
+            function commitDrag(finalClientX) {
+                var finalX   = state.dragOffsetX + (finalClientX - state.dragStartX);
+                var segW     = getSegmentWidth();
+                var dur      = getDuration();
+                var progress = segW > 0 ? (((-finalX % segW) + segW) % segW / segW) : 0;
+                viewport.classList.remove('is-dragging');
+                startAnim(-(progress * dur));
+            }
+
+            function pointerUp(e) {
+                if (!state.isDragging || e.pointerId !== state.pointerId) return;
+                state.isDragging = false;
+                try { viewport.releasePointerCapture(e.pointerId); } catch (err) {}
+                commitDrag(e.clientX);
+            }
+
+            function onLostCapture() {
+                if (!state.isDragging) return;
+                state.isDragging = false;
+                viewport.classList.remove('is-dragging');
+                startAnim(0);
+            }
+
+            /* ── Pause / resume ──────────────────────────── */
+            function pauseRail(autoResumeMs) {
+                state.isPaused = true;
+                syncPause();
+                clearTimeout(state.resumeTimer);
+                if (autoResumeMs) {
+                    state.resumeTimer = setTimeout(function() {
+                        state.isPaused = false;
+                        syncPause();
+                    }, autoResumeMs);
                 }
-                return imgs;
             }
 
-            function getCloneLeadImages() {
-                var cloneSeg = track.querySelector('[data-rail-segment="clone"]');
-                if (!cloneSeg) return [];
-                return Array.from(cloneSeg.querySelectorAll('img')).slice(0, 4);
+            function resumeRail(delayMs) {
+                clearTimeout(state.resumeTimer);
+                state.resumeTimer = setTimeout(function() {
+                    state.isPaused = false;
+                    syncPause();
+                }, delayMs || 0);
             }
 
-            function decodeImages(imgs) {
-                return Promise.all(imgs.map(function(img) {
-                    if (img.decode) {
-                        return img.decode().catch(function() {});
-                    }
-                    if (img.complete) return Promise.resolve();
-                    return new Promise(function(resolve) {
-                        img.addEventListener('load', resolve, { once: true });
-                        img.addEventListener('error', resolve, { once: true });
-                    });
-                }));
-            }
-
-            function buildRail(resetPosition) {
-                var prevLoopWidth = state.loopWidth;
-                var nextLoopWidth = readLoopWidth() || measureLoopWidth();
-                var nextItemWidth = originals.length ? itemWidth(originals[0]) : 0;
-
-                if (!resetPosition
-                    && prevLoopWidth > 0
-                    && Math.abs(nextLoopWidth - prevLoopWidth) < 2
-                    && Math.abs(nextItemWidth - state.cachedItemWidth) < 2
-                    && track.querySelector('[data-rail-segment="clone"]')) {
-                    state.loopWidth = readLoopWidth();
-                    if (state.animating && !state.isDragging) {
-                        startRailAnimation(getTrackTranslateX());
-                    }
-                    return false;
-                }
-
-                state.cachedItemWidth = nextItemWidth;
-                state.loopWidth = nextLoopWidth;
-                buildSegments();
-
-                if (state.animating && !state.isDragging) {
-                    startRailAnimation(resetPosition ? 0 : getTrackTranslateX());
-                }
-                return true;
-            }
-
-            function scheduleRebuild(resetPosition) {
-                clearTimeout(state.rebuildTimer);
-                state.rebuildTimer = setTimeout(function() {
-                    buildRail(!!resetPosition);
-                }, 150);
-            }
-
+            /* ── Boot ────────────────────────────────────── */
             function reveal() {
-                if (state.revealed) return;
-                state.revealed = true;
                 section.classList.add('is-initialized');
                 section.classList.remove('is-rail-rebuilding');
                 clearRailSafetyReveal(section);
             }
 
-            function finishBoot() {
-                state.booting = false;
-                state.animating = true;
-                state.loopWidth = readLoopWidth();
-                reveal();
-                if (!prefersReduced) {
-                    startRailAnimation(0);
-                }
-            }
-
             function boot() {
+                // Make clone images eager (same URLs as originals, already cached)
+                var cloneSeg = track.querySelector('[data-rail-segment="clone"]');
+                if (cloneSeg) {
+                    cloneSeg.querySelectorAll('img').forEach(function(img) {
+                        img.loading = 'eager';
+                    });
+                }
+
                 if (prefersReduced) {
-                    buildSegments();
-                    state.booting = false;
                     viewport.style.overflowX = 'auto';
                     track.style.transform = 'none';
                     reveal();
                     return;
                 }
 
-                buildRail(true);
+                // Two rAFs: first lets layout flush, second fires after first paint
                 requestAnimationFrame(function() {
-                    buildSegments();
-                    finishBoot();
+                    requestAnimationFrame(function() {
+                        reveal();
+                        startAnim(0);
+                    });
                 });
-                decodeImages(getAboveFoldImages().concat(getCloneLeadImages()));
             }
 
-            function pauseRail(forceResumeMs) {
-                state.isPaused = true;
-                syncRailPause();
-                clearTimeout(state.resumeTimer);
-                state.resumeTimer = setTimeout(function() {
-                    state.isPaused = false;
-                    syncRailPause();
-                }, forceResumeMs || 1200);
+            /* ── Events ──────────────────────────────────── */
+            if (!prefersReduced) {
+                if (canHoverPause) {
+                    on(section, 'mouseenter', function() { pauseRail(1500); });
+                    on(section, 'mouseleave', function() { resumeRail(80); });
+                }
+                on(viewport, 'pointerdown', pointerDown);
+                on(viewport, 'pointermove', pointerMove, { passive: true });
+                on(viewport, 'pointerup', pointerUp);
+                on(viewport, 'pointercancel', pointerUp);
+                on(viewport, 'lostpointercapture', onLostCapture);
             }
 
-            function resumeRail(delay) {
-                clearTimeout(state.resumeTimer);
-                state.resumeTimer = setTimeout(function() {
-                    state.isPaused = false;
-                    syncRailPause();
-                }, delay || 0);
+            // Pause only when scrolled completely out of view
+            if ('IntersectionObserver' in window) {
+                visObs = new IntersectionObserver(function(entries) {
+                    entries.forEach(function(entry) {
+                        if (entry.isIntersecting) state.hasBeenVisible = true;
+                        if (!state.hasBeenVisible) return;
+                        state.isPaused = !entry.isIntersecting;
+                        syncPause();
+                    });
+                }, { threshold: 0, rootMargin: '200px 0px' });
+                visObs.observe(section);
             }
 
-            function pointerDown(e) {
-                if (prefersReduced) return;
-                if (cfg.ignoreDragSelector && e.target.closest(cfg.ignoreDragSelector)) return;
-                state.booting = false;
-                state.isDragging = true;
-                state.pointerId = e.pointerId;
-                state.dragStartX = e.clientX;
-                state.dragOffsetX = getTrackTranslateX();
-                stopRailAnimation();
-                pauseRail(2500);
-                viewport.classList.add('is-dragging');
-                viewport.setPointerCapture(e.pointerId);
-            }
+            // On resize: preserve current visual position, recalc duration
+            on(window, 'resize', function() {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(function() {
+                    if (!state.animating || state.isDragging) return;
+                    var x    = readAnimatedX();
+                    var segW = getSegmentWidth();
+                    var dur  = getDuration();
+                    var p    = segW > 0 ? (((-x % segW) + segW) % segW / segW) : 0;
+                    startAnim(-(p * dur));
+                }, 200);
+            }, { passive: true });
 
-            function pointerMove(e) {
-                if (!state.isDragging || e.pointerId !== state.pointerId) return;
-                renderDrag(state.dragOffsetX + (e.clientX - state.dragStartX));
-            }
-
-            function pointerUp(e) {
-                if (!state.isDragging || e.pointerId !== state.pointerId) return;
-                state.isDragging = false;
-                state.animating = true;
-                var resumeX = wrapTranslateX(state.dragOffsetX + (e.clientX - state.dragStartX));
-                viewport.classList.remove('is-dragging');
-                try { viewport.releasePointerCapture(e.pointerId); } catch (err) {}
-                startRailAnimation(resumeX);
-                resumeRail(200);
-            }
-
-            function onLostPointerCapture() {
-                if (!state.isDragging) return;
-                state.isDragging = false;
-                state.animating = true;
-                viewport.classList.remove('is-dragging');
-                startRailAnimation(wrapTranslateX(getTrackTranslateX()));
-                resumeRail(200);
-            }
-
+            /* ── Destroy ─────────────────────────────────── */
             function destroy() {
-                stopRailAnimation();
+                stopAnim();
                 clearTimeout(state.resumeTimer);
-                clearTimeout(state.rebuildTimer);
-                listeners.forEach(function(binding) {
-                    binding.el.removeEventListener(binding.evt, binding.fn, binding.opts);
-                });
+                clearTimeout(resizeTimer);
+                listeners.forEach(function(b) { b.el.removeEventListener(b.evt, b.fn, b.opts); });
                 listeners.length = 0;
-                if (resizeObserver) {
-                    resizeObserver.disconnect();
-                    resizeObserver = null;
-                }
-                if (visObs) {
-                    visObs.disconnect();
-                    visObs = null;
-                }
+                if (visObs) { visObs.disconnect(); visObs = null; }
                 clearRailSafetyReveal(section);
-                removeExtraCloneSegments();
-                unwrapJsOriginalSegment();
                 track.style.transform = '';
                 viewport.classList.remove('is-dragging');
+                section.classList.remove('is-marquee-active', 'is-initialized');
                 section.classList.add('is-rail-rebuilding');
-                section.classList.remove('is-initialized');
                 section.removeAttribute('data-rail-initialized');
                 section._railApi = null;
             }
@@ -2396,59 +2222,22 @@
             try {
                 boot();
             } catch (err) {
-                if (typeof console !== 'undefined' && console.error) {
-                    console.error('[products-rail] init failed', err);
-                }
                 viewport.style.overflowX = 'auto';
                 track.style.transform = 'none';
                 forceRevealRail(section);
             }
 
-            if (typeof ResizeObserver !== 'undefined') {
-                var lastObservedWidth = 0;
-                resizeObserver = new ResizeObserver(function() {
-                    var w = originals.length ? itemWidth(originals[0]) : 0;
-                    if (w > 0 && Math.abs(w - lastObservedWidth) < 2) return;
-                    lastObservedWidth = w;
-                    scheduleRebuild(false);
-                });
-                originals.forEach(function(item) {
-                    resizeObserver.observe(item);
-                });
-            }
-
-            var resizeTimer = null;
-            on(window, 'resize', function() {
-                clearTimeout(resizeTimer);
-                resizeTimer = setTimeout(function() { buildRail(false); }, 150);
-            }, { passive: true });
-
-            if ('IntersectionObserver' in window) {
-                visObs = new IntersectionObserver(function(entries) {
-                    entries.forEach(function(entry) {
-                        state.isPaused = !entry.isIntersecting;
-                        syncRailPause();
-                    });
-                }, { threshold: 0.05, rootMargin: '80px 0px' });
-                visObs.observe(section);
-            }
-
-            if (!prefersReduced) {
-                if (canHoverPause) {
-                    on(section, 'mouseenter', function() { pauseRail(1500); });
-                    on(section, 'mouseleave', function() { resumeRail(80); });
-                }
-
-                on(viewport, 'pointerdown', pointerDown);
-                on(viewport, 'pointermove', pointerMove, { passive: true });
-                on(viewport, 'pointerup', pointerUp);
-                on(viewport, 'pointercancel', pointerUp);
-                on(viewport, 'lostpointercapture', onLostPointerCapture);
-            }
-
             section._railApi = {
-                destroy: destroy,
-                rebuild: function(restart) { buildRail(!!restart); },
+                destroy:   destroy,
+                rebuild:   function() {
+                    if (state.animating && !state.isDragging) {
+                        var x    = readAnimatedX();
+                        var segW = getSegmentWidth();
+                        var dur  = getDuration();
+                        var p    = segW > 0 ? (((-x % segW) + segW) % segW / segW) : 0;
+                        startAnim(-(p * dur));
+                    }
+                },
                 direction: getPageDirection,
             };
 

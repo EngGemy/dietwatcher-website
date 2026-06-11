@@ -16,7 +16,7 @@ $planPricePerDay = $planDurationDays > 0 ? $planLinePrice / $planDurationDays : 
 $sessionVerifiedPhone = session('phone_verified');
 $oldPhone = old('phone', '');
 $initialPhone = $oldPhone !== '' ? $oldPhone : (string) ($sessionVerifiedPhone ?? '');
-$phoneVerifiedFromSession = filled($sessionVerifiedPhone);
+$phoneVerifiedFromSession = \App\Support\CustomerSession::isLoggedIn();
 $initialPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput($initialPhone);
 $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('address_phone', ''));
 @endphp
@@ -760,9 +760,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 </div>
             </div>
 
-            @if(config('services.external_api.use_new_auth_flow', false))
-                @include('partials.checkout-auth-modal')
-            @endif
+            @include('partials.checkout-auth-modal')
 
             @if(!config('services.external_api.use_new_auth_flow', false))
             {{-- -- OTP Verification Modal (teleported to body) ---- --}}
@@ -3168,6 +3166,12 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             subscription_plan_id: parseInt(this.selectedSubscriptionPlanId || 0, 10) || 0,
                             plan_duration_id: parseInt(this.selectedPlanDurationId || 0, 10) || 0,
                             plan_calory_id: parseInt(this.selectedPlanCaloryId || 0, 10) || 0,
+                            delivery_type: this.deliveryType || 'home',
+                            start_date: this.startDate || '',
+                            selected_address_id: this.selectedAddressId || '',
+                            region_duration_id: this.selectedRegionDurationId || '',
+                            branch_id: this.selectedBranchId || '',
+                            zone_id: this.selectedZoneId || '',
                         }),
                     });
 
@@ -3209,6 +3213,16 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 this.couponApplied = false;
                 this.couponCode = '';
                 this.couponMessage = '';
+            },
+
+            publishCustomerSessionUpdate(profile = {}) {
+                const name = profile && profile.name ? String(profile.name) : String(this.customerName || '');
+                window.dispatchEvent(new CustomEvent('checkout-session-updated', {
+                    detail: {
+                        loggedIn: true,
+                        customerName: name,
+                    },
+                }));
             },
 
             // Re-validate coupon when duration changes (subtotal changes)
@@ -3300,29 +3314,31 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     const data = await response.json();
 
                     if (data.success) {
+                        if (data.needs_registration || data.is_continue) {
+                            this.otpModalOpen = false;
+                            window.dispatchEvent(new CustomEvent('open-checkout-auth', {
+                                detail: {
+                                    phone: this.fullPhone966(),
+                                    startAt: 'register',
+                                },
+                            }));
+
+                            return;
+                        }
+
                         this.phoneVerified = true;
                         this.syncAddressError = '';
                         this.otpMessageType = 'success';
                         this.otpMessage = data.message;
                         this.savedAddresses = Array.isArray(data.addresses) ? data.addresses : [];
-                        this.isContinueUser = !!data.is_continue;
+                        this.isContinueUser = false;
 
                         if (data.profile && data.profile.name) {
                             this.customerName = String(data.profile.name);
-                        }
-
-                        // Name field: show for new users; hide when returning user already has name.
-                        const isNewUser = !!data.is_continue;
-                        if (!isNewUser && data.profile && data.profile.name) {
                             this.showNameField = false;
-                        } else {
-                            this.showNameField = true;
                         }
 
-                        // Keep selection manual: user confirms address with "اختيار العنوان" button.
-                        if (isNewUser) {
-                            this.$nextTick(() => this.$refs.checkoutUserCard?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-                        }
+                        this.publishCustomerSessionUpdate(data.profile || {});
 
                         setTimeout(() => { this.otpModalOpen = false; }, 800);
                         this.$nextTick(() => this.scheduleMoyasarRefresh());
@@ -3776,11 +3792,12 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         this.phoneLocal = window.dwSaudiPhoneDigits(String(detail.phone));
                     }
                     this.applyCheckoutAddresses(detail.addresses || []);
-                    this.isContinueUser = !!detail.isContinue;
+                    this.isContinueUser = false;
                     if (detail.profile && detail.profile.name) {
                         this.customerName = String(detail.profile.name);
                     }
-                    this.showNameField = this.isContinueUser || ! (this.customerName || '').trim();
+                    this.showNameField = ! (this.customerName || '').trim();
+                    this.publishCustomerSessionUpdate(detail.profile || {});
                     await this.$nextTick();
                     if (this.deliveryType === 'home') {
                         setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 350);

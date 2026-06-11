@@ -783,6 +783,12 @@ class CheckoutController extends Controller
             'subscription_plan_id' => 'nullable|integer',
             'plan_duration_id' => 'nullable|integer',
             'plan_calory_id' => 'nullable|integer',
+            'delivery_type' => 'nullable|in:home,pickup',
+            'start_date' => 'nullable|string|max:20',
+            'selected_address_id' => 'nullable|string|max:50',
+            'region_duration_id' => 'nullable|string|max:50',
+            'branch_id' => 'nullable|string|max:50',
+            'zone_id' => 'nullable|string|max:50',
         ]);
 
         $rawIdentifier = trim((string) ($validated['identifier'] ?? ''));
@@ -811,29 +817,9 @@ class CheckoutController extends Controller
                 ], 422);
             }
 
-            $planCaloryId = (int) ($validated['plan_calory_id'] ?? 0);
-            if ($planCaloryId <= 0) {
-                $cart = session()->get(CartManager::SESSION_SUBSCRIPTION, []);
-                $line = SubscriptionCheckoutPayload::firstPlanLine($cart)['line'];
-                $options = is_array($line['options'] ?? null) ? $line['options'] : [];
-                $planCaloryId = (int) ($options['calorie_id'] ?? 0);
-                if ($planCaloryId <= 0) {
-                    $subPlanId = (int) ($validated['subscription_plan_id'] ?? $options['subscription_plan_id'] ?? 0);
-                    $planCaloryId = SubscriptionCheckoutPayload::resolvePlanCaloryId(
-                        $programId,
-                        $subPlanId,
-                        (string) ($options['calories'] ?? ''),
-                        $this->externalDataService
-                    );
-                }
-            }
-
             $extResult = $this->validatePromoViaExternalApi(
                 (string) $validated['code'],
-                $programId,
-                $planDurationId,
-                $planCaloryId,
-                (int) ($validated['subscription_plan_id'] ?? 0),
+                $validated,
             );
 
             return response()->json($extResult, ($extResult['valid'] ?? false) ? 200 : 422);
@@ -850,15 +836,11 @@ class CheckoutController extends Controller
     /**
      * Validate promo via POST /subscriptions/calculate (customer token required).
      *
+     * @param  array<string, mixed>  $checkoutContext
      * @return array<string, mixed>
      */
-    private function validatePromoViaExternalApi(
-        string $code,
-        int $programId,
-        int $planDurationId,
-        int $planCaloryId,
-        int $subscriptionPlanId = 0,
-    ): array {
+    private function validatePromoViaExternalApi(string $code, array $checkoutContext): array
+    {
         if (! filled(config('services.external_api.url'))) {
             return [
                 'valid' => false,
@@ -879,53 +861,36 @@ class CheckoutController extends Controller
         }
 
         try {
-            $planId = $subscriptionPlanId > 0 ? $subscriptionPlanId : $programId;
-            $cart = session()->get(CartManager::SESSION_SUBSCRIPTION)
-                ?? session()->get(CartManager::SESSION_MARKET, []);
-            $withWeekend = SubscriptionCheckoutPayload::resolveWithWeekend($cart, $this->externalDataService);
-            $payload = [
-                'program_id' => (string) $programId,
-                'plan_id' => (string) $planId,
-                'plan_duration_id' => (string) $planDurationId,
-                'plan_calory_id' => (string) max(0, $planCaloryId),
-                'promocode_name' => trim($code),
-                'receiving' => 'delivery',
-                'with_support' => '0',
-                'with_weekend' => $withWeekend,
+            $cart = session()->get(CartManager::SESSION_SUBSCRIPTION, []);
+            $planDurationId = (int) ($checkoutContext['plan_duration_id'] ?? 0);
+            $codeVariants = $this->promoCodeVariants($code);
+            $lastFailure = [
+                'valid' => false,
+                'discount' => 0,
+                'message' => (string) __('checkout.promo_invalid'),
+                'source' => 'external',
             ];
 
-            $response = $this->accountApiService->calculateSubscription($payload, $token);
-            if ($response['ok'] ?? false) {
-                return $this->normalizeExternalPromoCalculateResult(
-                    is_array($response['data'] ?? null) ? $response['data'] : [],
-                    $response
+            foreach ($codeVariants as $promoCode) {
+                $result = $this->attemptExternalPromoValidation(
+                    $promoCode,
+                    $checkoutContext,
+                    $cart,
+                    $token,
+                    $planDurationId,
                 );
-            }
 
-            $message = trim((string) ($response['message'] ?? ''));
-            if ($message === '') {
-                $raw = is_array($response['raw'] ?? null) ? $response['raw'] : [];
-                $errors = $raw['errors'] ?? null;
-                if (is_array($errors)) {
-                    foreach ($errors as $fieldErrors) {
-                        if (is_array($fieldErrors) && isset($fieldErrors[0])) {
-                            $message = trim((string) $fieldErrors[0]);
-                            break;
-                        }
-                        if (is_string($fieldErrors) && trim($fieldErrors) !== '') {
-                            $message = trim($fieldErrors);
-                            break;
-                        }
-                    }
+                if ($result['valid'] ?? false) {
+                    return $result;
+                }
+
+                $lastFailure = $result;
+                if ($result['api_rejected'] ?? false) {
+                    continue;
                 }
             }
 
-            return [
-                'valid' => false,
-                'discount' => 0,
-                'message' => $message !== '' ? $message : __('checkout.promo_invalid'),
-                'source' => 'external',
-            ];
+            return $lastFailure;
         } catch (\Exception $e) {
             Log::warning('External promo validation failed', [
                 'code' => $code,
@@ -942,46 +907,64 @@ class CheckoutController extends Controller
     }
 
     /**
-     * @param  array<string, mixed>  $data
-     * @param  array<string, mixed>  $wrapper
+     * @param  array<string, mixed>  $checkoutContext
+     * @param  array<string, mixed>  $cart
      * @return array<string, mixed>
      */
-    private function normalizeExternalPromoCalculateResult(array $data, array $wrapper): array
-    {
-        $parsed = $this->accountApiService->parseSubscriptionCalculateTotals($data);
-        $discount = is_array($parsed) ? (float) ($parsed['discount'] ?? 0) : 0.0;
-        $subtotal = is_array($parsed) ? (float) ($parsed['subtotal'] ?? 0) : 0.0;
+    private function attemptExternalPromoValidation(
+        string $promoCode,
+        array $checkoutContext,
+        array $cart,
+        string $token,
+        int $planDurationId,
+    ): array {
+        $validated = array_merge($checkoutContext, [
+            'promocode_name' => $promoCode,
+            'coupon' => $promoCode,
+            'delivery_type' => (string) ($checkoutContext['delivery_type'] ?? 'home'),
+        ]);
 
-        if ($discount <= 0) {
-            $discount = $this->externalMoneyAmount($data['discount'] ?? $data['discount_amount'] ?? 0);
-        }
-        if ($subtotal <= 0) {
-            $subtotal = $this->externalMoneyAmount($data['subtotal'] ?? $data['price'] ?? $data['plan_price'] ?? 0);
-        }
-        if ($discount <= 0 && $subtotal > 0) {
-            $total = $this->externalMoneyAmount(
-                $data['total'] ?? $data['grand_total'] ?? $data['amount'] ?? $data['final_total'] ?? -1
-            );
-            if ($total >= 0 && $total < $subtotal) {
-                $discount = $subtotal - $total;
-            }
-        }
+        $payload = SubscriptionCheckoutPayload::buildFormPayload(
+            $validated,
+            $cart,
+            $this->externalDataService,
+            $planDurationId > 0 ? $planDurationId : null,
+        );
 
-        $promoPresent = $discount > 0
-            || filled($data['promocode'] ?? null)
-            || filled($data['promo_code'] ?? null)
-            || filled($data['promocode_name'] ?? null);
-
-        if (! $promoPresent) {
-            $message = trim((string) ($wrapper['message'] ?? $data['message'] ?? __('checkout.promo_invalid')));
-
+        if ($payload === []) {
             return [
                 'valid' => false,
                 'discount' => 0,
-                'message' => $message !== '' ? $message : __('checkout.promo_invalid'),
+                'message' => __('checkout.promo_select_duration'),
                 'source' => 'external',
+                'api_rejected' => false,
             ];
         }
+
+        $payloadWithPromo = $payload;
+        $payloadBaseline = $payload;
+        unset($payloadBaseline['promocode_name']);
+
+        $withPromo = $this->accountApiService->calculateSubscription($payloadWithPromo, $token);
+        if (! ($withPromo['ok'] ?? false)) {
+            return [
+                'valid' => false,
+                'discount' => 0,
+                'message' => $this->extractExternalPromoErrorMessage($withPromo),
+                'source' => 'external',
+                'api_rejected' => $this->externalPromoWasRejected($withPromo),
+            ];
+        }
+
+        $promoData = is_array($withPromo['data'] ?? null) ? $withPromo['data'] : [];
+        $baselineData = null;
+        $baseline = $this->accountApiService->calculateSubscription($payloadBaseline, $token);
+        if ($baseline['ok'] ?? false) {
+            $baselineData = is_array($baseline['data'] ?? null) ? $baseline['data'] : [];
+        }
+
+        $requestSubtotal = (float) ($checkoutContext['subtotal'] ?? 0);
+        $discount = $this->extractDiscountFromCalculateResponse($promoData, $baselineData, $requestSubtotal);
 
         return [
             'valid' => true,
@@ -990,7 +973,146 @@ class CheckoutController extends Controller
             'source' => 'external',
             'type' => 'fixed',
             'value' => round(max(0, $discount), 2),
+            'promocode_name' => $promoCode,
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function promoCodeVariants(string $code): array
+    {
+        $trimmed = trim($code);
+        if ($trimmed === '') {
+            return [];
+        }
+
+        $variants = [
+            $trimmed,
+            strtoupper($trimmed),
+            strtolower($trimmed),
+            ucfirst(strtolower($trimmed)),
+        ];
+
+        return array_values(array_unique(array_filter($variants, static fn (string $value): bool => $value !== '')));
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $baselineData
+     */
+    private function extractDiscountFromCalculateResponse(
+        array $promoData,
+        ?array $baselineData,
+        float $requestSubtotal = 0,
+    ): float {
+        if ($baselineData !== null) {
+            $baselineTotal = $this->extractCalculatePayableTotal($baselineData);
+            $promoTotal = $this->extractCalculatePayableTotal($promoData);
+            if ($baselineTotal >= 0 && $promoTotal >= 0 && $promoTotal < $baselineTotal) {
+                return $baselineTotal - $promoTotal;
+            }
+        }
+
+        $parsed = $this->accountApiService->parseSubscriptionCalculateTotals($promoData);
+        if (is_array($parsed) && (float) ($parsed['discount'] ?? 0) > 0) {
+            return (float) $parsed['discount'];
+        }
+
+        foreach (['discount', 'discount_amount', 'promo_discount', 'coupon_discount', 'promocode_discount'] as $key) {
+            $amount = $this->externalMoneyAmount(data_get($promoData, $key));
+            if ($amount > 0) {
+                return $amount;
+            }
+        }
+
+        $subtotal = $this->externalMoneyAmount(
+            $promoData['subtotal'] ?? $promoData['price'] ?? $promoData['plan_price'] ?? 0
+        );
+        $total = $this->externalMoneyAmount(
+            $promoData['total'] ?? $promoData['grand_total'] ?? $promoData['amount'] ?? $promoData['final_total'] ?? -1
+        );
+
+        if ($subtotal > 0 && $total >= 0 && $total < $subtotal) {
+            return $subtotal - $total;
+        }
+
+        if ($subtotal > 0 && $total === 0.0) {
+            return $subtotal;
+        }
+
+        if ($requestSubtotal > 0 && $total === 0.0) {
+            return $requestSubtotal;
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     */
+    private function externalPromoWasRejected(array $result): bool
+    {
+        $raw = is_array($result['raw'] ?? null) ? $result['raw'] : [];
+        $errors = $raw['errors'] ?? null;
+        if (! is_array($errors)) {
+            return false;
+        }
+
+        foreach (['promocode_name', 'promocode', 'promo_code', 'coupon', 'promo'] as $field) {
+            if (! empty($errors[$field])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     */
+    private function extractExternalPromoErrorMessage(array $result): string
+    {
+        $message = trim((string) ($result['message'] ?? ''));
+        if ($message !== '') {
+            return $message;
+        }
+
+        $raw = is_array($result['raw'] ?? null) ? $result['raw'] : [];
+        $errors = $raw['errors'] ?? null;
+        if (is_array($errors)) {
+            foreach (['promocode_name', 'promocode', 'promo_code', 'coupon'] as $field) {
+                $fieldErrors = $errors[$field] ?? null;
+                if (is_array($fieldErrors) && isset($fieldErrors[0])) {
+                    return trim((string) $fieldErrors[0]);
+                }
+            }
+
+            foreach ($errors as $fieldErrors) {
+                if (is_array($fieldErrors) && isset($fieldErrors[0])) {
+                    return trim((string) $fieldErrors[0]);
+                }
+                if (is_string($fieldErrors) && trim($fieldErrors) !== '') {
+                    return trim($fieldErrors);
+                }
+            }
+        }
+
+        return (string) __('checkout.promo_invalid');
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function extractCalculatePayableTotal(array $data): float
+    {
+        $parsed = $this->accountApiService->parseSubscriptionCalculateTotals($data);
+        if (is_array($parsed)) {
+            return (float) ($parsed['total'] ?? -1);
+        }
+
+        return $this->externalMoneyAmount(
+            $data['total'] ?? $data['grand_total'] ?? $data['amount'] ?? $data['final_total'] ?? -1
+        );
     }
 
     private function externalMoneyAmount(mixed $value): float

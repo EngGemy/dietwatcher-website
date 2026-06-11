@@ -247,7 +247,7 @@ if (typeof window.checkoutAuthModalMock === 'undefined') {
             init() {
                 const raw = this.getPhoneFromCheckout();
                 this.mobile = window.dwSaudiPhone966(raw) || raw.replace(/\D/g, '');
-                window.addEventListener('open-checkout-auth', (event) => this.openModal(event.detail?.phone || ''));
+                window.addEventListener('open-checkout-auth', (event) => this.openModal(event.detail?.phone || '', event.detail || {}));
             },
             getPhoneFromCheckout() {
                 const el = document.querySelector('input[name="phone"]');
@@ -286,15 +286,22 @@ if (typeof window.checkoutAuthModalMock === 'undefined') {
                 if (key === 'otp_2') return ['otp_2', 'verifying_2', 'authenticated'].includes(this.step);
                 return false;
             },
-            openModal(forcedPhone = '') {
+            openModal(forcedPhone = '', options = {}) {
                 this.isOpen = true;
-                this.step = 'sending_otp_1';
                 this.errors = {};
-                this.needsRegistrationFlow = false;
                 const raw = forcedPhone ? String(forcedPhone).trim() : this.getPhoneFromCheckout();
                 this.mobile = window.dwSaudiPhone966(raw) || raw.replace(/\D/g, '');
                 this.otp1 = ['', '', '', ''];
                 this.otp2 = ['', '', '', ''];
+
+                if (options.startAt === 'register') {
+                    this.needsRegistrationFlow = true;
+                    this.step = 'register';
+                    return;
+                }
+
+                this.needsRegistrationFlow = false;
+                this.step = 'sending_otp_1';
                 this.sendOtp('otp_1');
             },
             closeModal() {
