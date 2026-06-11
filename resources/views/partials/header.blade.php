@@ -195,14 +195,15 @@
 
             {{-- Profile Dropdown --}}
             @php
-                $isLoggedIn = session('external_api_token') && session('phone_verified');
-                $customerName = trim((string) session('customer_name', ''));
-                // Fallback: try to get name from profile session
-                if (! $customerName) {
-                    $profile = session('customer_profile', []);
-                    $customerName = trim((string) ($profile['name'] ?? ''));
-                }
-                $customerInitial = $customerName ? mb_strtoupper(mb_substr($customerName, 0, 1)) : '';
+                use App\Support\CustomerSession;
+
+                $isLoggedIn = CustomerSession::isLoggedIn();
+                $customerName = $isLoggedIn
+                    ? CustomerSession::displayName('')
+                    : '';
+                $customerInitial = $customerName !== ''
+                    ? mb_strtoupper(mb_substr($customerName, 0, 1))
+                    : '';
             @endphp
 
             <div
@@ -260,12 +261,17 @@
                                 {{ $customerInitial ?: '👤' }}
                             </div>
                             <div class="header__profile-welcome-text">
-                                <p class="header__profile-greeting">
-                                    {{ app()->getLocale() === 'ar' ? 'أهلاً' : 'Welcome' }}
+                                <p class="header__profile-name">
+                                    @if(app()->getLocale() === 'ar')
+                                        أهلاً@if($customerName !== '')، {{ $customerName }}@endif
+                                    @else
+                                        @if($customerName !== '')
+                                            Welcome, {{ $customerName }}
+                                        @else
+                                            Welcome
+                                        @endif
+                                    @endif
                                 </p>
-                                @if($customerName)
-                                    <p class="header__profile-name">{{ $customerName }}</p>
-                                @endif
                             </div>
                         </div>
 

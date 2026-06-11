@@ -6,6 +6,66 @@
     --pd-muted: rgba(15, 23, 42, 0.62);
     --pd-border: rgba(148, 163, 184, 0.28);
     --pd-radius: 1rem;
+    --pd-hero-img-max: 240px;
+}
+
+@media (min-width: 768px) {
+    .plan-detail {
+        --pd-hero-img-max: 300px;
+    }
+}
+
+@media (min-width: 1024px) {
+    .plan-detail {
+        --pd-hero-img-max: 340px;
+    }
+}
+
+/* Compact hero image — content-first, not full-bleed */
+.plan-detail .meal-detail__hero {
+    align-items: start;
+}
+
+.plan-detail .meal-detail__media {
+    aspect-ratio: 16 / 10;
+    min-height: 0;
+    height: auto;
+    max-height: var(--pd-hero-img-max);
+    width: 100%;
+    max-width: 420px;
+    margin-inline: auto;
+}
+
+.plan-detail .meal-detail__media-img,
+.plan-detail .meal-detail__media img {
+    max-height: var(--pd-hero-img-max);
+    object-fit: cover;
+    object-position: center;
+}
+
+.plan-detail .meal-detail__media [data-hs-carousel],
+.plan-detail .meal-detail__media .hs-carousel,
+.plan-detail .meal-detail__media .hs-carousel-body,
+.plan-detail .meal-detail__media .hs-carousel-slide {
+    max-height: var(--pd-hero-img-max);
+    height: 100%;
+}
+
+@media (min-width: 1024px) {
+    .plan-detail .meal-detail__hero {
+        grid-template-columns: minmax(240px, 36%) minmax(0, 1fr);
+        gap: clamp(1.5rem, 2.5vw, 2.75rem);
+    }
+
+    .plan-detail .meal-detail__media {
+        margin-inline: 0;
+        max-width: none;
+        aspect-ratio: 4 / 3;
+    }
+
+    .plan-detail .meal-detail__panel {
+        top: 5.5rem;
+    }
 }
 
 .plan-detail__block {

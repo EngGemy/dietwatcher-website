@@ -820,6 +820,15 @@ class CheckoutController extends Controller
 
         $programId = (int) ($validated['program_id'] ?? 0);
         if ($programId > 0) {
+            $planDurationId = (int) ($validated['plan_duration_id'] ?? 0);
+            if ($planDurationId <= 0) {
+                return response()->json([
+                    'valid' => false,
+                    'discount' => 0,
+                    'message' => __('checkout.promo_select_duration'),
+                ], 422);
+            }
+
             $planCaloryId = (int) ($validated['plan_calory_id'] ?? 0);
             if ($planCaloryId <= 0) {
                 $cart = session()->get(CartManager::SESSION_SUBSCRIPTION, []);
@@ -840,12 +849,12 @@ class CheckoutController extends Controller
             $extResult = $this->validatePromoViaExternalApi(
                 (string) $validated['code'],
                 $programId,
-                (int) ($validated['plan_duration_id'] ?? 0),
+                $planDurationId,
                 $planCaloryId,
                 (int) ($validated['subscription_plan_id'] ?? 0),
             );
             if ($extResult !== null) {
-                return response()->json($extResult);
+                return response()->json($extResult, ($extResult['valid'] ?? false) ? 200 : 422);
             }
         }
 
@@ -921,11 +930,6 @@ class CheckoutController extends Controller
             return null;
         }
 
-        $token = (string) session('external_api_token', '');
-        if ($token === '') {
-            return null;
-        }
-
         try {
             $planId = $subscriptionPlanId > 0 ? $subscriptionPlanId : $programId;
             $cart = session()->get(CartManager::SESSION_SUBSCRIPTION)
@@ -935,46 +939,98 @@ class CheckoutController extends Controller
                 'program_id' => (string) $programId,
                 'plan_id' => (string) $planId,
                 'plan_duration_id' => (string) $planDurationId,
-                'plan_calory_id' => (string) $planCaloryId,
+                'plan_calory_id' => (string) max(0, $planCaloryId),
                 'promocode_name' => $code,
                 'receiving' => 'delivery',
                 'with_support' => '0',
                 'with_weekend' => $withWeekend,
             ];
-            $response = $this->accountApiService
-                ->calculateSubscription($payload, $token);
-            if (! ($response['ok'] ?? false)) {
-                return null;
+
+            $token = (string) session('external_api_token', '');
+            if ($token !== '') {
+                $response = $this->accountApiService->calculateSubscription($payload, $token);
+                if ($response['ok'] ?? false) {
+                    return $this->normalizeExternalPromoCalculateResult(
+                        is_array($response['data'] ?? null) ? $response['data'] : [],
+                        $response
+                    );
+                }
             }
 
-            $data = is_array($response['data'] ?? null) ? $response['data'] : [];
-            $discountAmount = (float) ($data['discount'] ?? $data['discount_amount'] ?? 0);
-            $promoValid = $discountAmount > 0
-                || isset($data['promocode'])
-                || ($response['raw']['success'] ?? false) === true;
-
-            if (! $promoValid) {
-                $message = (string) ($response['message'] ?? __('Invalid coupon code.'));
-
-                return ['valid' => false, 'discount' => 0, 'message' => $message, 'source' => 'external'];
+            $serviceCalc = $this->externalDataService->calculateSubscription($payload);
+            if ($serviceCalc['success'] ?? false) {
+                return $this->normalizeExternalPromoCalculateResult(
+                    is_array($serviceCalc['data'] ?? null) ? $serviceCalc['data'] : [],
+                    $serviceCalc
+                );
             }
 
-            return [
-                'valid' => true,
-                'discount' => round($discountAmount, 2),
-                'message' => __('Coupon applied successfully!'),
-                'source' => 'external',
-                'type' => 'fixed',
-                'value' => round($discountAmount, 2),
-            ];
+            $message = trim((string) ($serviceCalc['message'] ?? ''));
+            if ($message !== '') {
+                return [
+                    'valid' => false,
+                    'discount' => 0,
+                    'message' => $message,
+                    'source' => 'external',
+                ];
+            }
         } catch (\Exception $e) {
             Log::warning('External promo validation failed', [
                 'code' => $code,
                 'error' => $e->getMessage(),
             ]);
-
-            return null;
         }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $wrapper
+     * @return array<string, mixed>
+     */
+    private function normalizeExternalPromoCalculateResult(array $data, array $wrapper): array
+    {
+        $parsed = $this->accountApiService->parseSubscriptionCalculateTotals($data);
+        $discount = is_array($parsed) ? (float) ($parsed['discount'] ?? 0) : 0.0;
+        $subtotal = is_array($parsed) ? (float) ($parsed['subtotal'] ?? 0) : 0.0;
+
+        if ($discount <= 0) {
+            $discount = (float) ($data['discount'] ?? $data['discount_amount'] ?? 0);
+        }
+        if ($subtotal <= 0) {
+            $subtotal = (float) ($data['subtotal'] ?? $data['price'] ?? $data['plan_price'] ?? 0);
+        }
+        if ($discount <= 0 && $subtotal > 0) {
+            $total = (float) ($data['total'] ?? $data['grand_total'] ?? $data['amount'] ?? $data['final_total'] ?? -1);
+            if ($total >= 0 && $total < $subtotal) {
+                $discount = $subtotal - $total;
+            }
+        }
+
+        $promoPresent = $discount > 0
+            || isset($data['promocode'])
+            || isset($data['promo_code']);
+
+        if (! $promoPresent) {
+            $message = trim((string) ($wrapper['message'] ?? $data['message'] ?? __('Invalid coupon code.')));
+
+            return [
+                'valid' => false,
+                'discount' => 0,
+                'message' => $message !== '' ? $message : __('Invalid coupon code.'),
+                'source' => 'external',
+            ];
+        }
+
+        return [
+            'valid' => true,
+            'discount' => round(max(0, $discount), 2),
+            'message' => __('Coupon applied successfully!'),
+            'source' => 'external',
+            'type' => 'fixed',
+            'value' => round(max(0, $discount), 2),
+        ];
     }
 
     /**

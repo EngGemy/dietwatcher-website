@@ -191,15 +191,28 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                         </button>
                                     </template>
                                 </div>
-                                <p x-show="couponMessage" x-cloak
-                                   :class="couponApplied ? 'text-green-600' : 'text-red-500'"
-                                   class="text-sm mt-1" x-text="couponMessage"></p>
+                                <div
+                                    x-show="couponMessage"
+                                    x-cloak
+                                    class="checkout-coupon-feedback mt-2"
+                                    :class="couponApplied ? 'checkout-coupon-feedback--success' : 'checkout-coupon-feedback--error'"
+                                    role="status"
+                                    aria-live="polite"
+                                >
+                                    <svg x-show="couponApplied" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                    </svg>
+                                    <svg x-show="!couponApplied" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12V12.75Z" />
+                                    </svg>
+                                    <span x-text="couponMessage"></span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     {{-- User Information --}}
-                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-ref="checkoutUserCard">
+                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-ref="checkoutUserCard" data-checkout-phone-section>
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('User Information') }}</h3>
 
                         <div class="space-y-4">
@@ -254,8 +267,41 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         </div>
                     </div>
 
-                    {{-- Delivery address: map (home) or branch (pickup) ? toggles live in Select Options --}}
-                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5" x-ref="paymentCard">
+                    {{-- Step gate: verify phone before delivery options (shown instead of the map/form) --}}
+                    <div
+                        x-show="!phoneVerified"
+                        x-cloak
+                        class="checkout-verify-gate mt-6"
+                        role="status"
+                    >
+                        <div class="checkout-verify-gate__icon" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+                            </svg>
+                        </div>
+                        <div class="checkout-verify-gate__body">
+                            <p class="checkout-verify-gate__step">{{ __('checkout.step_verify_phone') }}</p>
+                            <p class="checkout-verify-gate__title">{{ __('checkout.verify_phone_before_address') }}</p>
+                            <button
+                                type="button"
+                                class="btn btn--primary btn--sm mt-3"
+                                @click="promptPhoneVerificationForDelivery()"
+                            >
+                                {{ __('checkout.verify_phone_first_btn') }}
+                            </button>
+                        </div>
+                    </div>
+
+                    {{-- Delivery address: map (home) or branch (pickup) — only after phone verified --}}
+                    <div
+                        x-show="phoneVerified"
+                        x-cloak
+                        x-transition:enter="transition ease-out duration-300"
+                        x-transition:enter-start="opacity-0 translate-y-2"
+                        x-transition:enter-end="opacity-100 translate-y-0"
+                        class="mt-6 rounded-md border border-gray-200 bg-white p-5"
+                        x-ref="deliveryCard"
+                    >
                         <input type="hidden" name="selected_address_id" :value="selectedAddressId || ''" :disabled="deliveryType !== 'home'" />
                         <input type="hidden" name="region_duration_id" :value="selectedRegionDurationId || ''" :disabled="deliveryType !== 'home'" />
                         <h3 class="mb-6 text-2xl font-semibold md:text-2xl">{{ __('Delivery Address') }}</h3>
@@ -554,6 +600,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
                     {{-- Payment: Moyasar (fields visible, pay button disabled until phone verified) --}}
                     <div class="mt-6 rounded-md border border-gray-200 bg-white p-5"
+                         x-ref="paymentCard"
                          :class="{ 'checkout-pay-locked': !phoneVerified }"
                     >
                         <h3 class="mb-2 text-2xl font-semibold md:text-2xl">{{ __('Payment') }}</h3>
@@ -574,15 +621,15 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
                         <div x-show="moyasarError" x-cloak class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" x-text="moyasarError"></div>
                         <div
-                            x-show="syncAddressError && deliveryType === 'home' && syncAddressError !== @json(__('checkout.area_not_served'))"
+                            x-show="syncAddressErrorDisplay()"
                             x-cloak
                             class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
-                            x-text="syncAddressError"
+                            x-text="syncAddressErrorDisplay()"
                         ></div>
 
                         <div class="relative min-h-[160px] rounded-xl border border-gray-200 bg-gray-50 p-4">
                             <div
-                                x-show="!canProceedToPayment()"
+                                x-show="phoneVerified && !canProceedToPayment() && paymentBlockerMessage()"
                                 x-cloak
                                 class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
                                 x-text="paymentBlockerMessage()"></div>
@@ -1319,6 +1366,70 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
     }
     .checkout-branch-selected__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
 
+    .checkout-verify-gate {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 1.15rem 1.25rem;
+        border-radius: 14px;
+        border: 2px dashed rgba(39, 159, 249, 0.35);
+        background: linear-gradient(135deg, #f0f9ff 0%, #eff6ff 100%);
+        box-shadow: 0 4px 18px rgba(39, 159, 249, 0.08);
+    }
+    .checkout-verify-gate__icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        flex-shrink: 0;
+        border-radius: 999px;
+        background: #fff;
+        color: #279ff9;
+        border: 1px solid rgba(39, 159, 249, 0.2);
+        box-shadow: 0 2px 8px rgba(39, 159, 249, 0.12);
+    }
+    .checkout-verify-gate__icon svg {
+        width: 1.35rem;
+        height: 1.35rem;
+    }
+    .checkout-verify-gate__step {
+        margin: 0 0 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #279ff9;
+    }
+    .checkout-verify-gate__title {
+        margin: 0;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        line-height: 1.55;
+        color: #1e3a5f;
+    }
+
+    .checkout-coupon-feedback {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        padding: 0.65rem 0.85rem;
+        border-radius: 10px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        line-height: 1.45;
+    }
+    .checkout-coupon-feedback--success {
+        border: 1px solid rgba(34, 197, 94, 0.35);
+        background: #f0fdf4;
+        color: #166534;
+    }
+    .checkout-coupon-feedback--error {
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        background: #fef2f2;
+        color: #991b1b;
+    }
+
     #moyasar-form-checkout .mysr-form {
         font-family: inherit !important;
     }
@@ -1506,6 +1617,42 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     return fromForm;
                 }
                 return '{{ csrf_token() }}';
+            },
+
+            syncAddressErrorDisplay() {
+                const msg = String(this.syncAddressError || '').trim();
+                if (! msg) {
+                    return '';
+                }
+                const areaMsg = @json(__('checkout.area_not_served'));
+                const blockerMsg = @json(__('checkout.confirm_saved_address_before_payment'));
+                if (msg === areaMsg || msg === blockerMsg) {
+                    return '';
+                }
+
+                return msg;
+            },
+
+            promptPhoneVerificationForDelivery() {
+                if (this.phoneVerified) {
+                    return;
+                }
+                const phoneSection = this.$refs.checkoutForm?.querySelector('[data-checkout-phone-section]');
+                if (phoneSection) {
+                    phoneSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                if (this.fullPhone966()) {
+                    this.openOtpModal();
+                }
+            },
+
+            guardPhoneVerified() {
+                if (this.phoneVerified) {
+                    return true;
+                }
+                this.promptPhoneVerificationForDelivery();
+
+                return false;
             },
 
             getXsrfTokenFromCookie() {
@@ -1921,9 +2068,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     const data = await res.json().catch(() => ({}));
                     const ok = res.ok && (data.success === true || data.skipped === true);
                     if (ok) {
-                        this.syncAddressError = data.already_saved
-                            ? (data.message || @json(__('checkout.address_already_saved')))
-                            : '';
+                        this.syncAddressError = '';
                         if (Array.isArray(data.addresses)) {
                             this.applyCheckoutAddresses(data.addresses);
                         }
@@ -2189,6 +2334,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             startAddingAddress() {
+                if (! this.guardPhoneVerified()) {
+                    return;
+                }
                 this.addingNewAddress = !this.addingNewAddress;
                 this.newAddressError = '';
                 if (this.addingNewAddress) {
@@ -2210,6 +2358,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             async saveDeliveryAddress() {
+                if (! this.guardPhoneVerified()) {
+                    return;
+                }
                 this.newAddressError = '';
                 this.syncAddressError = '';
                 if (! this.fullPhone966()) {
@@ -2554,7 +2705,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
                         return true;
                     }
-                    this.syncAddressError = data.message || @json(__('checkout.confirm_saved_address_before_payment'));
+                    this.syncAddressError = String(data.message || '').trim();
 
                     return false;
                 } catch (e) {
@@ -2582,6 +2733,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             async selectSavedAddress(addr) {
+                if (! this.guardPhoneVerified()) {
+                    return;
+                }
                 if (! addr || this.deliveryType !== 'home') {
                     return;
                 }
@@ -2593,7 +2747,6 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 this.editingDeliveryTimeAddressId = null;
                 const activated = await this.activateCheckoutAddress(addr.id, addr);
                 if (! activated) {
-                    this.syncAddressError = this.syncAddressError || @json(__('checkout.confirm_saved_address_before_payment'));
                     this.clearMoyasarWidget();
 
                     return;
@@ -2736,11 +2889,17 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             openBranchPicker() {
+                if (! this.guardPhoneVerified()) {
+                    return;
+                }
                 this.pickupPhase = 'list';
                 this.branchSearch = '';
             },
 
             selectBranch(id) {
+                if (! this.guardPhoneVerified()) {
+                    return;
+                }
                 this.resetPaymentSession(true);
                 this.syncAddressError = '';
                 this.selectedBranchId = String(id);
@@ -2905,6 +3064,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             paymentBlockerMessage() {
+                if (! this.phoneVerified) {
+                    return '';
+                }
                 if (this.deliveryType === 'pickup') {
                     return @json(__('checkout.payment_blocker_pickup'));
                 }
@@ -2966,7 +3128,26 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
             // AJAX coupon validation
             async applyCoupon() {
-                if (!this.couponCode.trim()) return;
+                const code = this.couponCode.trim();
+                if (! code) {
+                    return;
+                }
+
+                if (! this.fullPhone966()) {
+                    this.couponApplied = false;
+                    this.discount = 0;
+                    this.couponMessage = @json(__('checkout.promo_requires_verified_phone'));
+
+                    return;
+                }
+
+                if (this.isPlanCheckout && ! this.selectedPlanDurationId) {
+                    this.couponApplied = false;
+                    this.discount = 0;
+                    this.couponMessage = @json(__('checkout.promo_select_duration'));
+
+                    return;
+                }
 
                 this.couponLoading = true;
                 this.couponMessage = '';
@@ -2980,7 +3161,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             'Accept': 'application/json',
                         },
                         body: JSON.stringify({
-                            code: this.couponCode.trim(),
+                            code: code,
                             subtotal: this.subtotal(),
                             identifier: this.fullPhone966() || '',
                             program_id: this.selectedPlanId || 0,
@@ -2998,14 +3179,20 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             couponMsg = String(flat[0]);
                         }
                     }
-                    this.couponMessage = couponMsg;
 
-                    if (response.ok && data.valid) {
-                        this.discount = data.discount;
+                    const isValid = response.ok && data.valid === true;
+                    if (isValid) {
+                        this.discount = Number(data.discount || 0);
                         this.couponApplied = true;
+                        this.couponMessage = couponMsg || @json(__('checkout.promo_applied_success'));
+                        if (! this._moyasarSessionFailed && this.canProceedToPayment()) {
+                            this._moyasarFingerprint = '';
+                            this.scheduleMoyasarRefresh();
+                        }
                     } else {
                         this.discount = 0;
                         this.couponApplied = false;
+                        this.couponMessage = couponMsg || @json(__('checkout.promo_invalid'));
                     }
                 } catch (error) {
                     this.couponMessage = @json(__('An error occurred. Please try again.'));
@@ -3594,6 +3781,10 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         this.customerName = String(detail.profile.name);
                     }
                     this.showNameField = this.isContinueUser || ! (this.customerName || '').trim();
+                    await this.$nextTick();
+                    if (this.deliveryType === 'home') {
+                        setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 350);
+                    }
                     if (this.deliveryType === 'home' && ! this.selectedAddressId) {
                         const autoSelected = await this.autoSelectSavedAddressIfNeeded();
                         if (autoSelected) {
@@ -3671,7 +3862,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         this.coverageOk = true;
                         this.coverageMessage = '';
                         this.syncAddressError = '';
-                    } else {
+                    } else if (this.phoneVerified) {
                         this.coverageOk = this.selectedAddressId ? true : null;
                         this.coverageMessage = '';
                         setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 300);
@@ -3688,7 +3879,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         this.scheduleMoyasarRefresh();
                     }
                 });
-                if (this.deliveryType === 'home') {
+                if (this.phoneVerified && this.deliveryType === 'home') {
                     setTimeout(() => window.dispatchEvent(new CustomEvent('checkout-home-map-refresh')), 500);
                 }
 

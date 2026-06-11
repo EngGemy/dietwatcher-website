@@ -371,16 +371,20 @@
                         $mealFallback = asset('assets/images/meal-' . ($loop->iteration % 3 === 0 ? 3 : $loop->iteration % 3) . '.png');
                         $effectivePrice = ($meal['offer_price'] ?? 0) > 0 && ($meal['offer_price'] < $meal['price']) ? $meal['offer_price'] : $meal['price'];
                     @endphp
-                    @php $isPlaceholderMeal = ! empty($meal['_placeholder']); @endphp
+                    @php
+                        $isPlaceholderMeal = ! empty($meal['_placeholder']);
+                        $railImgLoading = $loop->iteration <= 4 ? 'eager' : 'lazy';
+                        $railImgFetchPriority = $loop->iteration <= 4 ? 'high' : 'low';
+                    @endphp
                     <article class="meal-card products-rail__card" data-rail-item>
                         <div class="meal-card__thumbnail">
                             @if($isPlaceholderMeal)
                                 <a href="{{ route('meals.index') }}">
-                                    <img src="{{ $mealImageUrl }}" alt="{{ $meal['name'] }}" loading="eager" decoding="async" />
+                                    <img src="{{ $mealImageUrl }}" alt="{{ $meal['name'] }}" width="400" height="300" loading="{{ $railImgLoading }}" fetchpriority="{{ $railImgFetchPriority }}" decoding="async" />
                                 </a>
                             @else
                                 <a href="{{ route('store.show', $meal['id']) }}">
-                                    <img src="{{ $mealImageUrl }}" alt="{{ $meal['name'] }}" loading="eager" decoding="async" onerror="this.src='{{ $mealFallback }}'" />
+                                    <img src="{{ $mealImageUrl }}" alt="{{ $meal['name'] }}" width="400" height="300" loading="{{ $railImgLoading }}" fetchpriority="{{ $railImgFetchPriority }}" decoding="async" onerror="this.src='{{ $mealFallback }}'" />
                                 </a>
                             @endif
                         </div>
@@ -1109,6 +1113,22 @@
     position: relative;
     --rail-gap: clamp(1rem, 1.6vw, 1.6rem);
     --card-width: clamp(240px, 20vw, 300px);
+    /* thumb 4:3 + title/footer/button + track padding */
+    --rail-card-body-h: 11.25rem;
+    --rail-viewport-min-h: calc((var(--card-width) * 0.75) + var(--rail-card-body-h) + 0.8rem);
+    min-height: var(--rail-viewport-min-h);
+}
+.products-rail__viewport {
+    position: relative;
+}
+.products-rail.is-rail-rebuilding {
+    pointer-events: none;
+}
+@media (scripting: none) {
+    .products-rail.is-initialized .products-rail__viewport,
+    .testimonials-rail.is-initialized .testimonials-rail__viewport {
+        overflow-x: auto;
+    }
 }
 .products-empty-state {
     max-width: 36rem;
@@ -1140,7 +1160,7 @@
     overflow-x: auto;
     overflow-y: hidden;
     border-radius: 16px;
-    min-height: 300px;
+    min-height: var(--rail-viewport-min-h, 300px);
     touch-action: pan-x;
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: x proximity;
@@ -1156,11 +1176,8 @@
     cursor: grab;
     user-select: none;
     scroll-snap-type: none;
-    mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent);
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent);
-}
-.products-rail__viewport {
-    min-height: 300px;
+    mask-image: linear-gradient(to right, transparent, #000 1.5%, #000 98.5%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 1.5%, #000 98.5%, transparent);
 }
 .products-rail__viewport.is-dragging {
     cursor: grabbing;
@@ -1174,19 +1191,24 @@
     padding: .4rem;
     will-change: transform;
     transform: translate3d(0, 0, 0);
-}
-.products-rail.is-initialized .products-rail__track {
     direction: ltr;
 }
 .products-rail__hint {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
-    margin: 0.5rem 0 0;
+    margin: 0;
+    padding: 0;
     font-size: 0.6875rem;
     font-weight: 500;
     color: #9ca3af;
+    pointer-events: none;
+    z-index: 1;
 }
 @media (min-width: 768px) {
     .products-rail__hint {
@@ -1200,11 +1222,23 @@
     transform: translateY(0) scale(1);
     transition: transform .36s cubic-bezier(.16,1,.3,1), box-shadow .36s ease;
 }
+[dir="rtl"] .products-rail__card {
+    direction: rtl;
+}
+[dir="ltr"] .products-rail__card {
+    direction: ltr;
+}
 .products-rail__card .meal-card__thumbnail {
     overflow: hidden;
     border-radius: 10px;
+    aspect-ratio: 4 / 3;
 }
 .products-rail__card .meal-card__thumbnail img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
     transition: transform .45s cubic-bezier(.16,1,.3,1), filter .45s ease;
     transform-origin: center;
 }
@@ -1258,9 +1292,13 @@
     top: 0;
     pointer-events: none;
     opacity: 0;
-    transform: translate3d(-50%, -50%, 0);
+    visibility: hidden;
+    transform: translate3d(-100px, -100px, 0);
     z-index: 70;
     transition: opacity .2s ease;
+}
+.products-rail.is-cursor-active.is-cursor-positioned .products-rail__cursor {
+    visibility: visible;
 }
 .products-rail__cursor--dot {
     width: 8px;
@@ -1282,7 +1320,7 @@
     letter-spacing: .03em;
     backdrop-filter: blur(4px);
 }
-.products-rail.is-cursor-active .products-rail__cursor {
+.products-rail.is-cursor-active.is-cursor-positioned .products-rail__cursor {
     opacity: 1;
 }
 .cart-badge-bounce {
@@ -1350,10 +1388,22 @@
 .testimonials-rail {
     --t-gap: clamp(1rem, 1.8vw, 1.4rem);
     --t-card-w: clamp(280px, 33vw, 390px);
+    --rail-card-body-h: 9.5rem;
+    --rail-viewport-min-h: calc((var(--t-card-w) * 0.62) + var(--rail-card-body-h) + 1rem);
     position: relative;
+    min-height: var(--rail-viewport-min-h);
+}
+.testimonials-rail.is-rail-rebuilding {
+    pointer-events: none;
+}
+[dir="rtl"] .testimonials-rail__item {
+    direction: rtl;
+}
+[dir="ltr"] .testimonials-rail__item {
+    direction: ltr;
 }
 .testimonials-rail__viewport {
-    min-height: 280px;
+    min-height: var(--rail-viewport-min-h);
 }
 .testimonials-rail__hint {
     display: flex;
@@ -1382,8 +1432,6 @@
     will-change: transform;
     transform: translate3d(0,0,0);
     padding: .5rem .25rem;
-}
-.testimonials-rail.is-initialized .testimonials-rail__track {
     direction: ltr;
 }
 .testimonials-rail__item {
@@ -1803,13 +1851,83 @@
             }
         })();
 
-        /* ─── Shared infinite rail (store + testimonials): seamless loop, no empty gaps ─── */
+        /* ─── Shared infinite rail (store + testimonials): vanilla JS, RTL/LTR safe ─── */
+        function getPageDirection() {
+            return document.documentElement.getAttribute('dir') === 'rtl' ? 'rtl' : 'ltr';
+        }
+
+        function forceRevealRail(section) {
+            if (!section) return;
+            section.classList.remove('is-rail-rebuilding');
+            section.classList.add('is-initialized');
+            var viewport = section.querySelector('.products-rail__viewport, .testimonials-rail__viewport');
+            var track = section.querySelector('[data-products-track], [data-testimonials-track]');
+            if (viewport) viewport.style.overflowX = 'auto';
+            if (track) track.style.transform = 'none';
+        }
+
+        function scheduleRailSafetyReveal(section, ms) {
+            if (!section || section._railSafetyTimer) return;
+            section._railSafetyTimer = setTimeout(function() {
+                if (!section.classList.contains('is-initialized')) {
+                    forceRevealRail(section);
+                }
+                section._railSafetyTimer = null;
+            }, ms || 3000);
+        }
+
+        function clearRailSafetyReveal(section) {
+            if (section && section._railSafetyTimer) {
+                clearTimeout(section._railSafetyTimer);
+                section._railSafetyTimer = null;
+            }
+        }
+
+        function ensureRailDirObserver() {
+            if (window._railDirObserverBound) return;
+            window._railDirObserverBound = true;
+            if (typeof MutationObserver === 'undefined') return;
+
+            var dirObs = new MutationObserver(function(mutations) {
+                var dirChanged = false;
+                for (var i = 0; i < mutations.length; i++) {
+                    if (mutations[i].attributeName === 'dir') {
+                        dirChanged = true;
+                        break;
+                    }
+                }
+                if (!dirChanged) return;
+
+                document.querySelectorAll('[data-products-rail], [data-testimonials-rail]').forEach(function(section) {
+                    var savedCfg = section._railCfg;
+                    if (!savedCfg) return;
+                    try {
+                        if (section._railApi && typeof section._railApi.destroy === 'function') {
+                            section._railApi.destroy();
+                        }
+                        initInfiniteRail(savedCfg);
+                    } catch (err) {
+                        forceRevealRail(section);
+                    }
+                });
+            });
+            dirObs.observe(document.documentElement, {
+                attributes: true,
+                attributeFilter: ['dir'],
+            });
+            window._railDirObserver = dirObs;
+        }
+
         function initInfiniteRail(cfg) {
             var section = cfg.section;
             var viewport = cfg.viewport;
             var track = cfg.track;
             var itemSelector = cfg.itemSelector;
             if (!section || !viewport || !track) return null;
+
+            if (section._railApi && typeof section._railApi.destroy === 'function') {
+                section._railApi.destroy();
+            }
 
             var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             var canHoverPause = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
@@ -1820,9 +1938,21 @@
             }
             if (!originals.length) return null;
 
+            track.style.direction = 'ltr';
+
+            var listeners = [];
+            var resizeObserver = null;
+            var visObs = null;
+
+            function on(el, evt, fn, opts) {
+                el.addEventListener(evt, fn, opts);
+                listeners.push({ el: el, evt: evt, fn: fn, opts: opts });
+            }
+
             var state = {
                 x: 0,
                 loopWidth: 0,
+                cachedItemWidth: 0,
                 speed: cfg.speed || 0.08,
                 isPaused: false,
                 isDragging: false,
@@ -1833,20 +1963,33 @@
                 rafId: null,
                 lastTs: 0,
                 rebuildTimer: null,
+                revealed: false,
+                animating: false,
+                booting: true,
             };
+
+            track.style.transform = 'translate3d(0,0,0)';
+
+            function itemWidth(item) {
+                var w = item.getBoundingClientRect().width;
+                if (w > 0) return w;
+                w = item.offsetWidth;
+                if (w > 0) return w;
+                return minItemWidth;
+            }
 
             function measureLoopWidth() {
                 var gap = parseFloat(getComputedStyle(track).gap || getComputedStyle(track).columnGap || '0') || 0;
+                var total = 0;
 
-                if (originals.length === 1) {
-                    return Math.max(originals[0].offsetWidth, minItemWidth);
-                }
+                originals.forEach(function(item, idx) {
+                    total += itemWidth(item);
+                    if (idx < originals.length - 1) {
+                        total += gap;
+                    }
+                });
 
-                var first = originals[0];
-                var last = originals[originals.length - 1];
-                var span = (last.offsetLeft + last.offsetWidth) - first.offsetLeft;
-
-                return Math.max(span + gap, minItemWidth);
+                return Math.max(total, minItemWidth);
             }
 
             function cloneItem(item) {
@@ -1855,6 +1998,11 @@
                 clone.setAttribute('aria-hidden', 'true');
                 clone.querySelectorAll('a, button, input, select, textarea').forEach(function(el) {
                     el.setAttribute('tabindex', '-1');
+                });
+                clone.querySelectorAll('img').forEach(function(img) {
+                    img.loading = 'lazy';
+                    img.setAttribute('fetchpriority', 'low');
+                    img.decoding = 'async';
                 });
                 return clone;
             }
@@ -1867,59 +2015,154 @@
 
             function getRequiredClonePasses(loopWidth) {
                 var viewportWidth = viewport.clientWidth || section.clientWidth || window.innerWidth;
-                if (loopWidth <= 0) return 3;
+                if (loopWidth <= 0) return 2;
 
-                return Math.max(3, Math.ceil(viewportWidth / loopWidth) + 2);
+                return Math.max(2, Math.ceil(viewportWidth / loopWidth) + 2);
             }
 
-            function ensureClones(loopWidth) {
+            function ensureClones() {
                 removeClones();
 
-                var prependFrag = document.createDocumentFragment();
-                originals.forEach(function(item) {
-                    prependFrag.appendChild(cloneItem(item));
-                });
-                track.insertBefore(prependFrag, originals[0]);
-
-                var passes = getRequiredClonePasses(loopWidth);
+                var passes = getRequiredClonePasses(state.loopWidth);
                 for (var pass = 0; pass < passes; pass++) {
+                    var frag = document.createDocumentFragment();
                     originals.forEach(function(item) {
-                        track.appendChild(cloneItem(item));
+                        frag.appendChild(cloneItem(item));
                     });
+                    track.appendChild(frag);
                 }
             }
 
             function normalizeX() {
                 if (state.loopWidth <= 0) return;
-                while (state.x <= -state.loopWidth) state.x += state.loopWidth;
-                while (state.x > 0) state.x -= state.loopWidth;
+                while (state.x <= -state.loopWidth) {
+                    state.x += state.loopWidth;
+                }
+                while (state.x > 0) {
+                    state.x -= state.loopWidth;
+                }
             }
 
             function render() {
+                if (state.booting && !state.isDragging) {
+                    track.style.transform = 'translate3d(0,0,0)';
+                    return;
+                }
                 track.style.transform = 'translate3d(' + state.x + 'px,0,0)';
             }
 
+            function getAboveFoldImages() {
+                var count = Math.min(4, originals.length);
+                var imgs = [];
+                for (var i = 0; i < count; i++) {
+                    var img = originals[i].querySelector('img');
+                    if (img) imgs.push(img);
+                }
+                return imgs;
+            }
+
+            function decodeImages(imgs) {
+                return Promise.all(imgs.map(function(img) {
+                    if (img.decode) {
+                        return img.decode().catch(function() {});
+                    }
+                    if (img.complete) return Promise.resolve();
+                    return new Promise(function(resolve) {
+                        img.addEventListener('load', resolve, { once: true });
+                        img.addEventListener('error', resolve, { once: true });
+                    });
+                }));
+            }
+
             function buildRail(resetPosition) {
-                var keepX = resetPosition ? 0 : state.x;
-                state.loopWidth = measureLoopWidth();
-                ensureClones(state.loopWidth);
-                state.x = keepX;
-                normalizeX();
+                var prevLoopWidth = state.loopWidth;
+                var prevX = state.x;
+                var nextLoopWidth = measureLoopWidth();
+                var nextItemWidth = originals.length ? itemWidth(originals[0]) : 0;
+
+                if (!resetPosition
+                    && prevLoopWidth > 0
+                    && Math.abs(nextLoopWidth - prevLoopWidth) < 2
+                    && Math.abs(nextItemWidth - state.cachedItemWidth) < 2
+                    && track.querySelector('[data-rail-clone="1"]')) {
+                    return false;
+                }
+
+                state.cachedItemWidth = nextItemWidth;
+                state.loopWidth = nextLoopWidth;
+                ensureClones();
+
+                if (resetPosition) {
+                    state.x = 0;
+                } else if (prevLoopWidth > 0 && state.loopWidth > 0) {
+                    state.x = prevX * (state.loopWidth / prevLoopWidth);
+                } else {
+                    state.x = prevX;
+                }
+
+                if (state.animating || state.isDragging) {
+                    normalizeX();
+                } else {
+                    state.x = 0;
+                }
                 render();
+                return true;
             }
 
             function scheduleRebuild(resetPosition) {
                 clearTimeout(state.rebuildTimer);
                 state.rebuildTimer = setTimeout(function() {
-                    buildRail(resetPosition);
-                }, 50);
+                    buildRail(!!resetPosition);
+                }, 150);
+            }
+
+            function reveal() {
+                if (state.revealed) return;
+                state.revealed = true;
+                section.classList.add('is-initialized');
+                section.classList.remove('is-rail-rebuilding');
+                clearRailSafetyReveal(section);
+                if (!prefersReduced && !state.rafId) {
+                    state.rafId = requestAnimationFrame(tick);
+                }
+            }
+
+            function finishBoot() {
+                state.booting = false;
+                state.animating = true;
+                state.x = 0;
+                render();
+                reveal();
+            }
+
+            function boot() {
+                if (prefersReduced) {
+                    state.loopWidth = measureLoopWidth();
+                    ensureClones();
+                    state.booting = false;
+                    viewport.style.overflowX = 'auto';
+                    track.style.transform = 'none';
+                    reveal();
+                    return;
+                }
+
+                decodeImages(getAboveFoldImages()).then(function() {
+                    buildRail(true);
+
+                    requestAnimationFrame(function() {
+                        requestAnimationFrame(function() {
+                            buildRail(false);
+                            finishBoot();
+                        });
+                    });
+                });
             }
 
             function tick(ts) {
                 if (!state.lastTs) state.lastTs = ts;
                 var dt = Math.min(ts - state.lastTs, 32);
                 state.lastTs = ts;
-                if (!prefersReduced && !state.isPaused && !state.isDragging && state.loopWidth > 0) {
+                if (state.animating && !prefersReduced && !state.isPaused && !state.isDragging && state.loopWidth > 0) {
                     state.x -= state.speed * dt;
                     normalizeX();
                     render();
@@ -1945,6 +2188,7 @@
             function pointerDown(e) {
                 if (prefersReduced) return;
                 if (cfg.ignoreDragSelector && e.target.closest(cfg.ignoreDragSelector)) return;
+                state.booting = false;
                 state.isDragging = true;
                 state.pointerId = e.pointerId;
                 state.dragStartX = e.clientX;
@@ -1964,25 +2208,69 @@
             function pointerUp(e) {
                 if (!state.isDragging || e.pointerId !== state.pointerId) return;
                 state.isDragging = false;
+                state.animating = true;
                 viewport.classList.remove('is-dragging');
                 try { viewport.releasePointerCapture(e.pointerId); } catch (err) {}
                 resumeRail(200);
             }
 
-            buildRail(true);
-            section.classList.add('is-initialized');
+            function onLostPointerCapture() {
+                state.isDragging = false;
+                viewport.classList.remove('is-dragging');
+                resumeRail(200);
+            }
 
-            originals.forEach(function(item) {
-                item.querySelectorAll('img').forEach(function(img) {
-                    if (!img.complete) {
-                        img.addEventListener('load', function() { scheduleRebuild(false); }, { once: true });
-                        img.addEventListener('error', function() { scheduleRebuild(false); }, { once: true });
-                    }
+            function destroy() {
+                if (state.rafId) {
+                    cancelAnimationFrame(state.rafId);
+                    state.rafId = null;
+                }
+                clearTimeout(state.resumeTimer);
+                clearTimeout(state.rebuildTimer);
+                listeners.forEach(function(binding) {
+                    binding.el.removeEventListener(binding.evt, binding.fn, binding.opts);
                 });
-            });
+                listeners.length = 0;
+                if (resizeObserver) {
+                    resizeObserver.disconnect();
+                    resizeObserver = null;
+                }
+                if (visObs) {
+                    visObs.disconnect();
+                    visObs = null;
+                }
+                clearRailSafetyReveal(section);
+                removeClones();
+                track.style.transform = '';
+                viewport.classList.remove('is-dragging');
+                section.classList.add('is-rail-rebuilding');
+                section.classList.remove('is-initialized');
+                section.removeAttribute('data-rail-initialized');
+                section._railApi = null;
+            }
+
+            section.setAttribute('data-rail-initialized', '1');
+            section._railCfg = cfg;
+            scheduleRailSafetyReveal(section, 3000);
+            ensureRailDirObserver();
+
+            try {
+                boot();
+            } catch (err) {
+                if (typeof console !== 'undefined' && console.error) {
+                    console.error('[products-rail] init failed', err);
+                }
+                viewport.style.overflowX = 'auto';
+                track.style.transform = 'none';
+                forceRevealRail(section);
+            }
 
             if (typeof ResizeObserver !== 'undefined') {
-                var resizeObserver = new ResizeObserver(function() {
+                var lastObservedWidth = 0;
+                resizeObserver = new ResizeObserver(function() {
+                    var w = originals.length ? itemWidth(originals[0]) : 0;
+                    if (w > 0 && Math.abs(w - lastObservedWidth) < 2) return;
+                    lastObservedWidth = w;
                     scheduleRebuild(false);
                 });
                 originals.forEach(function(item) {
@@ -1990,18 +2278,14 @@
                 });
             }
 
-            window.addEventListener('load', function() {
-                scheduleRebuild(false);
-            }, { once: true });
-
             var resizeTimer = null;
-            window.addEventListener('resize', function() {
+            on(window, 'resize', function() {
                 clearTimeout(resizeTimer);
                 resizeTimer = setTimeout(function() { buildRail(false); }, 150);
             }, { passive: true });
 
             if ('IntersectionObserver' in window) {
-                var visObs = new IntersectionObserver(function(entries) {
+                visObs = new IntersectionObserver(function(entries) {
                     entries.forEach(function(entry) {
                         state.isPaused = !entry.isIntersecting;
                     });
@@ -2011,27 +2295,69 @@
 
             if (!prefersReduced) {
                 if (canHoverPause) {
-                    section.addEventListener('mouseenter', function() { pauseRail(1500); });
-                    section.addEventListener('mouseleave', function() { resumeRail(80); });
+                    on(section, 'mouseenter', function() { pauseRail(1500); });
+                    on(section, 'mouseleave', function() { resumeRail(80); });
                 }
 
-                viewport.addEventListener('pointerdown', pointerDown);
-                viewport.addEventListener('pointermove', pointerMove, { passive: true });
-                viewport.addEventListener('pointerup', pointerUp);
-                viewport.addEventListener('pointercancel', pointerUp);
-                viewport.addEventListener('lostpointercapture', function() {
-                    state.isDragging = false;
-                    viewport.classList.remove('is-dragging');
-                    resumeRail(200);
-                });
-
-                state.rafId = requestAnimationFrame(tick);
-            } else {
-                viewport.style.overflowX = 'auto';
-                track.style.transform = 'none';
+                on(viewport, 'pointerdown', pointerDown);
+                on(viewport, 'pointermove', pointerMove, { passive: true });
+                on(viewport, 'pointerup', pointerUp);
+                on(viewport, 'pointercancel', pointerUp);
+                on(viewport, 'lostpointercapture', onLostPointerCapture);
             }
 
-            return { rebuild: function(restart) { buildRail(!!restart); } };
+            section._railApi = {
+                destroy: destroy,
+                rebuild: function(restart) { buildRail(!!restart); },
+                direction: getPageDirection,
+            };
+
+            return section._railApi;
+        }
+
+        function bootInfiniteRails() {
+            var productsSection = document.querySelector('[data-products-rail]');
+            if (productsSection && productsSection.getAttribute('data-rail-initialized') !== '1') {
+                try {
+                    initInfiniteRail({
+                        section: productsSection,
+                        viewport: productsSection.querySelector('.products-rail__viewport'),
+                        track: productsSection.querySelector('[data-products-track]'),
+                        itemSelector: '[data-rail-item]',
+                        speed: 0.1,
+                        ignoreDragSelector: '[data-add-to-cart-btn]',
+                    });
+                } catch (err) {
+                    if (typeof console !== 'undefined' && console.error) {
+                        console.error('[products-rail] boot failed', err);
+                    }
+                    forceRevealRail(productsSection);
+                }
+            }
+
+            var testimonialsSection = document.querySelector('[data-testimonials-rail]');
+            if (testimonialsSection && testimonialsSection.getAttribute('data-rail-initialized') !== '1') {
+                try {
+                    initInfiniteRail({
+                        section: testimonialsSection,
+                        viewport: testimonialsSection.querySelector('[data-testimonials-viewport]'),
+                        track: testimonialsSection.querySelector('[data-testimonials-track]'),
+                        itemSelector: '[data-testimonial-item]',
+                        speed: 0.06,
+                    });
+                } catch (err) {
+                    if (typeof console !== 'undefined' && console.error) {
+                        console.error('[testimonials-rail] boot failed', err);
+                    }
+                    forceRevealRail(testimonialsSection);
+                }
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootInfiniteRails);
+        } else {
+            bootInfiniteRails();
         }
 
         (function() {
@@ -2040,18 +2366,10 @@
 
             var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-            initInfiniteRail({
-                section: section,
-                viewport: section.querySelector('.products-rail__viewport'),
-                track: section.querySelector('[data-products-track]'),
-                itemSelector: '[data-rail-item]',
-                speed: 0.1,
-                ignoreDragSelector: '[data-add-to-cart-btn]',
-            });
-
+            var viewport = section.querySelector('.products-rail__viewport');
             var dot = section.querySelector('.products-rail__cursor--dot');
             var ring = section.querySelector('.products-rail__cursor--ring');
-            if (dot && ring && !prefersReduced && window.matchMedia('(hover: hover)').matches) {
+            if (viewport && dot && ring && !prefersReduced && window.matchMedia('(hover: hover)').matches) {
                 var cursorX = 0;
                 var cursorY = 0;
                 var ringX = 0;
@@ -2066,24 +2384,26 @@
                     rafId = requestAnimationFrame(animateCursor);
                 }
 
-                section.addEventListener('mouseenter', function() {
+                viewport.addEventListener('mouseenter', function() {
+                    if (!section.classList.contains('is-initialized')) return;
                     section.classList.add('is-cursor-active');
                     if (!rafId) {
                         rafId = requestAnimationFrame(animateCursor);
                     }
                 });
 
-                section.addEventListener('mouseleave', function() {
-                    section.classList.remove('is-cursor-active');
+                viewport.addEventListener('mouseleave', function() {
+                    section.classList.remove('is-cursor-active', 'is-cursor-positioned');
                     if (rafId) {
                         cancelAnimationFrame(rafId);
                         rafId = null;
                     }
                 });
 
-                section.addEventListener('mousemove', function(e) {
+                viewport.addEventListener('mousemove', function(e) {
                     cursorX = e.clientX;
                     cursorY = e.clientY;
+                    section.classList.add('is-cursor-positioned');
                 }, { passive: true });
             }
 
@@ -2175,20 +2495,6 @@
                     });
                 });
             }
-        })();
-
-        /* ─── Testimonials infinite rail ─── */
-        (function() {
-            var section = document.querySelector('[data-testimonials-rail]');
-            if (!section) return;
-
-            initInfiniteRail({
-                section: section,
-                viewport: section.querySelector('[data-testimonials-viewport]'),
-                track: section.querySelector('[data-testimonials-track]'),
-                itemSelector: '[data-testimonial-item]',
-                speed: 0.06,
-            });
         })();
 
         /* ─── Blog premium interactions: parallax + press feedback ─── */
