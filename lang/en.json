@@ -853,6 +853,8 @@
     "checkout.promo_select_duration": "Please select a subscription duration before applying a promo code.",
     "checkout.promo_applied_success": "Promo code applied successfully.",
     "checkout.promo_invalid": "This promo code is invalid or expired.",
+    "checkout.promo_subscriptions_only": "Promo codes are only available for meal plan subscriptions.",
+    "checkout.promo_unavailable": "Could not validate the promo code right now. Please try again.",
     "checkout.address_sync_failed": "We could not save this location to your account. Check the address and phone number, then try again.",
     "checkout.address_sync_needs_phone": "Enter a valid mobile number (after +966) before saving the map location.",
     "checkout.verify_phone_before_address": "Please verify your mobile number before entering a delivery address or choosing a branch.",

@@ -355,6 +355,11 @@
             <div class="products-rail" data-products-rail data-rail-min-width="240">
                 <div class="products-rail__viewport">
                     <div class="products-rail__track" data-products-track>
+                @foreach (['original', 'clone', 'clone'] as $railSegmentType)
+                    @php $isRailCloneSegment = $railSegmentType !== 'original'; @endphp
+                    <div class="infinite-rail__segment"
+                         data-rail-segment="{{ $railSegmentType }}"
+                         @if($isRailCloneSegment) aria-hidden="true" data-rail-clone="1" @endif>
                 @foreach($homeStoreMeals as $meal)
                     @php
                         $mealImage = $meal['image_url'] ?? '';
@@ -373,17 +378,22 @@
                     @endphp
                     @php
                         $isPlaceholderMeal = ! empty($meal['_placeholder']);
-                        $railImgLoading = $loop->iteration <= 4 ? 'eager' : 'lazy';
-                        $railImgFetchPriority = $loop->iteration <= 4 ? 'high' : 'low';
+                        if ($isRailCloneSegment) {
+                            $railImgLoading = 'eager';
+                            $railImgFetchPriority = 'low';
+                        } else {
+                            $railImgLoading = $loop->iteration <= 4 ? 'eager' : 'lazy';
+                            $railImgFetchPriority = $loop->iteration <= 4 ? 'high' : 'low';
+                        }
                     @endphp
-                    <article class="meal-card products-rail__card" data-rail-item>
+                    <article class="meal-card products-rail__card" data-rail-item @if($isRailCloneSegment) data-rail-clone="1" @endif>
                         <div class="meal-card__thumbnail">
                             @if($isPlaceholderMeal)
-                                <a href="{{ route('meals.index') }}">
+                                <a href="{{ route('meals.index') }}" @if($isRailCloneSegment) tabindex="-1" @endif>
                                     <img src="{{ $mealImageUrl }}" alt="{{ $meal['name'] }}" width="400" height="300" loading="{{ $railImgLoading }}" fetchpriority="{{ $railImgFetchPriority }}" decoding="async" />
                                 </a>
                             @else
-                                <a href="{{ route('store.show', $meal['id']) }}">
+                                <a href="{{ route('store.show', $meal['id']) }}" @if($isRailCloneSegment) tabindex="-1" @endif>
                                     <img src="{{ $mealImageUrl }}" alt="{{ $meal['name'] }}" width="400" height="300" loading="{{ $railImgLoading }}" fetchpriority="{{ $railImgFetchPriority }}" decoding="async" onerror="this.src='{{ $mealFallback }}'" />
                                 </a>
                             @endif
@@ -391,11 +401,11 @@
 
                         <div class="meal-card__body">
                             @if($isPlaceholderMeal)
-                                <a href="{{ route('meals.index') }}" class="meal-card__title-link">
+                                <a href="{{ route('meals.index') }}" class="meal-card__title-link" @if($isRailCloneSegment) tabindex="-1" @endif>
                                     <h3 class="meal-card__title">{{ $meal['name'] }}</h3>
                                 </a>
                             @else
-                                <a href="{{ route('store.show', $meal['id']) }}" class="meal-card__title-link">
+                                <a href="{{ route('store.show', $meal['id']) }}" class="meal-card__title-link" @if($isRailCloneSegment) tabindex="-1" @endif>
                                     <h3 class="meal-card__title">{{ $meal['name'] }}</h3>
                                 </a>
                             @endif
@@ -418,7 +428,7 @@
                                 </div>
 
                                 @if($isPlaceholderMeal)
-                                    <a href="{{ route('meals.index') }}" class="meal-card__btn products-rail__btn btn btn--primary btn--sm">
+                                    <a href="{{ route('meals.index') }}" class="meal-card__btn products-rail__btn btn btn--primary btn--sm" @if($isRailCloneSegment) tabindex="-1" @endif>
                                         {{ __('Choose from Market') }}
                                     </a>
                                 @else
@@ -427,6 +437,7 @@
                                             data-add-to-cart-btn
                                             data-default-label="{{ __('Add to Cart') }}"
                                             data-success-label="{{ __('Added') }}"
+                                            @if($isRailCloneSegment) tabindex="-1" @endif
                                             onclick="Livewire.dispatch('add-to-cart', { mealId: {{ $meal['id'] }}, name: '{{ addslashes($meal['name']) }}', price: {{ $effectivePrice }}, image: '{{ addslashes($mealImageUrl) }}' })">
                                         {{ __('Add to Cart') }}
                                     </button>
@@ -434,6 +445,8 @@
                             </div>
                         </div>
                     </article>
+                @endforeach
+                    </div>
                 @endforeach
                     </div>
                 </div>
@@ -1940,7 +1953,10 @@
             var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             var canHoverPause = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
             var minItemWidth = parseInt(section.getAttribute('data-rail-min-width') || '240', 10);
-            var originals = Array.from(track.querySelectorAll(itemSelector + ':not([data-rail-clone="1"])'));
+            var originalSegment = track.querySelector('[data-rail-segment="original"]');
+            var originals = originalSegment
+                ? Array.from(originalSegment.querySelectorAll(itemSelector))
+                : Array.from(track.querySelectorAll(itemSelector + ':not([data-rail-clone="1"])'));
             if (!originals.length) {
                 originals = Array.from(track.querySelectorAll(itemSelector));
             }
@@ -1958,22 +1974,20 @@
             }
 
             var state = {
-                x: 0,
                 loopWidth: 0,
                 cachedItemWidth: 0,
                 speed: cfg.speed || 0.08,
                 isPaused: false,
                 isDragging: false,
                 dragStartX: 0,
-                dragStartOffset: 0,
+                dragOffsetX: 0,
                 pointerId: null,
                 resumeTimer: null,
-                rafId: null,
-                lastTs: 0,
                 rebuildTimer: null,
                 revealed: false,
                 animating: false,
                 booting: true,
+                waAnim: null,
             };
 
             track.style.transform = 'translate3d(0,0,0)';
@@ -2010,6 +2024,7 @@
 
                 var seg = document.createElement('div');
                 seg.setAttribute('data-rail-segment', 'original');
+                seg.setAttribute('data-rail-segment-js', '1');
                 applySegmentLayout(seg);
                 originals.forEach(function(item) {
                     seg.appendChild(item);
@@ -2018,9 +2033,12 @@
                 return seg;
             }
 
-            function decorateCloneSegment(cloneSeg) {
+            function decorateCloneSegment(cloneSeg, isExtra) {
                 cloneSeg.setAttribute('data-rail-segment', 'clone');
                 cloneSeg.setAttribute('data-rail-clone', '1');
+                if (isExtra) {
+                    cloneSeg.setAttribute('data-rail-segment-extra', '1');
+                }
                 cloneSeg.setAttribute('aria-hidden', 'true');
                 cloneSeg.querySelectorAll(itemSelector).forEach(function(item) {
                     item.setAttribute('data-rail-clone', '1');
@@ -2034,14 +2052,14 @@
                 });
             }
 
-            function removeCloneSegments() {
-                track.querySelectorAll('[data-rail-segment="clone"]').forEach(function(node) {
+            function removeExtraCloneSegments() {
+                track.querySelectorAll('[data-rail-segment="clone"][data-rail-segment-extra="1"]').forEach(function(node) {
                     node.remove();
                 });
             }
 
-            function unwrapOriginalSegment() {
-                var seg = track.querySelector('[data-rail-segment="original"]');
+            function unwrapJsOriginalSegment() {
+                var seg = track.querySelector('[data-rail-segment="original"][data-rail-segment-js="1"]');
                 if (!seg) return;
                 while (seg.firstChild) {
                     track.insertBefore(seg.firstChild, seg);
@@ -2051,7 +2069,7 @@
 
             function measureSegmentWidth(seg) {
                 if (!seg) return minItemWidth;
-                var w = seg.getBoundingClientRect().width;
+                var w = seg.offsetWidth;
                 return w > 0 ? w : minItemWidth;
             }
 
@@ -2070,69 +2088,120 @@
                 return Math.max((last.offsetLeft + itemWidth(last)) - first.offsetLeft, minItemWidth);
             }
 
-            function calibrateLoopWidth() {
+            function readLoopWidth() {
                 var originalSeg = track.querySelector('[data-rail-segment="original"]');
                 var firstCloneSeg = track.querySelector('[data-rail-segment="clone"]');
-                if (originalSeg && firstCloneSeg) {
-                    var offset = firstCloneSeg.offsetLeft - originalSeg.offsetLeft;
-                    if (offset > 0) return offset;
-                }
-                return measureLoopWidth();
+                if (!originalSeg || !firstCloneSeg) return measureLoopWidth();
+                var offset = firstCloneSeg.offsetLeft - originalSeg.offsetLeft;
+                if (offset > 0) return offset;
+                return measureSegmentWidth(originalSeg);
             }
 
-            function getRequiredClonePasses(loopWidth) {
+            function calibrateLoopWidth() {
+                return readLoopWidth();
+            }
+
+            function getTrackTranslateX() {
+                var style = window.getComputedStyle(track);
+                var transform = style.transform;
+                if (!transform || transform === 'none') return 0;
+                if (typeof DOMMatrixReadOnly !== 'undefined') {
+                    return new DOMMatrixReadOnly(transform).m41;
+                }
+                var match = transform.match(/matrix(3d)?\(([^)]+)\)/);
+                if (!match) return 0;
+                var parts = match[2].split(',').map(function(v) { return parseFloat(v.trim()); });
+                return match[1] === '3d' ? (parts[12] || 0) : (parts[4] || 0);
+            }
+
+            function wrapTranslateX(x) {
+                var lw = state.loopWidth;
+                if (lw <= 0) return x;
+                x = x % lw;
+                if (x > 0) x -= lw;
+                return Math.round(x * 100) / 100;
+            }
+
+            function stopRailAnimation() {
+                if (state.waAnim) {
+                    state.waAnim.cancel();
+                    state.waAnim = null;
+                }
+            }
+
+            function syncRailPause() {
+                if (!state.waAnim) return;
+                if (state.isPaused || state.isDragging) {
+                    state.waAnim.pause();
+                } else {
+                    state.waAnim.play();
+                }
+            }
+
+            function startRailAnimation(fromX) {
+                stopRailAnimation();
+                state.loopWidth = readLoopWidth();
+                if (state.loopWidth <= 0) return;
+
+                var startX = typeof fromX === 'number' ? wrapTranslateX(fromX) : 0;
+                var endX = startX - state.loopWidth;
+                var duration = state.loopWidth / state.speed;
+
+                track.style.transform = '';
+                state.waAnim = track.animate(
+                    [
+                        { transform: 'translate3d(' + startX + 'px, 0, 0)' },
+                        { transform: 'translate3d(' + endX + 'px, 0, 0)' },
+                    ],
+                    {
+                        duration: duration,
+                        iterations: Infinity,
+                        easing: 'linear',
+                        fill: 'both',
+                    }
+                );
+                syncRailPause();
+            }
+
+            function getRequiredCloneCount(loopWidth) {
                 var viewportWidth = viewport.clientWidth || section.clientWidth || window.innerWidth;
                 if (loopWidth <= 0) return 2;
-                return Math.max(2, Math.ceil(viewportWidth / loopWidth) + 2);
+                return Math.max(2, Math.ceil(viewportWidth / loopWidth) + 1);
             }
 
             function ensureSegmentClones() {
                 var originalSeg = track.querySelector('[data-rail-segment="original"]');
                 if (!originalSeg) return;
 
-                var estWidth = state.loopWidth > 0 ? state.loopWidth : measureSegmentWidth(originalSeg);
-                var passes = getRequiredClonePasses(estWidth);
-                var existing = track.querySelectorAll('[data-rail-segment="clone"]').length;
+                var loopWidth = state.loopWidth > 0 ? state.loopWidth : measureSegmentWidth(originalSeg);
+                var neededClones = getRequiredCloneCount(loopWidth);
+                var existingClones = track.querySelectorAll('[data-rail-segment="clone"]').length;
 
-                if (existing === passes && existing > 0) {
-                    return;
+                if (existingClones === 0) {
+                    var firstClone = originalSeg.cloneNode(true);
+                    decorateCloneSegment(firstClone, false);
+                    track.appendChild(firstClone);
+                    existingClones = 1;
                 }
 
-                removeCloneSegments();
+                var toAdd = neededClones - existingClones;
+                if (toAdd <= 0) return;
 
-                for (var p = 0; p < passes; p++) {
+                for (var p = 0; p < toAdd; p++) {
                     var cloneSeg = originalSeg.cloneNode(true);
-                    decorateCloneSegment(cloneSeg);
+                    decorateCloneSegment(cloneSeg, true);
                     track.appendChild(cloneSeg);
                 }
             }
 
             function buildSegments() {
                 wrapOriginalsInSegment();
+                state.loopWidth = calibrateLoopWidth();
                 ensureSegmentClones();
                 state.loopWidth = calibrateLoopWidth();
             }
 
-            function normalizeX() {
-                if (state.loopWidth <= 0) return;
-                while (state.x <= -state.loopWidth) {
-                    state.x += state.loopWidth;
-                }
-                while (state.x > 0) {
-                    state.x -= state.loopWidth;
-                }
-            }
-
-            function getTranslateX() {
-                if (state.booting && !state.isDragging) return 0;
-                if (state.loopWidth <= 0) return state.x;
-                var x = state.x % state.loopWidth;
-                if (x > 0) x -= state.loopWidth;
-                return x;
-            }
-
-            function render() {
-                var x = getTranslateX();
+            function renderDrag(x) {
                 track.style.transform = 'translate3d(' + x + 'px,0,0)';
             }
 
@@ -2167,8 +2236,7 @@
 
             function buildRail(resetPosition) {
                 var prevLoopWidth = state.loopWidth;
-                var prevX = state.x;
-                var nextLoopWidth = measureLoopWidth();
+                var nextLoopWidth = readLoopWidth() || measureLoopWidth();
                 var nextItemWidth = originals.length ? itemWidth(originals[0]) : 0;
 
                 if (!resetPosition
@@ -2176,9 +2244,10 @@
                     && Math.abs(nextLoopWidth - prevLoopWidth) < 2
                     && Math.abs(nextItemWidth - state.cachedItemWidth) < 2
                     && track.querySelector('[data-rail-segment="clone"]')) {
-                    state.loopWidth = calibrateLoopWidth();
-                    if (state.animating || state.isDragging) normalizeX();
-                    render();
+                    state.loopWidth = readLoopWidth();
+                    if (state.animating && !state.isDragging) {
+                        startRailAnimation(getTrackTranslateX());
+                    }
                     return false;
                 }
 
@@ -2186,20 +2255,9 @@
                 state.loopWidth = nextLoopWidth;
                 buildSegments();
 
-                if (resetPosition) {
-                    state.x = 0;
-                } else if (prevLoopWidth > 0 && state.loopWidth > 0) {
-                    state.x = prevX * (state.loopWidth / prevLoopWidth);
-                } else {
-                    state.x = prevX;
+                if (state.animating && !state.isDragging) {
+                    startRailAnimation(resetPosition ? 0 : getTrackTranslateX());
                 }
-
-                if (state.animating || state.isDragging) {
-                    normalizeX();
-                } else {
-                    state.x = 0;
-                }
-                render();
                 return true;
             }
 
@@ -2216,17 +2274,16 @@
                 section.classList.add('is-initialized');
                 section.classList.remove('is-rail-rebuilding');
                 clearRailSafetyReveal(section);
-                if (!prefersReduced && !state.rafId) {
-                    state.rafId = requestAnimationFrame(tick);
-                }
             }
 
             function finishBoot() {
                 state.booting = false;
                 state.animating = true;
-                state.x = 0;
-                render();
+                state.loopWidth = readLoopWidth();
                 reveal();
+                if (!prefersReduced) {
+                    startRailAnimation(0);
+                }
             }
 
             function boot() {
@@ -2239,41 +2296,21 @@
                     return;
                 }
 
-                decodeImages(getAboveFoldImages()).then(function() {
-                    buildRail(true);
-                    return decodeImages(getCloneLeadImages());
-                }).then(function() {
-                    requestAnimationFrame(function() {
-                        requestAnimationFrame(function() {
-                            buildRail(false);
-                            finishBoot();
-                        });
-                    });
+                buildRail(true);
+                requestAnimationFrame(function() {
+                    buildSegments();
+                    finishBoot();
                 });
-            }
-
-            function tick(ts) {
-                if (!state.lastTs) state.lastTs = ts;
-                var dt = Math.min(ts - state.lastTs, 32);
-                state.lastTs = ts;
-                if (state.animating && !prefersReduced && !state.isPaused && !state.isDragging) {
-                    if (state.loopWidth <= 0) {
-                        buildSegments();
-                    }
-                    if (state.loopWidth > 0) {
-                        state.x -= state.speed * dt;
-                        normalizeX();
-                        render();
-                    }
-                }
-                state.rafId = requestAnimationFrame(tick);
+                decodeImages(getAboveFoldImages().concat(getCloneLeadImages()));
             }
 
             function pauseRail(forceResumeMs) {
                 state.isPaused = true;
+                syncRailPause();
                 clearTimeout(state.resumeTimer);
                 state.resumeTimer = setTimeout(function() {
                     state.isPaused = false;
+                    syncRailPause();
                 }, forceResumeMs || 1200);
             }
 
@@ -2281,6 +2318,7 @@
                 clearTimeout(state.resumeTimer);
                 state.resumeTimer = setTimeout(function() {
                     state.isPaused = false;
+                    syncRailPause();
                 }, delay || 0);
             }
 
@@ -2291,7 +2329,8 @@
                 state.isDragging = true;
                 state.pointerId = e.pointerId;
                 state.dragStartX = e.clientX;
-                state.dragStartOffset = state.x;
+                state.dragOffsetX = getTrackTranslateX();
+                stopRailAnimation();
                 pauseRail(2500);
                 viewport.classList.add('is-dragging');
                 viewport.setPointerCapture(e.pointerId);
@@ -2299,31 +2338,31 @@
 
             function pointerMove(e) {
                 if (!state.isDragging || e.pointerId !== state.pointerId) return;
-                state.x = state.dragStartOffset + (e.clientX - state.dragStartX);
-                normalizeX();
-                render();
+                renderDrag(state.dragOffsetX + (e.clientX - state.dragStartX));
             }
 
             function pointerUp(e) {
                 if (!state.isDragging || e.pointerId !== state.pointerId) return;
                 state.isDragging = false;
                 state.animating = true;
+                var resumeX = wrapTranslateX(state.dragOffsetX + (e.clientX - state.dragStartX));
                 viewport.classList.remove('is-dragging');
                 try { viewport.releasePointerCapture(e.pointerId); } catch (err) {}
+                startRailAnimation(resumeX);
                 resumeRail(200);
             }
 
             function onLostPointerCapture() {
+                if (!state.isDragging) return;
                 state.isDragging = false;
+                state.animating = true;
                 viewport.classList.remove('is-dragging');
+                startRailAnimation(wrapTranslateX(getTrackTranslateX()));
                 resumeRail(200);
             }
 
             function destroy() {
-                if (state.rafId) {
-                    cancelAnimationFrame(state.rafId);
-                    state.rafId = null;
-                }
+                stopRailAnimation();
                 clearTimeout(state.resumeTimer);
                 clearTimeout(state.rebuildTimer);
                 listeners.forEach(function(binding) {
@@ -2339,8 +2378,8 @@
                     visObs = null;
                 }
                 clearRailSafetyReveal(section);
-                removeCloneSegments();
-                unwrapOriginalSegment();
+                removeExtraCloneSegments();
+                unwrapJsOriginalSegment();
                 track.style.transform = '';
                 viewport.classList.remove('is-dragging');
                 section.classList.add('is-rail-rebuilding');
@@ -2388,6 +2427,7 @@
                 visObs = new IntersectionObserver(function(entries) {
                     entries.forEach(function(entry) {
                         state.isPaused = !entry.isIntersecting;
+                        syncRailPause();
                     });
                 }, { threshold: 0.05, rootMargin: '80px 0px' });
                 visObs.observe(section);

@@ -1425,14 +1425,18 @@ class AccountApiService
             return null;
         }
 
-        $total = $this->moneyAmount($data['total'] ?? $data['grand_total'] ?? $data['amount'] ?? $data['final_total'] ?? null);
-        if ($total <= 0) {
-            return null;
-        }
-
         $subtotal = $this->moneyAmount($data['subtotal'] ?? $data['price'] ?? $data['plan_price'] ?? 0);
         $delivery = $this->moneyAmount($data['delivery'] ?? $data['delivery_price'] ?? $data['delivery_fee'] ?? 0);
         $discount = $this->moneyAmount($data['discount'] ?? $data['discount_amount'] ?? 0);
+        $total = $this->moneyAmount($data['total'] ?? $data['grand_total'] ?? $data['amount'] ?? $data['final_total'] ?? null);
+
+        if ($total < 0) {
+            return null;
+        }
+
+        if ($total === 0.0 && $discount <= 0 && $subtotal <= 0) {
+            return null;
+        }
         $vat = $this->moneyAmount($data['vat'] ?? $data['tax'] ?? $data['vat_amount'] ?? 0);
 
         if ($vat <= 0 && $subtotal > 0) {

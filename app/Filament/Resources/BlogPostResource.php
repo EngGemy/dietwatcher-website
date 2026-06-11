@@ -32,6 +32,26 @@ use Illuminate\Support\Str;
 
 class BlogPostResource extends Resource
 {
+    /**
+     * Filament select labels must be non-null strings.
+     */
+    private static function recordLabel(object $record, string $fallbackAttribute = 'slug'): string
+    {
+        $name = $record->name ?? null;
+        if (is_string($name) && trim($name) !== '') {
+            return $name;
+        }
+
+        $fallback = $record->{$fallbackAttribute} ?? null;
+        if (is_string($fallback) && trim($fallback) !== '') {
+            return $fallback;
+        }
+
+        $id = $record->id ?? null;
+
+        return $id !== null ? "#{$id}" : '—';
+    }
+
     protected static ?string $model = BlogPost::class;
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-document-text';
@@ -164,20 +184,21 @@ class BlogPostResource extends Resource
                     Select::make('blog_category_id')
                         ->label(__('admin.blog_posts.fields.category'))
                         ->relationship('category', 'slug')
-                        ->getOptionLabelFromRecordUsing(fn($record) => $record->name)
+                        ->getOptionLabelFromRecordUsing(fn ($record) => self::recordLabel($record))
                         ->searchable()
                         ->preload(),
 
                     Select::make('author_id')
                         ->label(__('admin.blog_posts.fields.author'))
                         ->relationship('author', 'name')
+                        ->getOptionLabelFromRecordUsing(fn ($record) => self::recordLabel($record, 'email'))
                         ->searchable()
                         ->preload(),
 
                     Select::make('tags')
                         ->label(__('admin.blog_posts.fields.tags'))
                         ->relationship('tags', 'slug')
-                        ->getOptionLabelFromRecordUsing(fn($record) => $record->name)
+                        ->getOptionLabelFromRecordUsing(fn ($record) => self::recordLabel($record))
                         ->multiple()
                         ->searchable()
                         ->preload(),
@@ -309,7 +330,7 @@ class BlogPostResource extends Resource
                 SelectFilter::make('category')
                     ->label(__('admin.blog_posts.fields.category'))
                     ->relationship('category', 'slug')
-                    ->getOptionLabelFromRecordUsing(fn($record) => $record->name),
+                    ->getOptionLabelFromRecordUsing(fn ($record) => self::recordLabel($record)),
             ])
             ->recordActions([
                 EditAction::make(),

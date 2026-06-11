@@ -166,8 +166,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                 <input type="hidden" name="duration" value="once" />
                             @endif
 
-                            {{-- Coupon Code --}}
-                            <div>
+                            {{-- Coupon Code (external API — meal plan subscriptions only) --}}
+                            <div x-show="isPlanCheckout" x-cloak>
                                 <p class="mb-3 text-lg md:text-xl">
                                     {{ __('Coupon Code') }}
                                     <span class="text-gray-600">({{ __('optional') }})</span>

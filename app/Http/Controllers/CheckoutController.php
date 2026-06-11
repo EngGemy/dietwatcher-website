@@ -7,7 +7,6 @@ namespace App\Http\Controllers;
 use App\Enums\PaymentKind;
 use App\Enums\PaymentStatus;
 use App\Livewire\Cart\CartManager;
-use App\Models\Coupon;
 use App\Models\Payment;
 use App\Models\Settings\Setting;
 use App\Services\AccountApiService;
@@ -657,22 +656,9 @@ class CheckoutController extends Controller
             ? ($zoneDeliveryFee > 0 ? $zoneDeliveryFee : $deliveryFeeFromSettings)
             : 0.0;
 
-        // Handle coupon discount
+        // Promo discounts are resolved via external /subscriptions/calculate in resolvePaymentAmounts().
         $discountAmount = 0.0;
-        $coupon = null;
         $couponCode = $validated['promocode_name'] ?? ($validated['coupon'] ?? null);
-
-        if ($couponCode) {
-            $coupon = Coupon::where('code', strtoupper($couponCode))->first();
-
-            if ($coupon) {
-                $identifier = $validated['phone'];
-
-                if ($coupon->isValidForUser($identifier)) {
-                    $discountAmount = $coupon->calculateDiscount($subtotal);
-                }
-            }
-        }
 
         $vatRate = (float) Setting::getValue('vat_rate', 15) / 100;
         $isSubscriptionCheckout = $hasPlanItems && session()->has(CartManager::SESSION_SUBSCRIPTION);
@@ -780,10 +766,6 @@ class CheckoutController extends Controller
 
         session()->forget('checkout_moyasar_order');
 
-        if ($coupon && $discountAmount > 0) {
-            $coupon->incrementUsage($validated['phone']);
-        }
-
         // Redirect to Moyasar payment form
         return redirect()->route('payment.form', ['order' => $payment->order_number]);
     }
@@ -853,71 +835,22 @@ class CheckoutController extends Controller
                 $planCaloryId,
                 (int) ($validated['subscription_plan_id'] ?? 0),
             );
-            if ($extResult !== null) {
-                return response()->json($extResult, ($extResult['valid'] ?? false) ? 200 : 422);
-            }
-        }
 
-        $coupon = Coupon::where('code', strtoupper($validated['code']))->first();
-
-        if (! $coupon) {
-            return response()->json([
-                'valid' => false,
-                'discount' => 0,
-                'message' => __('Invalid coupon code.'),
-            ]);
-        }
-
-        if (! $coupon->isValid()) {
-            $message = __('This coupon is no longer valid.');
-
-            if ($coupon->expires_at && $coupon->expires_at->isPast()) {
-                $message = __('This coupon has expired.');
-            }
-
-            if ($coupon->max_uses !== null && $coupon->used_count >= $coupon->max_uses) {
-                $message = __('This coupon has been fully redeemed.');
-            }
-
-            return response()->json([
-                'valid' => false,
-                'discount' => 0,
-                'message' => $message,
-            ]);
-        }
-
-        if (! $coupon->isValidForUser($validated['identifier'])) {
-            return response()->json([
-                'valid' => false,
-                'discount' => 0,
-                'message' => __('You have already used this coupon the maximum number of times.'),
-            ]);
-        }
-
-        $discount = $coupon->calculateDiscount((float) $validated['subtotal']);
-
-        if ($discount <= 0) {
-            return response()->json([
-                'valid' => false,
-                'discount' => 0,
-                'message' => __('Your order does not meet the minimum amount for this coupon.'),
-            ]);
+            return response()->json($extResult, ($extResult['valid'] ?? false) ? 200 : 422);
         }
 
         return response()->json([
-            'valid' => true,
-            'discount' => round($discount, 2),
-            'message' => __('Coupon applied successfully!'),
-            'type' => $coupon->type,
-            'value' => $coupon->type === 'percentage' ? $coupon->value : ($coupon->value / 100),
-            'source' => 'local',
-        ]);
+            'valid' => false,
+            'discount' => 0,
+            'message' => __('checkout.promo_subscriptions_only'),
+            'source' => 'external',
+        ], 422);
     }
 
     /**
-     * Try to validate promo via POST /subscriptions/calculate on the external API.
+     * Validate promo via POST /subscriptions/calculate (customer token required).
      *
-     * @return array<string, mixed>|null Normalized JSON shape, or null to fall back to local coupons
+     * @return array<string, mixed>
      */
     private function validatePromoViaExternalApi(
         string $code,
@@ -925,9 +858,24 @@ class CheckoutController extends Controller
         int $planDurationId,
         int $planCaloryId,
         int $subscriptionPlanId = 0,
-    ): ?array {
+    ): array {
         if (! filled(config('services.external_api.url'))) {
-            return null;
+            return [
+                'valid' => false,
+                'discount' => 0,
+                'message' => __('checkout.promo_unavailable'),
+                'source' => 'external',
+            ];
+        }
+
+        $token = (string) session('external_api_token', '');
+        if ($token === '') {
+            return [
+                'valid' => false,
+                'discount' => 0,
+                'message' => __('checkout.promo_requires_verified_phone'),
+                'source' => 'external',
+            ];
         }
 
         try {
@@ -940,48 +888,57 @@ class CheckoutController extends Controller
                 'plan_id' => (string) $planId,
                 'plan_duration_id' => (string) $planDurationId,
                 'plan_calory_id' => (string) max(0, $planCaloryId),
-                'promocode_name' => $code,
+                'promocode_name' => trim($code),
                 'receiving' => 'delivery',
                 'with_support' => '0',
                 'with_weekend' => $withWeekend,
             ];
 
-            $token = (string) session('external_api_token', '');
-            if ($token !== '') {
-                $response = $this->accountApiService->calculateSubscription($payload, $token);
-                if ($response['ok'] ?? false) {
-                    return $this->normalizeExternalPromoCalculateResult(
-                        is_array($response['data'] ?? null) ? $response['data'] : [],
-                        $response
-                    );
-                }
-            }
-
-            $serviceCalc = $this->externalDataService->calculateSubscription($payload);
-            if ($serviceCalc['success'] ?? false) {
+            $response = $this->accountApiService->calculateSubscription($payload, $token);
+            if ($response['ok'] ?? false) {
                 return $this->normalizeExternalPromoCalculateResult(
-                    is_array($serviceCalc['data'] ?? null) ? $serviceCalc['data'] : [],
-                    $serviceCalc
+                    is_array($response['data'] ?? null) ? $response['data'] : [],
+                    $response
                 );
             }
 
-            $message = trim((string) ($serviceCalc['message'] ?? ''));
-            if ($message !== '') {
-                return [
-                    'valid' => false,
-                    'discount' => 0,
-                    'message' => $message,
-                    'source' => 'external',
-                ];
+            $message = trim((string) ($response['message'] ?? ''));
+            if ($message === '') {
+                $raw = is_array($response['raw'] ?? null) ? $response['raw'] : [];
+                $errors = $raw['errors'] ?? null;
+                if (is_array($errors)) {
+                    foreach ($errors as $fieldErrors) {
+                        if (is_array($fieldErrors) && isset($fieldErrors[0])) {
+                            $message = trim((string) $fieldErrors[0]);
+                            break;
+                        }
+                        if (is_string($fieldErrors) && trim($fieldErrors) !== '') {
+                            $message = trim($fieldErrors);
+                            break;
+                        }
+                    }
+                }
             }
+
+            return [
+                'valid' => false,
+                'discount' => 0,
+                'message' => $message !== '' ? $message : __('checkout.promo_invalid'),
+                'source' => 'external',
+            ];
         } catch (\Exception $e) {
             Log::warning('External promo validation failed', [
                 'code' => $code,
                 'error' => $e->getMessage(),
             ]);
-        }
 
-        return null;
+            return [
+                'valid' => false,
+                'discount' => 0,
+                'message' => __('checkout.promo_unavailable'),
+                'source' => 'external',
+            ];
+        }
     }
 
     /**
@@ -996,29 +953,32 @@ class CheckoutController extends Controller
         $subtotal = is_array($parsed) ? (float) ($parsed['subtotal'] ?? 0) : 0.0;
 
         if ($discount <= 0) {
-            $discount = (float) ($data['discount'] ?? $data['discount_amount'] ?? 0);
+            $discount = $this->externalMoneyAmount($data['discount'] ?? $data['discount_amount'] ?? 0);
         }
         if ($subtotal <= 0) {
-            $subtotal = (float) ($data['subtotal'] ?? $data['price'] ?? $data['plan_price'] ?? 0);
+            $subtotal = $this->externalMoneyAmount($data['subtotal'] ?? $data['price'] ?? $data['plan_price'] ?? 0);
         }
         if ($discount <= 0 && $subtotal > 0) {
-            $total = (float) ($data['total'] ?? $data['grand_total'] ?? $data['amount'] ?? $data['final_total'] ?? -1);
+            $total = $this->externalMoneyAmount(
+                $data['total'] ?? $data['grand_total'] ?? $data['amount'] ?? $data['final_total'] ?? -1
+            );
             if ($total >= 0 && $total < $subtotal) {
                 $discount = $subtotal - $total;
             }
         }
 
         $promoPresent = $discount > 0
-            || isset($data['promocode'])
-            || isset($data['promo_code']);
+            || filled($data['promocode'] ?? null)
+            || filled($data['promo_code'] ?? null)
+            || filled($data['promocode_name'] ?? null);
 
         if (! $promoPresent) {
-            $message = trim((string) ($wrapper['message'] ?? $data['message'] ?? __('Invalid coupon code.')));
+            $message = trim((string) ($wrapper['message'] ?? $data['message'] ?? __('checkout.promo_invalid')));
 
             return [
                 'valid' => false,
                 'discount' => 0,
-                'message' => $message !== '' ? $message : __('Invalid coupon code.'),
+                'message' => $message !== '' ? $message : __('checkout.promo_invalid'),
                 'source' => 'external',
             ];
         }
@@ -1026,11 +986,20 @@ class CheckoutController extends Controller
         return [
             'valid' => true,
             'discount' => round(max(0, $discount), 2),
-            'message' => __('Coupon applied successfully!'),
+            'message' => __('checkout.promo_applied_success'),
             'source' => 'external',
             'type' => 'fixed',
             'value' => round(max(0, $discount), 2),
         ];
+    }
+
+    private function externalMoneyAmount(mixed $value): float
+    {
+        if (is_array($value)) {
+            $value = $value['amount'] ?? $value['value'] ?? 0;
+        }
+
+        return is_numeric($value) ? (float) $value : 0.0;
     }
 
     /**
@@ -1933,16 +1902,7 @@ class CheckoutController extends Controller
             : 0.0;
 
         $discountAmount = 0.0;
-        $coupon = null;
         $couponCode = $validated['promocode_name'] ?? ($validated['coupon'] ?? null);
-
-        if ($couponCode) {
-            $coupon = Coupon::where('code', strtoupper($couponCode))->first();
-
-            if ($coupon && $coupon->isValidForUser($phone)) {
-                $discountAmount = $coupon->calculateDiscount($subtotal);
-            }
-        }
 
         $vatRate = (float) Setting::getValue('vat_rate', 15) / 100;
         $isSubscriptionCheckout = $hasPlanItems && session()->has(CartManager::SESSION_SUBSCRIPTION);
