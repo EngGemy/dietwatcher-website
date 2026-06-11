@@ -1176,8 +1176,6 @@
     cursor: grab;
     user-select: none;
     scroll-snap-type: none;
-    mask-image: linear-gradient(to right, transparent, #000 1.5%, #000 98.5%, transparent);
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 1.5%, #000 98.5%, transparent);
 }
 .products-rail__viewport.is-dragging {
     cursor: grabbing;
@@ -1186,12 +1184,22 @@
     display: flex;
     flex-wrap: nowrap;
     align-items: stretch;
-    gap: var(--rail-gap);
+    gap: 0;
     width: max-content;
     padding: .4rem;
     will-change: transform;
     transform: translate3d(0, 0, 0);
     direction: ltr;
+}
+.infinite-rail__segment {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    flex-shrink: 0;
+    gap: var(--rail-gap);
+}
+.testimonials-rail__track .infinite-rail__segment {
+    gap: var(--t-gap);
 }
 .products-rail__hint {
     position: absolute;
@@ -1427,7 +1435,7 @@
     display: flex;
     flex-wrap: nowrap;
     align-items: stretch;
-    gap: var(--t-gap);
+    gap: 0;
     width: max-content;
     will-change: transform;
     transform: translate3d(0,0,0);
@@ -1978,59 +1986,131 @@
                 return minItemWidth;
             }
 
-            function measureLoopWidth() {
-                var gap = parseFloat(getComputedStyle(track).gap || getComputedStyle(track).columnGap || '0') || 0;
-                var total = 0;
-
-                originals.forEach(function(item, idx) {
-                    total += itemWidth(item);
-                    if (idx < originals.length - 1) {
-                        total += gap;
-                    }
-                });
-
-                return Math.max(total, minItemWidth);
+            function segmentGapPx() {
+                var cs = getComputedStyle(section);
+                var gap = parseFloat(cs.getPropertyValue('--rail-gap'));
+                if (isNaN(gap) || gap <= 0) {
+                    gap = parseFloat(cs.getPropertyValue('--t-gap'));
+                }
+                return (!isNaN(gap) && gap > 0) ? gap : 16;
             }
 
-            function cloneItem(item) {
-                var clone = item.cloneNode(true);
-                clone.setAttribute('data-rail-clone', '1');
-                clone.setAttribute('aria-hidden', 'true');
-                clone.querySelectorAll('a, button, input, select, textarea').forEach(function(el) {
+            function applySegmentLayout(seg) {
+                seg.className = 'infinite-rail__segment';
+                seg.style.display = 'flex';
+                seg.style.flexShrink = '0';
+                seg.style.flexWrap = 'nowrap';
+                seg.style.alignItems = 'stretch';
+                seg.style.gap = segmentGapPx() + 'px';
+            }
+
+            function wrapOriginalsInSegment() {
+                var existing = track.querySelector('[data-rail-segment="original"]');
+                if (existing) return existing;
+
+                var seg = document.createElement('div');
+                seg.setAttribute('data-rail-segment', 'original');
+                applySegmentLayout(seg);
+                originals.forEach(function(item) {
+                    seg.appendChild(item);
+                });
+                track.appendChild(seg);
+                return seg;
+            }
+
+            function decorateCloneSegment(cloneSeg) {
+                cloneSeg.setAttribute('data-rail-segment', 'clone');
+                cloneSeg.setAttribute('data-rail-clone', '1');
+                cloneSeg.setAttribute('aria-hidden', 'true');
+                cloneSeg.querySelectorAll(itemSelector).forEach(function(item) {
+                    item.setAttribute('data-rail-clone', '1');
+                });
+                cloneSeg.querySelectorAll('a, button, input, select, textarea').forEach(function(el) {
                     el.setAttribute('tabindex', '-1');
                 });
-                clone.querySelectorAll('img').forEach(function(img) {
-                    img.loading = 'lazy';
-                    img.setAttribute('fetchpriority', 'low');
-                    img.decoding = 'async';
+                cloneSeg.querySelectorAll('img').forEach(function(img) {
+                    img.loading = 'eager';
+                    img.removeAttribute('fetchpriority');
                 });
-                return clone;
             }
 
-            function removeClones() {
-                track.querySelectorAll('[data-rail-clone="1"]').forEach(function(node) {
+            function removeCloneSegments() {
+                track.querySelectorAll('[data-rail-segment="clone"]').forEach(function(node) {
                     node.remove();
                 });
+            }
+
+            function unwrapOriginalSegment() {
+                var seg = track.querySelector('[data-rail-segment="original"]');
+                if (!seg) return;
+                while (seg.firstChild) {
+                    track.insertBefore(seg.firstChild, seg);
+                }
+                seg.remove();
+            }
+
+            function measureSegmentWidth(seg) {
+                if (!seg) return minItemWidth;
+                var w = seg.getBoundingClientRect().width;
+                return w > 0 ? w : minItemWidth;
+            }
+
+            function measureLoopWidth() {
+                var originalSeg = track.querySelector('[data-rail-segment="original"]');
+                if (originalSeg) {
+                    return measureSegmentWidth(originalSeg);
+                }
+                if (!originals.length) return minItemWidth;
+                var gap = segmentGapPx();
+                if (originals.length === 1) {
+                    return Math.max(itemWidth(originals[0]), minItemWidth);
+                }
+                var first = originals[0];
+                var last = originals[originals.length - 1];
+                return Math.max((last.offsetLeft + itemWidth(last)) - first.offsetLeft, minItemWidth);
+            }
+
+            function calibrateLoopWidth() {
+                var originalSeg = track.querySelector('[data-rail-segment="original"]');
+                var firstCloneSeg = track.querySelector('[data-rail-segment="clone"]');
+                if (originalSeg && firstCloneSeg) {
+                    var offset = firstCloneSeg.offsetLeft - originalSeg.offsetLeft;
+                    if (offset > 0) return offset;
+                }
+                return measureLoopWidth();
             }
 
             function getRequiredClonePasses(loopWidth) {
                 var viewportWidth = viewport.clientWidth || section.clientWidth || window.innerWidth;
                 if (loopWidth <= 0) return 2;
-
                 return Math.max(2, Math.ceil(viewportWidth / loopWidth) + 2);
             }
 
-            function ensureClones() {
-                removeClones();
+            function ensureSegmentClones() {
+                var originalSeg = track.querySelector('[data-rail-segment="original"]');
+                if (!originalSeg) return;
 
-                var passes = getRequiredClonePasses(state.loopWidth);
-                for (var pass = 0; pass < passes; pass++) {
-                    var frag = document.createDocumentFragment();
-                    originals.forEach(function(item) {
-                        frag.appendChild(cloneItem(item));
-                    });
-                    track.appendChild(frag);
+                var estWidth = state.loopWidth > 0 ? state.loopWidth : measureSegmentWidth(originalSeg);
+                var passes = getRequiredClonePasses(estWidth);
+                var existing = track.querySelectorAll('[data-rail-segment="clone"]').length;
+
+                if (existing === passes && existing > 0) {
+                    return;
                 }
+
+                removeCloneSegments();
+
+                for (var p = 0; p < passes; p++) {
+                    var cloneSeg = originalSeg.cloneNode(true);
+                    decorateCloneSegment(cloneSeg);
+                    track.appendChild(cloneSeg);
+                }
+            }
+
+            function buildSegments() {
+                wrapOriginalsInSegment();
+                ensureSegmentClones();
+                state.loopWidth = calibrateLoopWidth();
             }
 
             function normalizeX() {
@@ -2043,12 +2123,17 @@
                 }
             }
 
+            function getTranslateX() {
+                if (state.booting && !state.isDragging) return 0;
+                if (state.loopWidth <= 0) return state.x;
+                var x = state.x % state.loopWidth;
+                if (x > 0) x -= state.loopWidth;
+                return x;
+            }
+
             function render() {
-                if (state.booting && !state.isDragging) {
-                    track.style.transform = 'translate3d(0,0,0)';
-                    return;
-                }
-                track.style.transform = 'translate3d(' + state.x + 'px,0,0)';
+                var x = getTranslateX();
+                track.style.transform = 'translate3d(' + x + 'px,0,0)';
             }
 
             function getAboveFoldImages() {
@@ -2059,6 +2144,12 @@
                     if (img) imgs.push(img);
                 }
                 return imgs;
+            }
+
+            function getCloneLeadImages() {
+                var cloneSeg = track.querySelector('[data-rail-segment="clone"]');
+                if (!cloneSeg) return [];
+                return Array.from(cloneSeg.querySelectorAll('img')).slice(0, 4);
             }
 
             function decodeImages(imgs) {
@@ -2084,13 +2175,16 @@
                     && prevLoopWidth > 0
                     && Math.abs(nextLoopWidth - prevLoopWidth) < 2
                     && Math.abs(nextItemWidth - state.cachedItemWidth) < 2
-                    && track.querySelector('[data-rail-clone="1"]')) {
+                    && track.querySelector('[data-rail-segment="clone"]')) {
+                    state.loopWidth = calibrateLoopWidth();
+                    if (state.animating || state.isDragging) normalizeX();
+                    render();
                     return false;
                 }
 
                 state.cachedItemWidth = nextItemWidth;
                 state.loopWidth = nextLoopWidth;
-                ensureClones();
+                buildSegments();
 
                 if (resetPosition) {
                     state.x = 0;
@@ -2137,8 +2231,7 @@
 
             function boot() {
                 if (prefersReduced) {
-                    state.loopWidth = measureLoopWidth();
-                    ensureClones();
+                    buildSegments();
                     state.booting = false;
                     viewport.style.overflowX = 'auto';
                     track.style.transform = 'none';
@@ -2148,7 +2241,8 @@
 
                 decodeImages(getAboveFoldImages()).then(function() {
                     buildRail(true);
-
+                    return decodeImages(getCloneLeadImages());
+                }).then(function() {
                     requestAnimationFrame(function() {
                         requestAnimationFrame(function() {
                             buildRail(false);
@@ -2162,10 +2256,15 @@
                 if (!state.lastTs) state.lastTs = ts;
                 var dt = Math.min(ts - state.lastTs, 32);
                 state.lastTs = ts;
-                if (state.animating && !prefersReduced && !state.isPaused && !state.isDragging && state.loopWidth > 0) {
-                    state.x -= state.speed * dt;
-                    normalizeX();
-                    render();
+                if (state.animating && !prefersReduced && !state.isPaused && !state.isDragging) {
+                    if (state.loopWidth <= 0) {
+                        buildSegments();
+                    }
+                    if (state.loopWidth > 0) {
+                        state.x -= state.speed * dt;
+                        normalizeX();
+                        render();
+                    }
                 }
                 state.rafId = requestAnimationFrame(tick);
             }
@@ -2240,7 +2339,8 @@
                     visObs = null;
                 }
                 clearRailSafetyReveal(section);
-                removeClones();
+                removeCloneSegments();
+                unwrapOriginalSegment();
                 track.style.transform = '';
                 viewport.classList.remove('is-dragging');
                 section.classList.add('is-rail-rebuilding');
