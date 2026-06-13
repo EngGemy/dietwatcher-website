@@ -34,15 +34,11 @@ class Dashboard extends Component
         $this->error = '';
 
         $subs = $api->listSubscriptions();
-        $subscriptions = ($subs['ok'] ?? false)
-            ? $this->extractRows($subs['data'] ?? null, ['subscriptions', 'items', 'rows'])
-            : [];
-        if ($subscriptions === []) {
-            $singleSubscription = $this->extractOne($subs['data'] ?? null, ['subscription']);
-            if ($singleSubscription !== []) {
-                $subscriptions = [$singleSubscription];
-            }
-        }
+        $subscriptions = $this->extractRowsFromApiResult(
+            is_array($subs) ? $subs : [],
+            ['subscriptions'],
+            ['subscription'],
+        );
         $active = collect($subscriptions)->first(function (array $s): bool {
             $status = strtolower((string) ($s['status'] ?? $s['state'] ?? ''));
 
@@ -56,12 +52,12 @@ class Dashboard extends Component
 
         $orders = $api->listOrders('active');
         $orderRows = ($orders['ok'] ?? false)
-            ? $this->extractRows($orders['data'] ?? null, ['orders', 'items', 'rows'])
+            ? $this->extractRowsFromApiResult($orders, ['orders'], ['order'])
             : [];
         if ($orderRows === []) {
             $fallbackOrders = $api->listOrders('');
             if ($fallbackOrders['ok'] ?? false) {
-                $orderRows = $this->extractRows($fallbackOrders['data'] ?? null, ['orders', 'items', 'rows']);
+                $orderRows = $this->extractRowsFromApiResult($fallbackOrders, ['orders'], ['order']);
             }
         }
         $this->recentOrders = array_slice($orderRows, 0, 5);

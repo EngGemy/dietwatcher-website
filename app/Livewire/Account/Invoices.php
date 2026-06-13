@@ -50,7 +50,11 @@ class Invoices extends Component
             return;
         }
 
-        $this->invoices = $this->extractRows($result['data'] ?? null, ['invoices', 'items', 'rows']);
+        $this->invoices = $this->extractRowsFromApiResult(
+            $result,
+            ['invoices'],
+            ['invoice'],
+        );
         $this->loading = false;
     }
 

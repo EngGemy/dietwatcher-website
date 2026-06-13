@@ -47,18 +47,20 @@
                             $body = $body[app()->getLocale()] ?? $body['en'] ?? '';
                         }
                         $when = $item['created_at'] ?? $item['date'] ?? $item['sent_at'] ?? '';
-                        $isUnread = filter_var($item['is_read'] ?? $item['read'] ?? false, FILTER_VALIDATE_BOOLEAN) === false
-                            && filter_var($item['read_at'] ?? null, FILTER_VALIDATE_BOOLEAN) === false
-                            && empty($item['read_at']);
-                        if (isset($item['is_read'])) {
+                        $isUnread = true;
+                        if (array_key_exists('is_read', $item)) {
                             $isUnread = ! filter_var($item['is_read'], FILTER_VALIDATE_BOOLEAN);
+                        } elseif (! empty($item['read_at'])) {
+                            $isUnread = false;
+                        } elseif (array_key_exists('read', $item)) {
+                            $isUnread = ! filter_var($item['read'], FILTER_VALIDATE_BOOLEAN);
                         }
                         $link = $item['url'] ?? $item['action_url'] ?? $item['deep_link'] ?? null;
                     @endphp
-                    <li class="px-5 py-4 {{ $isUnread ? 'bg-blue-50/40' : 'hover:bg-gray-50' }} transition">
+                    <li class="px-5 py-4 {{ $isUnread ? 'bg-sky-50/70 border-s-4 border-[#279ff9]' : 'opacity-75 hover:bg-gray-50' }} transition">
                         <div class="flex items-start gap-3">
                             @if($isUnread)
-                                <span class="mt-1.5 w-2 h-2 rounded-full bg-blue-500 shrink-0" aria-hidden="true"></span>
+                                <span class="mt-1.5 w-2 h-2 rounded-full bg-[#279ff9] shrink-0" aria-hidden="true"></span>
                             @else
                                 <span class="mt-1.5 w-2 h-2 shrink-0" aria-hidden="true"></span>
                             @endif

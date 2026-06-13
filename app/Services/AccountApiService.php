@@ -329,6 +329,7 @@ class AccountApiService
         try {
             $params = array_filter([
                 'subscription_id' => $subscriptionId,
+                'device_id' => $this->deviceId(),
             ], fn ($v) => $v !== null && $v !== '');
 
             return $this->decode(
@@ -2307,8 +2308,24 @@ class AccountApiService
         if (! $this->hasToken()) {
             return $this->empty(__('account.login_required'));
         }
+
         try {
-            return $this->decode($this->authed()->get($this->url('notifications/read-all')));
+            $url = $this->url('notifications/read-all');
+            $last = $this->empty(__('account.request_failed'));
+
+            foreach (['post', 'put', 'get'] as $method) {
+                $response = match ($method) {
+                    'post' => $this->authed()->post($url),
+                    'put' => $this->authed()->put($url),
+                    default => $this->authed()->get($url),
+                };
+                $last = $this->decode($response);
+                if ($last['ok'] ?? false) {
+                    return $last;
+                }
+            }
+
+            return $last;
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::markNotificationsRead failed', ['error' => $e->getMessage()]);
 

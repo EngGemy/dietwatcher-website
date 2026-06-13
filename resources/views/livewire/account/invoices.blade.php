@@ -36,7 +36,11 @@
 
     <div class="acc-card">
         @if($loading)
-            <div class="acc-empty">{{ __('account.loading') }}</div>
+            <div class="acc-card-body space-y-3">
+                @for($i = 0; $i < 5; $i++)
+                    <div class="acc-skeleton acc-skeleton-line" style="width: {{ 70 + ($i * 5) }}%;"></div>
+                @endfor
+            </div>
         @elseif(empty($invoices))
             <div class="acc-empty">
                 <div class="acc-empty__icon">

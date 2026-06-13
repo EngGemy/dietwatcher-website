@@ -53,7 +53,7 @@ class Notifications extends Component
         }
 
         $data = $result['data'] ?? [];
-        $rows = $this->extractRows($data, ['notifications', 'items', 'rows']);
+        $rows = $this->extractRows($data, ['notifications']);
         if ($rows === [] && is_array($data) && array_is_list($data)) {
             $rows = array_values(array_filter($data, 'is_array'));
         }
@@ -78,12 +78,15 @@ class Notifications extends Component
         $result = $api->markNotificationsRead();
         if (! ($result['ok'] ?? false)) {
             $this->error = $result['message'] ?: __('account.action_failed');
+            $this->unreadCount = $api->unreadNotificationCount();
 
             return;
         }
+
         $this->unreadCount = 0;
         $this->notice = __('account.notifications_marked_read');
         $this->loadPage($api, 1, true);
+        $this->unreadCount = $api->unreadNotificationCount();
     }
 
     public function refresh(AccountApiService $api): void

@@ -21,17 +21,19 @@
         @media (max-width: 960px) { .acc-shell { grid-template-columns: 1fr; } }
 
         .acc-sidebar {
-            background:#0F172A;
-            color:#E5E7EB;
+            background:#fff;
+            color:#334155;
             display:flex;
             flex-direction:column;
             position:sticky;
             top:0;
             height:100vh;
-            padding:1.5rem 1.1rem;
-            gap:1.2rem;
+            padding:1.25rem 1rem;
+            gap:1rem;
             overflow-y:auto;
             z-index:20;
+            border-inline-end:1px solid #E5E7EB;
+            box-shadow:0 1px 3px rgba(15,23,42,.04);
         }
         @media (max-width: 960px) {
             .acc-sidebar {
@@ -48,43 +50,39 @@
         }
 
         .acc-logo {
-            display:flex; align-items:center; gap:.6rem;
-            padding:.4rem .4rem 1rem;
-            border-bottom:1px solid rgba(255,255,255,.08);
+            display:flex; align-items:center; gap:.75rem;
+            padding:.25rem .25rem 1rem;
+            border-bottom:1px solid #EEF0F4;
         }
-        .acc-logo__badge {
-            width:40px; height:40px; border-radius:12px;
-            background:linear-gradient(135deg,#3B82F6,#22D3EE);
-            display:flex; align-items:center; justify-content:center;
-            box-shadow:0 8px 25px -8px rgba(59,130,246,.7);
-            color:#fff; font-weight:800;
+        .acc-logo img {
+            height:40px; width:auto; max-width:140px; object-fit:contain;
         }
-        .acc-logo__title { font-weight:800; font-size:1.05rem; color:#fff; }
-        .acc-logo__sub { font-size:.72rem; opacity:.6; letter-spacing:.05em; }
+        .acc-logo__title { font-weight:800; font-size:1rem; color:#111827; }
+        .acc-logo__sub { font-size:.72rem; color:#64748B; letter-spacing:.04em; }
 
         .acc-nav { display:flex; flex-direction:column; gap:.15rem; }
         .acc-nav__group-title {
-            font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
-            color:#64748B; font-weight:700; padding:0 .7rem; margin:.5rem 0 .3rem;
+            font-size:.72rem; letter-spacing:.08em; text-transform:uppercase;
+            color:#94A3B8; font-weight:700; padding:0 .7rem; margin:.5rem 0 .3rem;
         }
         .acc-nav a {
             display:flex; align-items:center; gap:.7rem;
             padding:.65rem .8rem;
-            border-radius:10px;
-            color:#CBD5E1;
+            border-radius:12px;
+            color:#475569;
             font-size:.92rem;
-            font-weight:500;
+            font-weight:600;
             transition:background .15s, color .15s;
             text-decoration:none;
         }
         .acc-nav a:hover {
-            background:rgba(255,255,255,.06);
-            color:#fff;
+            background:#F0F9FF;
+            color:#279ff9;
         }
         .acc-nav a.is-active {
-            background:linear-gradient(120deg, rgba(59,130,246,.18), rgba(59,130,246,.04));
-            color:#fff;
-            box-shadow:inset 3px 0 0 #3B82F6;
+            background:linear-gradient(120deg, rgba(39,159,249,.12), rgba(63,181,54,.08));
+            color:#279ff9;
+            box-shadow:inset 3px 0 0 #279ff9;
         }
         [dir="rtl"] .acc-nav a.is-active {
             box-shadow:inset -3px 0 0 #3B82F6;
@@ -108,7 +106,7 @@
         .acc-topbar__user { display:flex; align-items:center; gap:.6rem; }
         .acc-avatar {
             width:36px; height:36px; border-radius:50%;
-            background:linear-gradient(135deg,#3B82F6,#1D4ED8);
+            background:linear-gradient(135deg,#279ff9,#3fb536);
             color:#fff; font-weight:700;
             display:flex; align-items:center; justify-content:center;
         }
@@ -166,10 +164,10 @@
             text-decoration:none;
         }
         .acc-btn:active { transform:translateY(1px); }
-        .acc-btn--primary { background:linear-gradient(120deg, #3B82F6 0%, #2563EB 100%); color:#fff; box-shadow:0 8px 18px -8px rgba(37,99,235,.5); }
-        .acc-btn--primary:hover { filter:brightness(1.05); }
-        .acc-btn--ghost   { background:#fff; color:#2563EB; border-color:#DBEAFE; }
-        .acc-btn--ghost:hover { background:#EFF6FF; }
+        .acc-btn--primary { background:linear-gradient(135deg, #279ff9 0%, #3fb536 100%); color:#fff; box-shadow:0 8px 18px -8px rgba(39,159,249,.45); }
+        .acc-btn--primary:hover { filter:brightness(1.04); }
+        .acc-btn--ghost   { background:#fff; color:#279ff9; border-color:#BFDBFE; }
+        .acc-btn--ghost:hover { background:#F0F9FF; }
         .acc-btn--muted   { background:#F8FAFC; color:#334155; border-color:#E2E8F0; }
         .acc-btn--muted:hover { background:#EEF2F7; }
         .acc-btn--danger  { background:#fff; color:#B91C1C; border-color:#FECACA; }
@@ -212,6 +210,54 @@
         }
 
         [x-cloak] { display:none !important; }
+
+        .acc-skeleton {
+            background:linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+            background-size:200% 100%;
+            animation:acc-shimmer 1.2s ease-in-out infinite;
+            border-radius:10px;
+        }
+        .acc-skeleton-line { height:14px; margin-bottom:.65rem; }
+        .acc-skeleton-block { height:72px; margin-bottom:.75rem; }
+        @keyframes acc-shimmer {
+            0% { background-position:200% 0; }
+            100% { background-position:-200% 0; }
+        }
+
+        .acc-app-banner {
+            margin-bottom:1.25rem;
+            border-radius:16px;
+            background:linear-gradient(135deg, #279ff9 0%, #3fb536 100%);
+            color:#fff;
+            box-shadow:0 10px 30px -12px rgba(39,159,249,.45);
+        }
+        .acc-app-banner__inner {
+            display:flex; align-items:center; justify-content:space-between;
+            gap:1rem; flex-wrap:wrap; padding:1rem 1.15rem;
+        }
+        .acc-app-banner__content { display:flex; align-items:center; gap:.85rem; min-width:0; }
+        .acc-app-banner__logo { border-radius:12px; background:#fff; padding:.35rem; flex-shrink:0; }
+        .acc-app-banner__title { font-weight:800; font-size:1rem; line-height:1.3; }
+        .acc-app-banner__subtitle { font-size:.82rem; opacity:.92; margin-top:.15rem; }
+        .acc-app-banner__actions { display:flex; align-items:center; gap:.55rem; flex-shrink:0; }
+        .acc-app-banner__dismiss {
+            background:rgba(255,255,255,.18); border:0; color:#fff;
+            width:32px; height:32px; border-radius:999px; cursor:pointer;
+            display:inline-flex; align-items:center; justify-content:center;
+        }
+        .acc-app-banner__dismiss:hover { background:rgba(255,255,255,.28); }
+        .acc-app-store-link { display:inline-flex; line-height:0; opacity:.95; transition:opacity .15s, transform .15s; }
+        .acc-app-store-link:hover { opacity:1; transform:translateY(-1px); }
+
+        .acc-app-card {
+            margin-top:.75rem; padding:.9rem; border-radius:14px;
+            background:linear-gradient(135deg, rgba(39,159,249,.08), rgba(63,181,54,.08));
+            border:1px solid rgba(39,159,249,.15);
+        }
+        .acc-app-card__icon { margin-bottom:.5rem; }
+        .acc-app-card__title { font-size:.82rem; font-weight:800; color:#0F172A; line-height:1.35; }
+        .acc-app-card__text { font-size:.72rem; color:#64748B; margin-top:.25rem; line-height:1.45; }
+        .acc-app-card__stores { display:flex; gap:.45rem; margin-top:.65rem; flex-wrap:wrap; }
     </style>
 
     @stack('styles')
@@ -235,8 +281,8 @@
     {{-- Sidebar --}}
     <aside class="acc-sidebar" :class="{ 'is-open': sidebarOpen }">
         <div class="acc-logo">
-            <div class="acc-logo__badge">DW</div>
-            <div>
+            <img src="{{ $siteLogo }}" alt="{{ $siteName ?? __('Diet Watchers') }}" decoding="async" />
+            <div class="hidden sm:block">
                 <div class="acc-logo__title">{{ __('Diet Watchers') }}</div>
                 <div class="acc-logo__sub">{{ __('account.my_account') }}</div>
             </div>
@@ -263,6 +309,13 @@
                 <svg fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3"/></svg>
                 {{ __('account.wallet') }}
             </a>
+            <a href="{{ route('account.notifications.index') }}" class="{{ str_starts_with($active, 'account.notifications') ? 'is-active' : '' }}">
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/></svg>
+                {{ __('account.notifications') }}
+                @if($unreadNotifications > 0)
+                    <span class="acc-nav__badge">{{ $unreadNotifications > 99 ? '99+' : $unreadNotifications }}</span>
+                @endif
+            </a>
             <a href="{{ route('account.invoices.index') }}" class="{{ str_starts_with($active, 'account.invoices') ? 'is-active' : '' }}">
                 <svg fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
                 {{ __('account.invoices') }}
@@ -278,10 +331,12 @@
                 {{ __('account.profile') }}
             </a>
 
-            <div class="mt-auto pt-6 border-t border-white/10">
-                <form action="{{ route('account.logout') }}" method="POST" class="px-1">
+            <div class="mt-auto pt-4 border-t border-gray-100">
+                <x-account.app-control-banner variant="sidebar" />
+
+                <form action="{{ route('account.logout') }}" method="POST" class="px-1 mt-3">
                     @csrf
-                    <button type="submit" class="acc-nav-logout flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-500/10 transition">
+                    <button type="submit" class="acc-nav-logout flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 transition">
                         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                         {{ __('account.logout') }}
                     </button>
@@ -323,6 +378,8 @@
                     {{ session('error') }}
                 </div>
             @endif
+
+            <x-account.app-control-banner />
 
             @yield('content')
             {{ $slot ?? '' }}

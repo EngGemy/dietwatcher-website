@@ -48,6 +48,16 @@ class Addresses extends Component
         }
 
         $this->addresses = $auth->getAddresses($token, false, false);
+        foreach ($this->addresses as $index => $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $addressId = (int) ($row['id'] ?? 0);
+            if ($addressId <= 0) {
+                continue;
+            }
+            $this->addresses[$index]['days'] = $auth->resolveAddressDeliveryDays($token, $addressId, $row);
+        }
         $this->loading = false;
     }
 
@@ -65,15 +75,11 @@ class Addresses extends Component
         $addr = collect($this->addresses)->firstWhere('id', $addressId)
             ?? collect($this->addresses)->firstWhere(fn ($a) => (int) ($a['id'] ?? 0) === $addressId);
 
-        if (is_array($addr) && ! empty($addr['days']) && is_array($addr['days'])) {
-            $this->selectedDays = array_map('intval', array_values($addr['days']));
-        } else {
-            $resp = $auth->getAddressDeliveryDays($token, $addressId);
-            $days = $resp['data']['days'] ?? $resp['days'] ?? $resp['data'] ?? [];
-            if (is_array($days)) {
-                $this->selectedDays = array_map('intval', array_values($days));
-            }
-        }
+        $this->selectedDays = $auth->resolveAddressDeliveryDays(
+            $token,
+            $addressId,
+            is_array($addr) ? $addr : null,
+        );
     }
 
     public function closeDeliveryDays(): void

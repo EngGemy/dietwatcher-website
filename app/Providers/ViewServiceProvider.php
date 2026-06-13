@@ -35,6 +35,6 @@ class ViewServiceProvider extends ServiceProvider
         View::composer('partials.header', HeaderComposer::class);
         
         // Register settings composer for header, footer, and all pages
-        View::composer(['partials.header', 'partials.footer', 'layouts.app', 'pages.*'], SettingsComposer::class);
+        View::composer(['partials.header', 'partials.footer', 'layouts.app', 'layouts.account', 'pages.*'], SettingsComposer::class);
     }
 }

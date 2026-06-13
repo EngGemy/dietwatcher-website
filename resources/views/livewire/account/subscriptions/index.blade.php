@@ -25,7 +25,11 @@
 
     <div class="acc-card">
         @if($loading)
-            <div class="acc-empty">{{ __('account.loading') }}</div>
+            <div class="acc-card-body space-y-3">
+                @for($i = 0; $i < 4; $i++)
+                    <div class="acc-skeleton acc-skeleton-block"></div>
+                @endfor
+            </div>
         @elseif(empty($subscriptions))
             <div class="acc-empty">
                 <div class="acc-empty__icon">

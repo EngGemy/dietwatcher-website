@@ -40,7 +40,11 @@ class Index extends Component
             return;
         }
 
-        $this->subscriptions = $this->extractRows($result['data'] ?? null, ['subscriptions', 'items', 'rows']);
+        $this->subscriptions = $this->extractRowsFromApiResult(
+            $result,
+            ['subscriptions'],
+            ['subscription'],
+        );
 
         $this->loading = false;
     }

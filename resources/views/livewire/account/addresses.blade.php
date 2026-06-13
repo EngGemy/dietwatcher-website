@@ -82,6 +82,8 @@
                                             <span class="acc-chip acc-chip--muted">{{ __('account.weekday_'.(int) $d) }}</span>
                                         @endforeach
                                     </p>
+                                @else
+                                    <p class="text-xs text-amber-700 mt-2">{{ __('account.delivery_days_not_set') }}</p>
                                 @endif
                             </div>
                             <div class="flex items-center gap-2 shrink-0">
