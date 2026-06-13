@@ -858,6 +858,8 @@ class AccountApiService
             ];
         }
 
+        $payload['payment_option'] = 'free';
+
         $created = $this->createSubscriptionCheckout($payload, $token);
         if (! ($created['ok'] ?? false)) {
             return [
@@ -992,23 +994,26 @@ class AccountApiService
         $payload = $schedule['payload'];
         $adjustedStartDate = (string) ($schedule['adjusted_start_date'] ?? '');
         $payloadHash = $this->hashSubscriptionPayload($payload);
+        $isFreeCheckout = strtolower((string) ($payload['payment_option'] ?? '')) === 'free';
 
-        $cached = session('checkout_api_subscription_checkout');
-        if (is_array($cached) && ($cached['payload_hash'] ?? '') === $payloadHash) {
-            $subscriptionId = (int) ($cached['subscription_id'] ?? 0);
-            $bootstrap = is_array($cached['bootstrap'] ?? null) ? $cached['bootstrap'] : null;
-            if ($subscriptionId > 0 && $bootstrap !== null) {
-                return [
-                    'ok' => true,
-                    'message' => '',
-                    'min_start_date' => null,
-                    'adjusted_start_date' => null,
-                    'subscription_id' => $subscriptionId,
-                    'create_data' => ['subscription' => ['id' => $subscriptionId]],
-                    'raw' => null,
-                    'payload' => $payload,
-                    'payload_hash' => $payloadHash,
-                ];
+        if (! $isFreeCheckout) {
+            $cached = session('checkout_api_subscription_checkout');
+            if (is_array($cached) && ($cached['payload_hash'] ?? '') === $payloadHash) {
+                $subscriptionId = (int) ($cached['subscription_id'] ?? 0);
+                $bootstrap = is_array($cached['bootstrap'] ?? null) ? $cached['bootstrap'] : null;
+                if ($subscriptionId > 0 && $bootstrap !== null) {
+                    return [
+                        'ok' => true,
+                        'message' => '',
+                        'min_start_date' => null,
+                        'adjusted_start_date' => null,
+                        'subscription_id' => $subscriptionId,
+                        'create_data' => ['subscription' => ['id' => $subscriptionId]],
+                        'raw' => null,
+                        'payload' => $payload,
+                        'payload_hash' => $payloadHash,
+                    ];
+                }
             }
         }
 
@@ -1093,10 +1098,16 @@ class AccountApiService
             }
         }
 
-        if (! $this->isSubscriptionPaymentConfirmed($subRow)) {
-            $payment = $this->extractPaymentResource($createData);
-            $externalPaymentId = is_numeric($payment['id'] ?? $payment['payment_id'] ?? null)
-                ? (int) ($payment['id'] ?? $payment['payment_id'])
+        $createPayment = $this->extractPaymentResource($createData);
+        if ($this->isFreePaymentResource($createPayment) || $this->isSubscriptionPaymentConfirmed($subRow)) {
+            Log::info('AccountApiService::finalizeFreeSubscription already paid from create response', [
+                'subscription_id' => $subscriptionId,
+                'payment_status' => data_get($createPayment, 'status'),
+                'payment_option' => data_get($createPayment, 'payment_option'),
+            ]);
+        } elseif (! $this->isSubscriptionPaymentConfirmed($subRow)) {
+            $externalPaymentId = is_numeric($createPayment['id'] ?? $createPayment['payment_id'] ?? null)
+                ? (int) ($createPayment['id'] ?? $createPayment['payment_id'])
                 : (int) data_get($subRow, 'payment.id', 0);
 
             $notifyQuery = array_filter([
@@ -1105,13 +1116,15 @@ class AccountApiService
                 'payment_id' => $externalPaymentId > 0 ? (string) $externalPaymentId : null,
             ], static fn ($value) => $value !== null && $value !== '');
 
-            $notify = $this->notifySubscriptionMoyasarPayment($notifyQuery, $token);
-            Log::info('AccountApiService::finalizeFreeSubscription notify', [
-                'subscription_id' => $subscriptionId,
-                'external_payment_id' => $externalPaymentId > 0 ? $externalPaymentId : null,
-                'api_ok' => $notify['ok'] ?? false,
-                'notify_succeeded' => $this->paymentNotifyResponseSucceeded($notify),
-            ]);
+            if ($notifyQuery !== []) {
+                $notify = $this->notifySubscriptionMoyasarPayment($notifyQuery, $token);
+                Log::info('AccountApiService::finalizeFreeSubscription notify fallback', [
+                    'subscription_id' => $subscriptionId,
+                    'external_payment_id' => $externalPaymentId > 0 ? $externalPaymentId : null,
+                    'api_ok' => $notify['ok'] ?? false,
+                    'notify_succeeded' => $this->paymentNotifyResponseSucceeded($notify),
+                ]);
+            }
         }
 
         $startDate = SubscriptionCheckoutPayload::normalizeStartDate(
@@ -1128,17 +1141,56 @@ class AccountApiService
             }
         }
 
+        if ($this->isFreePaymentResource($createPayment) || $this->isSubscriptionPaymentConfirmed($subRow)) {
+            return ['ok' => true, 'message' => ''];
+        }
+
         $show = $this->showSubscription($subscriptionId);
-        if (! ($show['ok'] ?? false)) {
-            return ['ok' => false, 'message' => __('checkout.free_subscription_activation_failed')];
+        if ($show['ok'] ?? false) {
+            $sub = $this->extractSubscriptionRowFromDecoded($show['data'] ?? null, $subscriptionId);
+            if ($this->isSubscriptionPaymentConfirmed($sub)) {
+                return ['ok' => true, 'message' => ''];
+            }
         }
 
-        $sub = $this->extractSubscriptionRowFromDecoded($show['data'] ?? null, $subscriptionId);
-        if (! $this->isSubscriptionPaymentConfirmed($sub)) {
-            return ['ok' => false, 'message' => __('checkout.free_subscription_activation_failed')];
+        Log::warning('AccountApiService::finalizeFreeSubscription activation check failed', [
+            'subscription_id' => $subscriptionId,
+            'create_payment' => $createPayment,
+            'create_subscription_status' => $subRow['status'] ?? null,
+            'show_ok' => $show['ok'] ?? false,
+        ]);
+
+        return ['ok' => false, 'message' => __('checkout.free_subscription_activation_failed')];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $payment
+     */
+    protected function isFreePaymentResource(?array $payment): bool
+    {
+        if ($payment === null) {
+            return false;
         }
 
-        return ['ok' => true, 'message' => ''];
+        $paymentOption = strtolower((string) ($payment['payment_option'] ?? ''));
+        if (in_array($paymentOption, ['free', 'promo', 'promocode', 'coupon'], true)) {
+            return true;
+        }
+
+        $amountRaw = $payment['amount'] ?? $payment['pay_amount'] ?? null;
+        $amount = is_numeric($amountRaw) ? (float) $amountRaw : null;
+        if ($amount !== null && $amount <= 0) {
+            $status = strtolower((string) ($payment['status'] ?? ''));
+            if (in_array($status, ['paid', 'success', 'completed', 'confirmed'], true)) {
+                return true;
+            }
+
+            if (filter_var($payment['is_paid'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1175,8 +1227,11 @@ class AccountApiService
             return $data;
         }
 
-        $rows = $data['subscriptions'] ?? $data['data'] ?? null;
-        if (is_array($rows)) {
+        foreach (['subscriptions', 'data', 'items'] as $key) {
+            $rows = $data[$key] ?? null;
+            if (! is_array($rows)) {
+                continue;
+            }
             foreach ($rows as $row) {
                 if (is_array($row) && (int) ($row['id'] ?? 0) === $subscriptionId) {
                     return $row;
