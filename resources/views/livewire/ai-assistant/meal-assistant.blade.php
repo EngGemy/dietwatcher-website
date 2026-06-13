@@ -203,62 +203,110 @@
                                 <p class="ai-note">{{ __('ai.fallback_report') }}</p>
                             @endif
 
-                            <article class="ai-report">
-                                <h3 class="ai-report__title">{{ $aiReport['headline'] ?? '' }}</h3>
-                                <p class="ai-report__summary">{{ $aiReport['summary'] ?? '' }}</p>
+                            <div class="ai-metrics ai-metrics--compact ai-metrics--sticky">
+                                <div class="ai-metric-card">
+                                    <span class="ai-metric-card__label">BMR</span>
+                                    <span class="ai-metric-card__value">{{ number_format((float) $bmr) }}</span>
+                                </div>
+                                <div class="ai-metric-card">
+                                    <span class="ai-metric-card__label">TDEE</span>
+                                    <span class="ai-metric-card__value">{{ number_format((float) $tdee) }}</span>
+                                </div>
+                                <div class="ai-metric-card ai-metric-card--accent">
+                                    <span class="ai-metric-card__label">{{ __('ai.target_calories') }}</span>
+                                    <span class="ai-metric-card__value">{{ number_format((int) $targetCalories) }}</span>
+                                </div>
+                            </div>
 
-                                <div class="ai-metrics ai-metrics--compact">
-                                    <div class="ai-metric-card">
-                                        <span class="ai-metric-card__label">BMR</span>
-                                        <span class="ai-metric-card__value">{{ number_format((float) $bmr) }}</span>
-                                    </div>
-                                    <div class="ai-metric-card">
-                                        <span class="ai-metric-card__label">TDEE</span>
-                                        <span class="ai-metric-card__value">{{ number_format((float) $tdee) }}</span>
-                                    </div>
-                                    <div class="ai-metric-card ai-metric-card--accent">
-                                        <span class="ai-metric-card__label">{{ __('ai.target_calories') }}</span>
-                                        <span class="ai-metric-card__value">{{ number_format((int) $targetCalories) }}</span>
+                            @if($analysisPlanPicks !== [] && $analysisIntroDone)
+                                <div class="ai-plan-pin">
+                                    @foreach($analysisPlanPicks as $plan)
+                                        <article class="ai-plan-pin__card" wire:key="ai-analysis-plan-{{ (int) $plan['id'] }}">
+                                            <div class="ai-plan-pin__head">
+                                                @if(!empty($plan['image']))
+                                                    <img src="{{ $plan['image'] }}" alt="" class="ai-plan-pin__img" loading="lazy">
+                                                @endif
+                                                <div class="ai-plan-pin__info">
+                                                    <span class="ai-plan-pin__badge">{{ __('ai.best_plan_match') }}</span>
+                                                    <h4 class="ai-plan-pin__name">{{ $plan['name'] ?? '' }}</h4>
+                                                    @if((int) ($plan['calories_per_day'] ?? 0) > 0)
+                                                        <p class="ai-plan-pin__meta">{{ (int) $plan['calories_per_day'] }} {{ __('ai.kcal_day') }}</p>
+                                                    @endif
+                                                    @if(!empty($plan['reason']))
+                                                        <p class="ai-plan-pin__reason">{{ $plan['reason'] }}</p>
+                                                    @endif
+                                                </div>
+                                                @if((int) ($plan['fit_score'] ?? 0) > 0)
+                                                    <span class="ai-fit-badge">{{ (int) $plan['fit_score'] }}%</span>
+                                                @endif
+                                            </div>
+                                            @if(!empty($plan['url']))
+                                                <a href="{{ $plan['url'] }}" class="ai-btn ai-btn--primary ai-btn--sm ai-btn--full" target="_blank" rel="noopener">
+                                                    {{ __('ai.open_plan_details') }}
+                                                </a>
+                                            @endif
+                                        </article>
+                                    @endforeach
+                                </div>
+                            @endif
+
+                            <div class="ai-section ai-section--chat ai-section--analysis-chat">
+                                <div class="ai-persona">
+                                    <span class="ai-persona__avatar">N</span>
+                                    <div>
+                                        <strong class="ai-persona__name">{{ __('ai.persona_name') }}</strong>
+                                        <span class="ai-persona__role">{{ __('ai.persona_role') }}</span>
                                     </div>
                                 </div>
 
-                                @foreach([
-                                    'bmi_comment' => __('ai.report_bmi'),
-                                    'calorie_strategy' => __('ai.report_calories'),
-                                    'macro_advice' => __('ai.report_macros'),
-                                    'meal_timing' => __('ai.report_timing'),
-                                    'weekly_focus' => __('ai.report_weekly'),
-                                ] as $key => $sectionTitle)
-                                    @if(!empty($aiReport[$key]))
-                                        <div class="ai-report__block">
-                                            <h4>{{ $sectionTitle }}</h4>
-                                            <p>{{ $aiReport[$key] }}</p>
+                                @if($analysisIntroDone)
+                                    <div class="ai-quick-questions">
+                                        @foreach($analysisQuickQuestions as $q)
+                                            <button
+                                                type="button"
+                                                class="ai-chip ai-chip--sm"
+                                                wire:click="askAnalysisQuickQuestion(@js($q))"
+                                                wire:loading.attr="disabled"
+                                            >{{ $q }}</button>
+                                        @endforeach
+                                    </div>
+                                @endif
+
+                                <div
+                                    class="ai-chat ai-chat--analysis"
+                                    wire:key="ai-analysis-chat-{{ count($analysisMessages) }}-{{ $loadingAnalysisChat ? 1 : 0 }}"
+                                    x-data
+                                    x-init="$nextTick(() => { $el.scrollTop = $el.scrollHeight })"
+                                >
+                                    @forelse($analysisMessages as $msg)
+                                        <div class="ai-chat__bubble ai-chat__bubble--{{ $msg['role'] === 'user' ? 'user' : 'bot' }}">
+                                            @if($msg['role'] !== 'user')
+                                                <span class="ai-chat__sender">{{ __('ai.persona_name') }}</span>
+                                            @endif
+                                            {!! $formatAnalysisMessage($msg['content']) !!}
                                         </div>
+                                    @empty
+                                        <p class="ai-empty">{{ __('ai.analysis_chat_empty') }}</p>
+                                    @endforelse
+                                    @if($loadingAnalysisChat)
+                                        <p class="ai-loading">{{ __('ai.typing') }}</p>
                                     @endif
-                                @endforeach
+                                </div>
 
-                                @if(!empty($aiReport['lifestyle_tips']) && is_array($aiReport['lifestyle_tips']))
-                                    <div class="ai-report__block">
-                                        <h4>{{ __('ai.report_tips') }}</h4>
-                                        <ul class="ai-report__list">
-                                            @foreach($aiReport['lifestyle_tips'] as $tip)
-                                                <li>{{ $tip }}</li>
-                                            @endforeach
-                                        </ul>
-                                    </div>
-                                @endif
-
-                                @if(!empty($aiReport['plan_pitch']))
-                                    <div class="ai-report__pitch">
-                                        <span class="ai-report__pitch-label">{{ __('ai.report_recommendation') }}</span>
-                                        <p>{{ $aiReport['plan_pitch'] }}</p>
-                                    </div>
-                                @endif
-
-                                @if(!empty($aiReport['caution']))
-                                    <p class="ai-report__caution">{{ $aiReport['caution'] }}</p>
-                                @endif
-                            </article>
+                                <form class="ai-chat-form" wire:submit.prevent="sendAnalysisMessage">
+                                    <input
+                                        type="text"
+                                        class="ai-input"
+                                        wire:model="analysisInput"
+                                        placeholder="{{ $analysisIntroDone ? __('ai.analysis_placeholder') : __('ai.analysis_name_placeholder') }}"
+                                        autocomplete="off"
+                                        wire:loading.attr="disabled"
+                                    >
+                                    <button type="submit" class="ai-btn ai-btn--primary ai-btn--sm" wire:loading.attr="disabled">
+                                        {{ __('ai.send') }}
+                                    </button>
+                                </form>
+                            </div>
 
                             <div class="ai-btn-row">
                                 <button type="button" class="ai-btn ai-btn--ghost" wire:click="prevAnalysisStep">{{ __('ai.edit_answers') }}</button>
@@ -790,6 +838,43 @@
 .ai-meal-card__price { font-size: .82rem; font-weight: 800; color: var(--ai-blue); }
 
 .ai-section--chat { display: flex; flex-direction: column; min-height: 320px; }
+.ai-section--analysis-chat { margin-top: .75rem; min-height: 360px; }
+.ai-metrics--sticky { margin-bottom: .65rem; }
+.ai-persona {
+    display: flex; align-items: center; gap: .55rem; margin-bottom: .55rem;
+    padding: .45rem .55rem; border-radius: 10px; background: var(--ai-blue-soft);
+    border: 1px solid var(--ai-blue-border);
+}
+.ai-persona__avatar {
+    width: 2rem; height: 2rem; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, var(--ai-blue-light), var(--ai-blue));
+    color: #fff; font-weight: 800; font-size: .85rem;
+}
+.ai-persona__name { display: block; font-size: .82rem; color: var(--ai-text); }
+.ai-persona__role { display: block; font-size: .68rem; color: var(--ai-muted); }
+.ai-plan-pin { margin: .65rem 0; }
+.ai-plan-pin__card {
+    border: 1px solid var(--ai-blue-border); border-radius: 12px; padding: .75rem;
+    background: linear-gradient(180deg, #fff 0%, var(--ai-blue-soft) 100%);
+    box-shadow: 0 8px 20px rgba(37, 99, 235, .08);
+}
+.ai-plan-pin__head { display: flex; gap: .65rem; align-items: flex-start; margin-bottom: .65rem; }
+.ai-plan-pin__img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
+.ai-plan-pin__info { flex: 1; min-width: 0; }
+.ai-plan-pin__badge {
+    display: inline-block; font-size: .65rem; font-weight: 800; color: var(--ai-blue);
+    background: #fff; border: 1px solid var(--ai-blue-border); border-radius: 999px;
+    padding: .1rem .45rem; margin-bottom: .25rem;
+}
+.ai-plan-pin__name { margin: 0; font-size: .92rem; font-weight: 800; color: var(--ai-text); }
+.ai-plan-pin__meta { margin: .15rem 0 0; font-size: .72rem; color: var(--ai-muted); }
+.ai-plan-pin__reason { margin: .35rem 0 0; font-size: .75rem; line-height: 1.45; color: #374151; }
+.ai-chat--analysis { max-height: 280px; }
+.ai-chat__sender {
+    display: block; font-size: .65rem; font-weight: 800; color: var(--ai-blue);
+    margin-bottom: .2rem;
+}
 .ai-chat { flex: 1; min-height: 200px; max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: .5rem; margin-bottom: .65rem; padding: .25rem; }
 .ai-chat__bubble { max-width: 92%; padding: .6rem .75rem; border-radius: 10px; font-size: .8rem; line-height: 1.45; }
 .ai-chat__bubble--user {

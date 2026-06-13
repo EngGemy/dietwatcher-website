@@ -17,6 +17,12 @@ class MealAssistant extends Component
 {
     private const SESSION_SUPPORT = 'ai_assistant_support_chat';
 
+    private const SESSION_ANALYSIS = 'ai_assistant_analysis_chat';
+
+    private const SESSION_USER_NAME = 'ai_assistant_user_name';
+
+    private const SESSION_ANALYSIS_INTRO = 'ai_assistant_analysis_intro_done';
+
     public bool $isOpen = false;
 
     public string $activeTab = 'analysis';
@@ -43,6 +49,20 @@ class MealAssistant extends Component
     public int $mealsPerDay = 3;
 
     public string $healthNotes = '';
+
+    public string $userName = '';
+
+    public string $analysisInput = '';
+
+    /** @var array<int, array{role: string, content: string}> */
+    public array $analysisMessages = [];
+
+    /** @var array<int, array<string, mixed>> */
+    public array $analysisPlanPicks = [];
+
+    public bool $loadingAnalysisChat = false;
+
+    public bool $analysisIntroDone = false;
 
     public bool $metricsReady = false;
 
@@ -116,6 +136,9 @@ class MealAssistant extends Component
         $this->siteName = (string) Setting::getValue('site_name', config('app.name'));
         $this->geminiConfigured = app(GeminiService::class)->isConfigured();
         $this->supportMessages = session(self::SESSION_SUPPORT, []);
+        $this->userName = trim((string) session(self::SESSION_USER_NAME, ''));
+        $this->analysisMessages = session(self::SESSION_ANALYSIS, []);
+        $this->analysisIntroDone = (bool) session(self::SESSION_ANALYSIS_INTRO, false);
         $this->quickQuestions = $this->defaultQuickQuestions();
         $this->loadAboutContent();
         $this->calculateMetrics();
@@ -306,6 +329,10 @@ class MealAssistant extends Component
         $this->recommendationSource = '';
         $this->aiReport = [];
         $this->reportSource = '';
+        $this->analysisMessages = [];
+        $this->analysisPlanPicks = [];
+        $this->analysisIntroDone = false;
+        session()->forget([self::SESSION_ANALYSIS, self::SESSION_ANALYSIS_INTRO]);
     }
 
     public function generateAiReport(): void
@@ -325,6 +352,7 @@ class MealAssistant extends Component
                 $this->aiReport = $report;
                 $this->reportSource = 'gemini';
                 $this->analysisStep = 3;
+                $this->finalizeAnalysisSession();
                 $this->loadingReport = false;
 
                 return;
@@ -334,7 +362,69 @@ class MealAssistant extends Component
         $this->aiReport = $this->localReport();
         $this->reportSource = 'local';
         $this->analysisStep = 3;
+        $this->finalizeAnalysisSession();
         $this->loadingReport = false;
+    }
+
+    private function finalizeAnalysisSession(): void
+    {
+        $this->recommendationPlans = $this->buildPlanRecommendations();
+        $this->analysisPlanPicks = array_slice($this->recommendationPlans, 0, 1);
+        $this->bootstrapAnalysisChat();
+    }
+
+    public function sendAnalysisMessage(): void
+    {
+        $question = trim($this->analysisInput);
+        if ($question === '') {
+            return;
+        }
+
+        $this->analysisMessages[] = ['role' => 'user', 'content' => $question];
+        $this->analysisInput = '';
+        $this->loadingAnalysisChat = true;
+
+        if (! $this->analysisIntroDone && $this->userName === '') {
+            $captured = $this->captureUserName($question);
+            if ($captured !== '') {
+                $this->userName = $captured;
+                session([self::SESSION_USER_NAME => $captured]);
+                $this->deliverAnalysisIntroMessages();
+                $this->loadingAnalysisChat = false;
+
+                return;
+            }
+
+            $this->analysisMessages[] = [
+                'role' => 'assistant',
+                'content' => (string) __('ai.analysis_ask_name_again'),
+            ];
+            $this->persistAnalysisChat();
+            $this->loadingAnalysisChat = false;
+
+            return;
+        }
+
+        $response = $this->buildAnalysisChatResponse($question);
+        $this->analysisMessages[] = ['role' => 'assistant', 'content' => $response['text']];
+
+        if ($response['plans'] !== []) {
+            $this->analysisPlanPicks = array_slice($response['plans'], 0, 2);
+        }
+
+        $this->persistAnalysisChat();
+        $this->loadingAnalysisChat = false;
+    }
+
+    public function askAnalysisQuickQuestion(string $question): void
+    {
+        $question = trim($question);
+        if ($question === '') {
+            return;
+        }
+
+        $this->analysisInput = $question;
+        $this->sendAnalysisMessage();
     }
 
     public function loadRecommendations(): void
@@ -485,6 +575,204 @@ class MealAssistant extends Component
     /**
      * @return array<int, string>
      */
+    private function defaultAnalysisQuickQuestions(): array
+    {
+        $locale = app()->getLocale();
+
+        return $locale === 'ar'
+            ? [
+                'لماذا هذه الباقة بالتحديد؟',
+                'كم سعرها تقريباً؟',
+                'هل تناسب خسارة الوزن؟',
+                'كيف أبدأ الاشتراك؟',
+            ]
+            : [
+                'Why this plan specifically?',
+                'What does it cost roughly?',
+                'Is it good for weight loss?',
+                'How do I subscribe?',
+            ];
+    }
+
+    private function bootstrapAnalysisChat(): void
+    {
+        $this->analysisMessages = [];
+        $this->analysisIntroDone = $this->userName !== '';
+
+        if ($this->userName !== '') {
+            $this->deliverAnalysisIntroMessages();
+
+            return;
+        }
+
+        $siteName = $this->siteName;
+        $welcome = app()->getLocale() === 'ar'
+            ? "مرحباً بك في {$siteName}! 👋\n\nأنا نوتريشرز، مستشارك الغذائي الذكي.\n\nراجعت بياناتك وحلّلتها — قبل ما أشاركك التقرير والباقة الأنسب لك، **ما اسمك؟**"
+            : "Welcome to {$siteName}! 👋\n\nI'm Nutrishers, your smart nutrition advisor.\n\nI've reviewed your stats — before I share your report and best-matching plan, **what's your name?**";
+
+        $this->analysisMessages[] = ['role' => 'assistant', 'content' => $welcome];
+        $this->persistAnalysisChat();
+    }
+
+    private function deliverAnalysisIntroMessages(): void
+    {
+        $name = $this->userName !== '' ? $this->userName : (app()->getLocale() === 'ar' ? 'صديقي' : 'there');
+        $locale = app()->getLocale();
+        $siteName = $this->siteName;
+
+        $this->analysisMessages[] = [
+            'role' => 'assistant',
+            'content' => $locale === 'ar'
+                ? "أهلاً {$name}! 😊 سعيد بمعرفتك — أنا نوتريشرز من {$siteName}."
+                : "Hi {$name}! 😊 Great to meet you — I'm Nutrishers from {$siteName}.",
+        ];
+
+        if (! empty($this->aiReport['headline'])) {
+            $this->analysisMessages[] = [
+                'role' => 'assistant',
+                'content' => '**'.(string) $this->aiReport['headline'].'**',
+            ];
+        }
+
+        if (! empty($this->aiReport['summary'])) {
+            $this->analysisMessages[] = [
+                'role' => 'assistant',
+                'content' => (string) $this->aiReport['summary'],
+            ];
+        }
+
+        $metricsLine = $locale === 'ar'
+            ? sprintf(
+                "📊 ملخص سريع:\n• BMI: %.1f (%s)\n• TDEE: %s سعرة\n• هدفك اليومي: %s سعرة\n• ماكرو: بروتين %.0fغ · كارب %.0fغ · دهون %.0fغ",
+                (float) $this->bmi,
+                (string) __('ai.bmi_'.$this->bmiCategory),
+                number_format((float) $this->tdee),
+                number_format((int) $this->targetCalories),
+                $this->macroTargets['protein_g'],
+                $this->macroTargets['carbs_g'],
+                $this->macroTargets['fat_g'],
+            )
+            : sprintf(
+                "📊 Quick snapshot:\n• BMI: %.1f (%s)\n• TDEE: %s kcal\n• Daily target: %s kcal\n• Macros: P %.0fg · C %.0fg · F %.0fg",
+                (float) $this->bmi,
+                (string) __('ai.bmi_'.$this->bmiCategory),
+                number_format((float) $this->tdee),
+                number_format((int) $this->targetCalories),
+                $this->macroTargets['protein_g'],
+                $this->macroTargets['carbs_g'],
+                $this->macroTargets['fat_g'],
+            );
+
+        $this->analysisMessages[] = ['role' => 'assistant', 'content' => $metricsLine];
+
+        if (! empty($this->aiReport['bmi_comment'])) {
+            $this->analysisMessages[] = ['role' => 'assistant', 'content' => (string) $this->aiReport['bmi_comment']];
+        }
+
+        if (! empty($this->aiReport['calorie_strategy'])) {
+            $this->analysisMessages[] = ['role' => 'assistant', 'content' => (string) $this->aiReport['calorie_strategy']];
+        }
+
+        if (! empty($this->aiReport['macro_advice'])) {
+            $this->analysisMessages[] = ['role' => 'assistant', 'content' => (string) $this->aiReport['macro_advice']];
+        }
+
+        $topPlan = $this->recommendationPlans[0] ?? null;
+        if (is_array($topPlan)) {
+            $planName = (string) ($topPlan['name'] ?? '');
+            $pitch = trim((string) ($this->aiReport['plan_pitch'] ?? $topPlan['reason'] ?? ''));
+            $fit = (int) ($topPlan['fit_score'] ?? 0);
+
+            $planIntro = $locale === 'ar'
+                ? "🎯 **الباقة الأنسب لك:** «{$planName}»".($fit > 0 ? " (تطابق {$fit}%)" : '')."\n\n{$pitch}\n\n👇 اضغط على الباقة بالأسفل لفتح التفاصيل في تبويب جديد — المحادثة تظل مفتوحة هنا لأي سؤال."
+                : "🎯 **Best plan for you:** «{$planName}»".($fit > 0 ? " ({$fit}% match)" : '')."\n\n{$pitch}\n\n👇 Tap the plan below to open details in a new tab — this chat stays open for your questions.";
+
+            $this->analysisMessages[] = ['role' => 'assistant', 'content' => $planIntro];
+            $this->analysisPlanPicks = [$topPlan];
+        } elseif (! empty($this->aiReport['plan_pitch'])) {
+            $this->analysisMessages[] = ['role' => 'assistant', 'content' => (string) $this->aiReport['plan_pitch']];
+        }
+
+        if (! empty($this->aiReport['weekly_focus'])) {
+            $this->analysisMessages[] = [
+                'role' => 'assistant',
+                'content' => ($locale === 'ar' ? '✅ تركيز هذا الأسبوع: ' : '✅ This week: ').(string) $this->aiReport['weekly_focus'],
+            ];
+        }
+
+        $this->analysisMessages[] = [
+            'role' => 'assistant',
+            'content' => (string) __('ai.analysis_follow_up'),
+        ];
+
+        $this->analysisIntroDone = true;
+        $this->persistAnalysisChat();
+    }
+
+    private function captureUserName(string $text): string
+    {
+        $text = trim(preg_replace('/[*#@]+/', '', $text) ?? $text);
+        if ($text === '') {
+            return '';
+        }
+
+        if (str_contains($text, '?') || str_contains($text, '؟')) {
+            return '';
+        }
+
+        if (mb_strlen($text) > 40) {
+            return '';
+        }
+
+        $wordCount = count(array_filter(preg_split('/\s+/u', $text) ?: []));
+        if ($wordCount > 4) {
+            return '';
+        }
+
+        $lower = mb_strtolower($text);
+        foreach (['مرحب', 'hello', 'hi', 'السلام', 'كيف', 'what', 'how', 'why', 'متى', 'when'] as $skip) {
+            if (str_contains($lower, $skip) && $wordCount > 2) {
+                return '';
+            }
+        }
+
+        return $text;
+    }
+
+    /**
+     * @return array{text: string, meals: array<int, array<string, mixed>>, plans: array<int, array<string, mixed>>}
+     */
+    private function buildAnalysisChatResponse(string $question): array
+    {
+        return $this->buildSupportResponse($question, $this->analysisMessages);
+    }
+
+    private function persistAnalysisChat(): void
+    {
+        session([
+            self::SESSION_ANALYSIS => $this->analysisMessages,
+            self::SESSION_ANALYSIS_INTRO => $this->analysisIntroDone,
+        ]);
+    }
+
+    private function formatAnalysisMessage(string $content): string
+    {
+        $escaped = e($content);
+
+        return nl2br(preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $escaped) ?? $escaped);
+    }
+
+    public function render()
+    {
+        return view('livewire.ai-assistant.meal-assistant', [
+            'analysisQuickQuestions' => $this->defaultAnalysisQuickQuestions(),
+            'formatAnalysisMessage' => fn (string $content): string => $this->formatAnalysisMessage($content),
+        ]);
+    }
+
+    /**
+     * @return array<int, string>
+     */
     private function defaultQuickQuestions(): array
     {
         $locale = app()->getLocale();
@@ -551,6 +839,7 @@ class MealAssistant extends Component
             'weight_kg' => $this->weightKg,
             'age' => $this->age,
             'gender' => $this->gender,
+            'user_name' => $this->userName !== '' ? $this->userName : null,
             'activity_level' => $this->activityLevel,
             'goal' => $this->goal,
             'bmi' => $this->bmi,
@@ -956,7 +1245,7 @@ PROMPT;
                 $primaryPlanName !== ''
                     ? sprintf('ابدأ بباقة «%s» — أقرب خيار لسعراتك اليومية.', $primaryPlanName)
                     : 'اختر باقة اشتراك قريبة من سعراتك اليومية من صفحة الباقات.',
-                'وزّع '.$this->mealsPerDay.' وجبات على مدار اليوم مع بروtein في كل وجبة.',
+                'وزّع '.$this->mealsPerDay.' وجبات على مدار اليوم مع بروتين في كل وجبة.',
                 'استخدم المتجر لوجبة مرنة أو تكميل أسبوعي — وليس كأساس يومي إن كان هدفك '.$goalLabel.'.',
                 'راجع وزنك كل 7–10 أيام وعدّل نشاطك أو حصصك تدريجياً.',
             ];
@@ -1269,11 +1558,11 @@ PROMPT;
         $checkoutUrl = route('checkout.index');
 
         $langInstruction = $locale === 'ar'
-            ? 'رد بالعربية ما لم يكتب العميل بالإنجليزية. كن ودوداً ومحترفاً مثل أفضل مستشار مبيعات. اذكر أسماء وجبات أو باقات محددة من الكتالوج عند التوصية.'
-            : 'Reply in English unless the user writes in Arabic. Be warm and professional like a top sales advisor. Name specific meals or plans from the catalog when recommending.';
+            ? 'رد بالعربية ما لم يكتب العميل بالإنجليزية. تكلّم باسم «نوتريشرز» — مستشار دايت ووتشرز الذكي. استخدم اسم العميل إن وُجد في الملف. كن ودوداً ومحترفاً. اذكر أسماء باقات أو وجبات محددة من الكتالوج.'
+            : 'Reply in English unless the user writes in Arabic. Speak as «Nutrishers» — the smart Diet Watchers advisor. Use the customer name from the profile when available. Be warm and professional. Name specific plans or meals from the catalog.';
 
         return <<<PROMPT
-You are the AI nutrition consultant and customer success advisor for {$siteName}, a premium healthy meal subscription and store in Saudi Arabia.
+You are Nutrishers — the AI nutrition consultant and customer success advisor for {$siteName}, a premium healthy meal subscription and store in Saudi Arabia.
 Your job: answer ANY customer question — plans, store meals, delivery, pricing, weight loss, subscription steps, or general nutrition.
 Recommend specific meals or subscription plans from the catalog below when relevant. Mention real product names.
 Use the customer profile when available. Ask one short follow-up only when critical info is missing.
@@ -1296,19 +1585,21 @@ PROMPT;
     }
 
     /**
+     * @param  array<int, array{role: string, content: string}>|null  $history
      * @return array{text: string, meals: array<int, array<string, mixed>>, plans: array<int, array<string, mixed>>}
      */
-    private function buildSupportResponse(string $question): array
+    private function buildSupportResponse(string $question, ?array $history = null): array
     {
         $intent = $this->detectSupportIntent($question);
         $meals = $this->topMealPicksForUser(4);
         $plans = $this->rankedPlansForUser(3);
+        $chatHistory = $history ?? $this->supportMessages;
 
         $gemini = app(GeminiService::class);
         if ($gemini->isConfigured()) {
             $answer = $gemini->generate(
                 $this->buildAdvisorSystemPrompt(),
-                $this->supportMessages,
+                $chatHistory,
                 false,
                 0.65
             );
@@ -1743,10 +2034,5 @@ PROMPT;
         }
 
         return substr($raw, $start, $end - $start + 1);
-    }
-
-    public function render()
-    {
-        return view('livewire.ai-assistant.meal-assistant');
     }
 }
