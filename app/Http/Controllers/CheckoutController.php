@@ -971,10 +971,29 @@ class CheckoutController extends Controller
 
         $requestSubtotal = (float) ($checkoutContext['subtotal'] ?? 0);
         $discount = $this->extractDiscountFromCalculateResponse($promoData, $baselineData, $requestSubtotal);
+        $apiTotal = $this->extractCalculatePayableTotal($promoData);
+
+        if ($discount <= 0 && $apiTotal >= 0 && $baselineData !== null) {
+            $baselineTotal = $this->extractCalculatePayableTotal($baselineData);
+            if ($baselineTotal > 0 && $apiTotal < $baselineTotal) {
+                $discount = $baselineTotal - $apiTotal;
+            }
+        }
+
+        if ($discount <= 0) {
+            return [
+                'valid' => false,
+                'discount' => 0,
+                'message' => (string) __('checkout.promo_invalid'),
+                'source' => 'external',
+                'api_rejected' => false,
+            ];
+        }
 
         return [
             'valid' => true,
             'discount' => round(max(0, $discount), 2),
+            'api_total' => $apiTotal >= 0 ? round($apiTotal, 2) : null,
             'message' => __('checkout.promo_applied_success'),
             'source' => 'external',
             'type' => 'fixed',
@@ -1011,6 +1030,8 @@ class CheckoutController extends Controller
         ?array $baselineData,
         float $requestSubtotal = 0,
     ): float {
+        $promoSource = $this->accountApiService->resolveCalculatePricingSource($promoData);
+
         if ($baselineData !== null) {
             $baselineTotal = $this->extractCalculatePayableTotal($baselineData);
             $promoTotal = $this->extractCalculatePayableTotal($promoData);
@@ -1025,17 +1046,23 @@ class CheckoutController extends Controller
         }
 
         foreach (['discount', 'discount_amount', 'promo_discount', 'coupon_discount', 'promocode_discount'] as $key) {
-            $amount = $this->externalMoneyAmount(data_get($promoData, $key));
+            $amount = $this->externalMoneyAmount(data_get($promoSource, $key));
             if ($amount > 0) {
                 return $amount;
             }
         }
 
+        $orderTotal = $this->externalMoneyAmount($promoSource['order_total'] ?? 0);
+        $afterDiscount = $this->externalMoneyAmount($promoSource['after_discount'] ?? 0);
+        if ($orderTotal > 0 && $afterDiscount >= 0 && $afterDiscount < $orderTotal) {
+            return $orderTotal - $afterDiscount;
+        }
+
         $subtotal = $this->externalMoneyAmount(
-            $promoData['subtotal'] ?? $promoData['price'] ?? $promoData['plan_price'] ?? 0
+            $promoSource['order_total'] ?? $promoSource['subtotal'] ?? $promoSource['price'] ?? $promoSource['plan_price'] ?? 0
         );
         $total = $this->externalMoneyAmount(
-            $promoData['total'] ?? $promoData['grand_total'] ?? $promoData['amount'] ?? $promoData['final_total'] ?? -1
+            $promoSource['total'] ?? $promoSource['after_discount'] ?? $promoSource['grand_total'] ?? $promoSource['amount'] ?? $promoSource['final_total'] ?? -1
         );
 
         if ($subtotal > 0 && $total >= 0 && $total < $subtotal) {
@@ -1116,8 +1143,10 @@ class CheckoutController extends Controller
             return (float) ($parsed['total'] ?? -1);
         }
 
+        $source = $this->accountApiService->resolveCalculatePricingSource($data);
+
         return $this->externalMoneyAmount(
-            $data['total'] ?? $data['grand_total'] ?? $data['amount'] ?? $data['final_total'] ?? -1
+            $source['total'] ?? $source['after_discount'] ?? $source['grand_total'] ?? $source['amount'] ?? $source['final_total'] ?? -1
         );
     }
 

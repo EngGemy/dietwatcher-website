@@ -1427,10 +1427,18 @@ class AccountApiService
             return null;
         }
 
-        $subtotal = $this->moneyAmount($data['subtotal'] ?? $data['price'] ?? $data['plan_price'] ?? 0);
-        $delivery = $this->moneyAmount($data['delivery'] ?? $data['delivery_price'] ?? $data['delivery_fee'] ?? 0);
-        $discount = $this->moneyAmount($data['discount'] ?? $data['discount_amount'] ?? 0);
-        $total = $this->moneyAmount($data['total'] ?? $data['grand_total'] ?? $data['amount'] ?? $data['final_total'] ?? null);
+        $source = $this->resolveCalculatePricingSource($data);
+
+        $subtotal = $this->moneyAmount(
+            $source['order_total'] ?? $source['subtotal'] ?? $source['price'] ?? $source['plan_price'] ?? 0
+        );
+        $delivery = $this->moneyAmount(
+            $source['delievery'] ?? $source['delivery'] ?? $source['delivery_price'] ?? $source['delivery_fee'] ?? 0
+        );
+        $discount = $this->moneyAmount($source['discount'] ?? $source['discount_amount'] ?? 0);
+        $total = $this->moneyAmount(
+            $source['total'] ?? $source['after_discount'] ?? $source['grand_total'] ?? $source['amount'] ?? $source['final_total'] ?? null
+        );
 
         if ($total < 0) {
             return null;
@@ -1439,7 +1447,7 @@ class AccountApiService
         if ($total === 0.0 && $discount <= 0 && $subtotal <= 0) {
             return null;
         }
-        $vat = $this->moneyAmount($data['vat'] ?? $data['tax'] ?? $data['vat_amount'] ?? 0);
+        $vat = $this->moneyAmount($source['vat'] ?? $source['tax'] ?? $source['vat_amount'] ?? 0);
 
         if ($vat <= 0 && $subtotal > 0) {
             $vat = max(0, $total - $subtotal - $delivery + $discount);
@@ -1452,6 +1460,23 @@ class AccountApiService
             'vat' => round($vat, 2),
             'total' => round($total, 2),
         ];
+    }
+
+    /**
+     * API calculate responses nest pricing under `checkout` (order_total, discount, total, delievery).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public function resolveCalculatePricingSource(array $data): array
+    {
+        $checkout = $data['checkout'] ?? null;
+
+        if (! is_array($checkout)) {
+            return $data;
+        }
+
+        return array_merge($data, $checkout);
     }
 
     protected function moneyAmount(mixed $value): float

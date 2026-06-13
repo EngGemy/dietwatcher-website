@@ -1554,6 +1554,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             vatRate: @json((float) $vatRate),
             deliveryFeeAmount: @json((float) $deliveryFeeAmount),
             discount: 0,
+            promoApiTotal: null,
             addressStreet: @json(old('street', '')),
             buildingNotes: @json(old('building', '')),
             customerName: @json(old('name', '')),
@@ -3181,12 +3182,18 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             // Computed: VAT extracted from VAT-inclusive price (for display only)
             // Formula: VAT = inclPrice - (inclPrice / (1 + vatRate))
             vatAmount() {
-                const inclTotal = this.subtotal() + this.deliveryFee() - this.discount;
+                const inclTotal = (this.couponApplied && this.promoApiTotal != null && this.promoApiTotal >= 0)
+                    ? this.promoApiTotal
+                    : (this.subtotal() + this.deliveryFee() - this.discount);
                 return Math.round((inclTotal - (inclTotal / (1 + this.vatRate))) * 100) / 100;
             },
 
             // Computed: grand total (price already includes VAT, just add delivery and subtract discount)
             total() {
+                if (this.couponApplied && this.promoApiTotal != null && this.promoApiTotal >= 0) {
+                    return Math.round(this.promoApiTotal * 100) / 100;
+                }
+
                 return Math.round((this.subtotal() + this.deliveryFee() - this.discount) * 100) / 100;
             },
 
@@ -3253,7 +3260,17 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
                     const isValid = response.ok && data.valid === true;
                     if (isValid) {
+                        const apiTotal = data.api_total != null ? Number(data.api_total) : null;
                         this.discount = Number(data.discount || 0);
+                        if (apiTotal != null && ! Number.isNaN(apiTotal) && apiTotal >= 0) {
+                            this.promoApiTotal = apiTotal;
+                            const localPayable = this.subtotal() + this.deliveryFee();
+                            if (this.discount <= 0 && localPayable > apiTotal) {
+                                this.discount = Math.round((localPayable - apiTotal) * 100) / 100;
+                            }
+                        } else {
+                            this.promoApiTotal = null;
+                        }
                         this.couponApplied = true;
                         this.couponMessage = couponMsg || @json(__('checkout.promo_applied_success'));
                         if (! this._moyasarSessionFailed && this.canProceedToPayment()) {
@@ -3262,12 +3279,14 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         }
                     } else {
                         this.discount = 0;
+                        this.promoApiTotal = null;
                         this.couponApplied = false;
                         this.couponMessage = couponMsg || @json(__('checkout.promo_invalid'));
                     }
                 } catch (error) {
                     this.couponMessage = @json(__('An error occurred. Please try again.'));
                     this.discount = 0;
+                    this.promoApiTotal = null;
                     this.couponApplied = false;
                 }
 
@@ -3277,9 +3296,14 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             // Remove applied coupon
             removeCoupon() {
                 this.discount = 0;
+                this.promoApiTotal = null;
                 this.couponApplied = false;
                 this.couponCode = '';
                 this.couponMessage = '';
+                if (! this._moyasarSessionFailed && this.canProceedToPayment()) {
+                    this._moyasarFingerprint = '';
+                    this.scheduleMoyasarRefresh();
+                }
             },
 
             publishCustomerSessionUpdate(profile = {}) {
