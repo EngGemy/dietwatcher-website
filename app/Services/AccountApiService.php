@@ -759,6 +759,67 @@ class AccountApiService
      */
     public function bootstrapSubscriptionMoyasar(array $payload, ?string $token = null): array
     {
+        $created = $this->createSubscriptionCheckout($payload, $token);
+        if (! ($created['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'message' => (string) ($created['message'] ?? __('account.request_failed')),
+                'min_start_date' => $created['min_start_date'] ?? null,
+                'adjusted_start_date' => $created['adjusted_start_date'] ?? null,
+                'subscription_id' => $created['subscription_id'] ?? null,
+                'bootstrap' => null,
+            ];
+        }
+
+        $createData = is_array($created['create_data'] ?? null) ? $created['create_data'] : [];
+        $bootstrap = $this->extractMoyasarBootstrapFromCreateResponse($createData, $created['raw'] ?? null);
+        if ($bootstrap === null) {
+            return [
+                'ok' => false,
+                'message' => __('checkout.subscription_payment_unavailable'),
+                'min_start_date' => null,
+                'adjusted_start_date' => null,
+                'subscription_id' => $created['subscription_id'] ?? null,
+                'bootstrap' => null,
+            ];
+        }
+
+        $subscriptionId = (int) ($bootstrap['subscription_id'] ?? $created['subscription_id'] ?? 0);
+        $payloadHash = (string) ($created['payload_hash'] ?? '');
+
+        session([
+            'checkout_api_subscription_checkout' => [
+                'payload_hash' => $payloadHash,
+                'subscription_id' => $subscriptionId,
+                'bootstrap' => $bootstrap,
+            ],
+        ]);
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'min_start_date' => null,
+            'adjusted_start_date' => $created['adjusted_start_date'] ?? null,
+            'subscription_id' => $subscriptionId,
+            'bootstrap' => $bootstrap,
+        ];
+    }
+
+    /**
+     * Create and activate a subscription when the calculated total is zero (100% discount).
+     *
+     * @param  array<string, string>  $payload
+     * @return array{
+     *     ok: bool,
+     *     message: string,
+     *     min_start_date: string|null,
+     *     adjusted_start_date: string|null,
+     *     subscription_id: int|null,
+     *     redirect_url: string|null
+     * }
+     */
+    public function confirmFreeSubscription(array $payload, ?string $token = null): array
+    {
         $token = (string) ($token ?: session('external_api_token', ''));
         if ($token === '') {
             return [
@@ -767,7 +828,116 @@ class AccountApiService
                 'min_start_date' => null,
                 'adjusted_start_date' => null,
                 'subscription_id' => null,
-                'bootstrap' => null,
+                'redirect_url' => null,
+            ];
+        }
+
+        $calcPayload = $payload;
+        unset($calcPayload['payment_option']);
+        $calc = $this->calculateSubscription($calcPayload, $token);
+        if (! ($calc['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'message' => $this->extractApiValidationMessage($calc),
+                'min_start_date' => null,
+                'adjusted_start_date' => null,
+                'subscription_id' => null,
+                'redirect_url' => null,
+            ];
+        }
+
+        $totals = $this->parseSubscriptionCalculateTotals($calc['data'] ?? null);
+        if ($totals === null || $totals['total'] > 0.001) {
+            return [
+                'ok' => false,
+                'message' => __('checkout.free_subscription_requires_zero_total'),
+                'min_start_date' => null,
+                'adjusted_start_date' => null,
+                'subscription_id' => null,
+                'redirect_url' => null,
+            ];
+        }
+
+        $created = $this->createSubscriptionCheckout($payload, $token);
+        if (! ($created['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'message' => (string) ($created['message'] ?? __('account.request_failed')),
+                'min_start_date' => $created['min_start_date'] ?? null,
+                'adjusted_start_date' => $created['adjusted_start_date'] ?? null,
+                'subscription_id' => $created['subscription_id'] ?? null,
+                'redirect_url' => null,
+            ];
+        }
+
+        $createData = is_array($created['create_data'] ?? null) ? $created['create_data'] : [];
+        $subscriptionId = (int) ($created['subscription_id'] ?? 0);
+        if ($subscriptionId <= 0) {
+            return [
+                'ok' => false,
+                'message' => __('checkout.free_subscription_activation_failed'),
+                'min_start_date' => null,
+                'adjusted_start_date' => $created['adjusted_start_date'] ?? null,
+                'subscription_id' => null,
+                'redirect_url' => null,
+            ];
+        }
+
+        $payload = is_array($created['payload'] ?? null) ? $created['payload'] : $payload;
+        $activated = $this->finalizeFreeSubscription($subscriptionId, $createData, $payload, $token);
+        if (! ($activated['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'message' => (string) ($activated['message'] ?? __('checkout.free_subscription_activation_failed')),
+                'min_start_date' => null,
+                'adjusted_start_date' => $created['adjusted_start_date'] ?? null,
+                'subscription_id' => $subscriptionId,
+                'redirect_url' => null,
+            ];
+        }
+
+        session()->forget('checkout_api_subscription_checkout');
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'min_start_date' => null,
+            'adjusted_start_date' => $created['adjusted_start_date'] ?? null,
+            'subscription_id' => $subscriptionId,
+            'redirect_url' => route('payment.subscription-confirm', ['subscription' => $subscriptionId]),
+        ];
+    }
+
+    /**
+     * Shared subscription create flow for paid (Moyasar) and free checkout.
+     *
+     * @param  array<string, string>  $payload
+     * @return array{
+     *     ok: bool,
+     *     message: string,
+     *     min_start_date: string|null,
+     *     adjusted_start_date: string|null,
+     *     subscription_id: int|null,
+     *     create_data: array<string, mixed>|null,
+     *     raw: array<string, mixed>|null,
+     *     payload: array<string, string>|null,
+     *     payload_hash: string|null
+     * }
+     */
+    protected function createSubscriptionCheckout(array $payload, ?string $token = null): array
+    {
+        $token = (string) ($token ?: session('external_api_token', ''));
+        if ($token === '') {
+            return [
+                'ok' => false,
+                'message' => __('account.login_required'),
+                'min_start_date' => null,
+                'adjusted_start_date' => null,
+                'subscription_id' => null,
+                'create_data' => null,
+                'raw' => null,
+                'payload' => null,
+                'payload_hash' => null,
             ];
         }
 
@@ -779,7 +949,10 @@ class AccountApiService
                 'min_start_date' => null,
                 'adjusted_start_date' => null,
                 'subscription_id' => null,
-                'bootstrap' => null,
+                'create_data' => null,
+                'raw' => null,
+                'payload' => null,
+                'payload_hash' => null,
             ];
         }
 
@@ -791,11 +964,12 @@ class AccountApiService
                 'min_start_date' => null,
                 'adjusted_start_date' => null,
                 'subscription_id' => null,
-                'bootstrap' => null,
+                'create_data' => null,
+                'raw' => null,
+                'payload' => null,
+                'payload_hash' => null,
             ];
         }
-
-        $minStartDate = null;
 
         $schedule = $this->validateSubscriptionStartDateFromCalculate($payload, $token);
         if (! ($schedule['ok'] ?? false)) {
@@ -808,13 +982,15 @@ class AccountApiService
                 'min_start_date' => $minStartDate !== '' ? $minStartDate : null,
                 'adjusted_start_date' => null,
                 'subscription_id' => null,
-                'bootstrap' => null,
+                'create_data' => null,
+                'raw' => null,
+                'payload' => null,
+                'payload_hash' => null,
             ];
         }
 
         $payload = $schedule['payload'];
         $adjustedStartDate = (string) ($schedule['adjusted_start_date'] ?? '');
-
         $payloadHash = $this->hashSubscriptionPayload($payload);
 
         $cached = session('checkout_api_subscription_checkout');
@@ -828,7 +1004,10 @@ class AccountApiService
                     'min_start_date' => null,
                     'adjusted_start_date' => null,
                     'subscription_id' => $subscriptionId,
-                    'bootstrap' => $bootstrap,
+                    'create_data' => ['subscription' => ['id' => $subscriptionId]],
+                    'raw' => null,
+                    'payload' => $payload,
+                    'payload_hash' => $payloadHash,
                 ];
             }
         }
@@ -874,7 +1053,10 @@ class AccountApiService
                 'min_start_date' => $dateRelated ? (($rawMin !== '' ? $rawMin : $minStartDate) ?: null) : null,
                 'adjusted_start_date' => null,
                 'subscription_id' => null,
-                'bootstrap' => null,
+                'create_data' => null,
+                'raw' => is_array($result['raw'] ?? null) ? $result['raw'] : null,
+                'payload' => $payload,
+                'payload_hash' => $payloadHash,
             ];
         }
 
@@ -883,36 +1065,126 @@ class AccountApiService
             $createData = $result['raw']['data'];
         }
 
-        $bootstrap = $this->extractMoyasarBootstrapFromCreateResponse($createData, $result['raw'] ?? null);
-        if ($bootstrap === null) {
-            return [
-                'ok' => false,
-                'message' => __('checkout.subscription_payment_unavailable'),
-                'min_start_date' => null,
-                'adjusted_start_date' => null,
-                'subscription_id' => $this->extractExternalSubscriptionId($createData),
-                'bootstrap' => null,
-            ];
-        }
-
-        $subscriptionId = (int) ($bootstrap['subscription_id'] ?? $this->extractExternalSubscriptionId($createData) ?? 0);
-
-        session([
-            'checkout_api_subscription_checkout' => [
-                'payload_hash' => $payloadHash,
-                'subscription_id' => $subscriptionId,
-                'bootstrap' => $bootstrap,
-            ],
-        ]);
-
         return [
             'ok' => true,
             'message' => '',
             'min_start_date' => null,
             'adjusted_start_date' => $adjustedStartDate !== '' ? $adjustedStartDate : null,
-            'subscription_id' => $subscriptionId,
-            'bootstrap' => $bootstrap,
+            'subscription_id' => $this->extractExternalSubscriptionId($createData),
+            'create_data' => $createData,
+            'raw' => is_array($result['raw'] ?? null) ? $result['raw'] : null,
+            'payload' => $payload,
+            'payload_hash' => $payloadHash,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $createData
+     * @param  array<string, string>  $payload
+     * @return array{ok: bool, message: string}
+     */
+    protected function finalizeFreeSubscription(int $subscriptionId, array $createData, array $payload, string $token): array
+    {
+        $subRow = $this->extractSubscriptionRowFromCreate($createData);
+        if ($subRow === []) {
+            $show = $this->showSubscription($subscriptionId);
+            if ($show['ok'] ?? false) {
+                $subRow = $this->extractSubscriptionRowFromDecoded($show['data'] ?? null, $subscriptionId);
+            }
+        }
+
+        if (! $this->isSubscriptionPaymentConfirmed($subRow)) {
+            $payment = $this->extractPaymentResource($createData);
+            $externalPaymentId = is_numeric($payment['id'] ?? $payment['payment_id'] ?? null)
+                ? (int) ($payment['id'] ?? $payment['payment_id'])
+                : (int) data_get($subRow, 'payment.id', 0);
+
+            $notifyQuery = array_filter([
+                'status' => 'paid',
+                'subscription_id' => (string) $subscriptionId,
+                'payment_id' => $externalPaymentId > 0 ? (string) $externalPaymentId : null,
+            ], static fn ($value) => $value !== null && $value !== '');
+
+            $notify = $this->notifySubscriptionMoyasarPayment($notifyQuery, $token);
+            Log::info('AccountApiService::finalizeFreeSubscription notify', [
+                'subscription_id' => $subscriptionId,
+                'external_payment_id' => $externalPaymentId > 0 ? $externalPaymentId : null,
+                'api_ok' => $notify['ok'] ?? false,
+                'notify_succeeded' => $this->paymentNotifyResponseSucceeded($notify),
+            ]);
+        }
+
+        $startDate = SubscriptionCheckoutPayload::normalizeStartDate(
+            (string) ($payload['date'] ?? $payload['start_date'] ?? '')
+        );
+        if ($startDate !== '') {
+            $start = $this->startSubscription($startDate, $token);
+            if (! ($start['ok'] ?? false)) {
+                Log::warning('AccountApiService::finalizeFreeSubscription start failed', [
+                    'subscription_id' => $subscriptionId,
+                    'start_date' => $startDate,
+                    'message' => $start['message'] ?? '',
+                ]);
+            }
+        }
+
+        $show = $this->showSubscription($subscriptionId);
+        if (! ($show['ok'] ?? false)) {
+            return ['ok' => false, 'message' => __('checkout.free_subscription_activation_failed')];
+        }
+
+        $sub = $this->extractSubscriptionRowFromDecoded($show['data'] ?? null, $subscriptionId);
+        if (! $this->isSubscriptionPaymentConfirmed($sub)) {
+            return ['ok' => false, 'message' => __('checkout.free_subscription_activation_failed')];
+        }
+
+        return ['ok' => true, 'message' => ''];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function extractSubscriptionRowFromCreate(mixed $data): array
+    {
+        if (! is_array($data)) {
+            return [];
+        }
+
+        $sub = $data['subscription'] ?? $data;
+        if (! is_array($sub)) {
+            return [];
+        }
+
+        return $sub;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function extractSubscriptionRowFromDecoded(mixed $data, int $subscriptionId): array
+    {
+        if (! is_array($data)) {
+            return [];
+        }
+
+        if (isset($data['subscription']) && is_array($data['subscription'])) {
+            return $data['subscription'];
+        }
+
+        if (isset($data['id']) && (int) $data['id'] === $subscriptionId) {
+            return $data;
+        }
+
+        $rows = $data['subscriptions'] ?? $data['data'] ?? null;
+        if (is_array($rows)) {
+            foreach ($rows as $row) {
+                if (is_array($row) && (int) ($row['id'] ?? 0) === $subscriptionId) {
+                    return $row;
+                }
+            }
+        }
+
+        return [];
     }
 
     /**

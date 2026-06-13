@@ -2132,6 +2132,10 @@ class CheckoutController extends Controller
         }
 
         if ($isSubscriptionCheckout) {
+            if ($total <= 0.001) {
+                return $this->zeroSubscriptionCheckoutResponse($subscriptionApiPayload);
+            }
+
             return $this->subscriptionMoyasarSessionResponse($subscriptionApiPayload, $moyasarService);
         }
 
@@ -2235,6 +2239,84 @@ class CheckoutController extends Controller
         $o = (float) ($d['offer_price'] ?? 0);
 
         return ($o > 0 && $o < $p) ? $o : $p;
+    }
+
+    /**
+     * Confirm a subscription when the API total is zero (100% discount, no Moyasar).
+     */
+    public function confirmFreeSubscription(Request $request, MoyasarPaymentService $moyasarService): JsonResponse
+    {
+        $request->merge(['preview_only' => false]);
+        $response = $this->moyasarSession($request, $moyasarService);
+        $payload = $response->getData(true);
+        if (is_array($payload) && ($payload['zero_checkout'] ?? false)) {
+            return $response;
+        }
+
+        if (is_array($payload) && ($payload['success'] ?? false)) {
+            return response()->json([
+                'success' => false,
+                'message' => __('checkout.free_subscription_requires_zero_total'),
+            ], 422);
+        }
+
+        return $response;
+    }
+
+    /**
+     * @param  array<string, string>  $subscriptionApiPayload
+     */
+    private function zeroSubscriptionCheckoutResponse(array $subscriptionApiPayload): JsonResponse
+    {
+        if ($subscriptionApiPayload === []) {
+            return response()->json([
+                'success' => false,
+                'message' => __('payment.fill_delivery_first'),
+            ], 422);
+        }
+
+        $token = (string) session('external_api_token', '');
+        if ($token === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('payment.verify_phone_to_pay'),
+            ], 403);
+        }
+
+        $boot = $this->accountApiService->confirmFreeSubscription($subscriptionApiPayload, $token);
+        if (! ($boot['ok'] ?? false)) {
+            $message = (string) ($boot['message'] ?? __('account.request_failed'));
+            $minStart = (string) ($boot['min_start_date'] ?? '');
+            if ($minStart === '') {
+                $minStart = SubscriptionCheckoutPayload::parseRawMinimumDateFromValidationMessage($message);
+            }
+            if ($minStart !== '') {
+                $message = SubscriptionCheckoutPayload::resolveStartDateErrorMessage($message, $minStart);
+            }
+            $response = [
+                'success' => false,
+                'message' => $message,
+                'errors' => [],
+            ];
+            if ($minStart !== '') {
+                $response['min_start_date'] = $minStart;
+                $response['errors'] = ['start_date' => [$message]];
+            }
+
+            return response()->json($response, 422);
+        }
+
+        $subscriptionId = (int) ($boot['subscription_id'] ?? 0);
+        session()->forget(CartManager::SESSION_SUBSCRIPTION);
+        session()->forget(CartManager::SESSION_MARKET);
+
+        return response()->json(array_filter([
+            'success' => true,
+            'zero_checkout' => true,
+            'subscription_id' => $subscriptionId,
+            'redirect_url' => (string) ($boot['redirect_url'] ?? ''),
+            'adjusted_start_date' => (string) ($boot['adjusted_start_date'] ?? ''),
+        ], static fn ($v) => $v !== null && $v !== ''));
     }
 
     /**

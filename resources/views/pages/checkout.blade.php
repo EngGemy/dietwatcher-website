@@ -617,7 +617,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         </div>
                     </div>
 
-                    {{-- Payment: Moyasar — only after phone verified and all checkout steps complete --}}
+                    {{-- Payment: Moyasar — only after phone verified, checkout complete, and total > 0 --}}
                     <div
                         x-show="showPaymentSection()"
                         x-cloak
@@ -651,6 +651,29 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         <div class="relative rounded-xl border border-gray-200 bg-gray-50 p-4">
                             <div id="moyasar-form-checkout" class="relative z-[1] min-h-[120px] w-full"></div>
                         </div>
+                    </div>
+
+                    {{-- Zero total: confirm subscription without Moyasar --}}
+                    <div
+                        x-show="showZeroCheckoutSection()"
+                        x-cloak
+                        x-transition:enter="transition ease-out duration-300"
+                        x-transition:enter-start="opacity-0 translate-y-2"
+                        x-transition:enter-end="opacity-100 translate-y-0"
+                        class="mt-6 rounded-md border border-green-200 bg-green-50/60 p-5"
+                    >
+                        <h3 class="mb-2 text-2xl font-semibold md:text-2xl">{{ __('checkout.confirm_free_subscription') }}</h3>
+                        <p class="mb-4 text-sm text-gray-700">{{ __('checkout.confirm_free_subscription_hint') }}</p>
+                        <div x-show="freeCheckoutError" x-cloak class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" x-text="freeCheckoutError"></div>
+                        <button
+                            type="button"
+                            class="btn btn--primary btn--md w-full"
+                            :disabled="freeCheckoutLoading || !canProceedToPayment()"
+                            @click="confirmFreeSubscription()"
+                        >
+                            <span x-show="!freeCheckoutLoading">{{ __('checkout.confirm_free_subscription') }}</span>
+                            <span x-show="freeCheckoutLoading" x-cloak>{{ __('Loading...') }}</span>
+                        </button>
                     </div>
                 </div>
 
@@ -745,12 +768,13 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                 </span>
                             </div>
 
-                            {{-- Proceed to Payment Button --}}
+                            {{-- Proceed to Payment / Confirm subscription --}}
                             <div class="pt-2">
                                 <button type="submit" class="btn btn--primary btn--md w-full"
-                                        :disabled="!phoneVerified || !canProceedToPayment()">
-                                    {{ __('payment.proceed') }} —
-                                    <span class="inline-flex items-baseline gap-1" dir="ltr">
+                                        :disabled="!phoneVerified || !canProceedToPayment() || freeCheckoutLoading">
+                                    <span x-show="!isZeroCheckout()">{{ __('payment.proceed') }} —</span>
+                                    <span x-show="isZeroCheckout()" x-cloak>{{ __('checkout.confirm_free_subscription') }}</span>
+                                    <span class="inline-flex items-baseline gap-1" dir="ltr" x-show="!isZeroCheckout()">
                                         <span x-text="money(total())">{{ number_format((float) ($baseSubtotal + $deliveryFeeAmount), 2) }}</span>
                                         <span class="sar-symbol" aria-label="{{ __('currency.symbol_label') }}">&#x20C1;</span>
                                     </span>
@@ -1643,6 +1667,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             couponMessage: '',
 
             moyasarError: '',
+            freeCheckoutLoading: false,
+            freeCheckoutError: '',
             /** Set when POST /checkout/sync-address fails (silent sync or user-visible). */
             syncAddressError: '',
             _moyasarTimer: null,
@@ -2668,7 +2694,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             queueMoyasarBootstrap() {
-                if (! this.phoneVerified || ! this.canProceedToPayment()) {
+                if (! this.phoneVerified || ! this.canProceedToPayment() || this.isZeroCheckout()) {
                     this.clearMoyasarWidget();
 
                     return;
@@ -2681,7 +2707,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (this._paymentBootstrapInFlight || this._moyasarSessionFailed) {
                     return;
                 }
-                if (! this.phoneVerified || ! this.canProceedToPayment()) {
+                if (! this.phoneVerified || ! this.canProceedToPayment() || this.isZeroCheckout()) {
                     this.clearMoyasarWidget();
 
                     return;
@@ -3103,8 +3129,19 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     && this.deliveryTimeReady();
             },
 
+            isZeroCheckout() {
+                return this.isPlanCheckout
+                    && this.phoneVerified
+                    && this.canProceedToPayment()
+                    && this.total() <= 0;
+            },
+
             showPaymentSection() {
-                return this.phoneVerified && this.canProceedToPayment();
+                return this.phoneVerified && this.canProceedToPayment() && ! this.isZeroCheckout();
+            },
+
+            showZeroCheckoutSection() {
+                return this.isZeroCheckout();
             },
 
             checkoutSetupHint() {
@@ -3511,7 +3548,91 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     this.moyasarError = @json(__('payment.fill_delivery_first'));
                     return;
                 }
+                if (this.isZeroCheckout()) {
+                    event.preventDefault();
+                    this.confirmFreeSubscription();
+
+                    return;
+                }
                 event.target.submit();
+            },
+
+            async confirmFreeSubscription() {
+                if (this.freeCheckoutLoading) {
+                    return;
+                }
+                if (! this.phoneVerified) {
+                    this.openOtpModal();
+
+                    return;
+                }
+                if (! this.canProceedToPayment()) {
+                    this.freeCheckoutError = @json(__('payment.fill_delivery_first'));
+
+                    return;
+                }
+                if (! this.isZeroCheckout()) {
+                    this.freeCheckoutError = @json(__('checkout.free_subscription_requires_zero_total'));
+
+                    return;
+                }
+
+                const form = this.$refs.checkoutForm;
+                if (! form) {
+                    return;
+                }
+
+                this.freeCheckoutLoading = true;
+                this.freeCheckoutError = '';
+                this.moyasarError = '';
+
+                try {
+                    if (this.isPlanCheckout) {
+                        await this.refreshMinStartDateFromApi();
+                    }
+                    const fd = new FormData(form);
+                    const res = await fetch('{{ route('checkout.confirm-free-subscription') }}', {
+                        method: 'POST',
+                        body: fd,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': this.getCsrfToken(),
+                        },
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (! res.ok || ! data.success) {
+                        const apiMin = data.min_start_date ? String(data.min_start_date) : '';
+                        if (apiMin) {
+                            this.applyApiMinStartDate(apiMin);
+                        }
+                        if (data.errors && data.errors.start_date && data.errors.start_date[0]) {
+                            this.freeCheckoutError = data.errors.start_date[0];
+                        } else {
+                            this.freeCheckoutError = data.message || @json(__('checkout.free_subscription_activation_failed'));
+                        }
+
+                        return;
+                    }
+                    if (data.adjusted_start_date) {
+                        this.applyApiMinStartDate(String(data.adjusted_start_date));
+                    }
+                    const redirectUrl = data.redirect_url ? String(data.redirect_url) : '';
+                    if (redirectUrl) {
+                        window.location.href = redirectUrl;
+
+                        return;
+                    }
+                    if (data.subscription_id) {
+                        window.location.href = '{{ route('payment.subscription-confirm') }}?subscription=' + encodeURIComponent(String(data.subscription_id));
+
+                        return;
+                    }
+                    this.freeCheckoutError = @json(__('checkout.free_subscription_activation_failed'));
+                } catch (e) {
+                    this.freeCheckoutError = @json(__('An error occurred. Please try again.'));
+                } finally {
+                    this.freeCheckoutLoading = false;
+                }
             },
 
             requestMoyasarBootstrap() {

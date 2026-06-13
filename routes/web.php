@@ -155,6 +155,9 @@ Route::post('/otp/register', [OtpController::class, 'register'])
 Route::post('/checkout/moyasar-session', [CheckoutController::class, 'moyasarSession'])
     ->name('checkout.moyasar-session');
 
+Route::post('/checkout/confirm-free-subscription', [CheckoutController::class, 'confirmFreeSubscription'])
+    ->name('checkout.confirm-free-subscription');
+
 Route::get('/checkout/moyasar-preview-callback', [CheckoutController::class, 'moyasarPreviewCallback'])
     ->name('checkout.moyasar-preview-callback');
 
