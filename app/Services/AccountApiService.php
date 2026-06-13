@@ -55,7 +55,9 @@ class AccountApiService
 
     protected function authedWithToken(string $token): PendingRequest
     {
-        return $this->http()->withToken($token);
+        $request = $this->http();
+
+        return $token !== '' ? $request->withToken($token) : $request;
     }
 
     protected function deviceId(): string

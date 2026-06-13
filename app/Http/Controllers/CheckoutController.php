@@ -792,19 +792,33 @@ class CheckoutController extends Controller
         ]);
 
         $rawIdentifier = trim((string) ($validated['identifier'] ?? ''));
-        $identifier = SaudiPhone::to966($rawIdentifier);
-        if ($identifier === '') {
-            $promoMsg = $rawIdentifier === ''
-                ? __('checkout.promo_requires_verified_phone')
-                : __('checkout.phone_saudi_invalid');
+        if ($rawIdentifier !== '') {
+            $identifier = SaudiPhone::to966($rawIdentifier);
+            if ($identifier === '') {
+                return response()->json([
+                    'valid' => false,
+                    'discount' => 0,
+                    'message' => __('checkout.phone_saudi_invalid'),
+                ], 422);
+            }
+            $validated['identifier'] = $identifier;
+        } else {
+            $validated['identifier'] = '';
+        }
+
+        $customerToken = (string) session('external_api_token', '');
+        if ($customerToken === '') {
+            $pendingRegister = trim((string) session('pending_register_mobile', '')) !== '';
 
             return response()->json([
                 'valid' => false,
                 'discount' => 0,
-                'message' => $promoMsg,
+                'message' => $pendingRegister
+                    ? __('checkout.promo_requires_registration')
+                    : __('checkout.promo_requires_verified_phone'),
+                'source' => 'external',
             ], 422);
         }
-        $validated['identifier'] = $identifier;
 
         $programId = (int) ($validated['program_id'] ?? 0);
         if ($programId > 0) {
@@ -828,7 +842,7 @@ class CheckoutController extends Controller
         return response()->json([
             'valid' => false,
             'discount' => 0,
-            'message' => __('checkout.promo_subscriptions_only'),
+            'message' => __('checkout.promo_store_not_supported'),
             'source' => 'external',
         ], 422);
     }
@@ -851,14 +865,6 @@ class CheckoutController extends Controller
         }
 
         $token = (string) session('external_api_token', '');
-        if ($token === '') {
-            return [
-                'valid' => false,
-                'discount' => 0,
-                'message' => __('checkout.promo_requires_verified_phone'),
-                'source' => 'external',
-            ];
-        }
 
         try {
             $cart = session()->get(CartManager::SESSION_SUBSCRIPTION, []);

@@ -166,8 +166,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                 <input type="hidden" name="duration" value="once" />
                             @endif
 
-                            {{-- Coupon Code (external API — meal plan subscriptions only) --}}
-                            <div x-show="isPlanCheckout" x-cloak>
+                            {{-- Coupon Code (external API — subscriptions; store meals pending API support) --}}
+                            <div>
                                 <p class="mb-3 text-lg md:text-xl">
                                     {{ __('Coupon Code') }}
                                     <span class="text-gray-600">({{ __('optional') }})</span>
@@ -3197,10 +3197,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     return;
                 }
 
-                if (! this.fullPhone966()) {
+                if (! this.phoneVerified) {
                     this.couponApplied = false;
                     this.discount = 0;
                     this.couponMessage = @json(__('checkout.promo_requires_verified_phone'));
+                    this.promptPhoneVerificationForDelivery();
 
                     return;
                 }

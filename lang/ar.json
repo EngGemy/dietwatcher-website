@@ -789,6 +789,8 @@
     "checkout.address_already_saved": "هذا الموقع محفوظ مسبقاً في عناوينك.",
     "checkout.phone_saudi_invalid": "أدخل رقم جوال سعودي صحيح: 9 أرقام تبدأ بـ 5 (بعد +966).",
     "checkout.promo_requires_verified_phone": "يرجى التحقق من رقم الجوال السعودي أولاً ثم إعادة تطبيق كود الخصم.",
+    "checkout.promo_requires_registration": "أكمل التسجيل بعد التحقق من رقم الجوال، ثم أعد تطبيق كود الخصم.",
+    "checkout.promo_store_not_supported": "أكواد الخصم للوجبات الفردية غير مدعومة من الـ API الخارجي حالياً. تعمل على اشتراكات خطط الوجبات.",
     "checkout.promo_select_duration": "يرجى اختيار مدة الاشتراك أولاً قبل تطبيق كود الخصم.",
     "checkout.promo_applied_success": "تم تطبيق كود الخصم بنجاح.",
     "checkout.promo_invalid": "كود الخصم غير صالح أو منتهي.",

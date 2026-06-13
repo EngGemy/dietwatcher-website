@@ -851,6 +851,8 @@
     "checkout.address_already_saved": "This location is already in your saved addresses.",
     "checkout.phone_saudi_invalid": "Enter a valid Saudi mobile: 9 digits starting with 5 (after +966).",
     "checkout.promo_requires_verified_phone": "Verify your Saudi mobile number first, then try applying the discount code.",
+    "checkout.promo_requires_registration": "Complete registration after verifying your mobile number, then apply the discount code.",
+    "checkout.promo_store_not_supported": "Discount codes for individual meals are not supported by the external API yet. They work on meal plan subscriptions.",
     "checkout.promo_select_duration": "Please select a subscription duration before applying a promo code.",
     "checkout.promo_applied_success": "Promo code applied successfully.",
     "checkout.promo_invalid": "This promo code is invalid or expired.",
