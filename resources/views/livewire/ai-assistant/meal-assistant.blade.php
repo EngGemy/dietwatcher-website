@@ -296,9 +296,94 @@
                             <p class="ai-loading">{{ __('ai.loading') }}</p>
                         @elseif($catalogUnavailable)
                             <p class="ai-empty">{{ __('ai.catalog_unavailable') }}</p>
-                        @elseif($recommendations === [])
+                        @elseif($recommendations === [] && $recommendationPlans === [])
                             <p class="ai-empty">{{ __('ai.no_recommendations') }}</p>
                         @else
+                            @if(!empty($recommendationPath))
+                                <article class="ai-path">
+                                    <span class="ai-path__badge">{{ __('ai.nutritionist_label') }}</span>
+                                    <h3 class="ai-path__title">{{ $recommendationPath['headline'] ?? '' }}</h3>
+                                    @if(!empty($recommendationPath['summary']))
+                                        <p class="ai-path__summary">{{ $recommendationPath['summary'] }}</p>
+                                    @endif
+                                    @if(!empty($recommendationPath['steps']) && is_array($recommendationPath['steps']))
+                                        <ol class="ai-path__steps">
+                                            @foreach($recommendationPath['steps'] as $step)
+                                                <li>{{ $step }}</li>
+                                            @endforeach
+                                        </ol>
+                                    @endif
+                                    @if(!empty($recommendationPath['store_role']))
+                                        <p class="ai-path__note">{{ $recommendationPath['store_role'] }}</p>
+                                    @endif
+                                    @if($recommendationTips !== [])
+                                        <ul class="ai-path__tips">
+                                            @foreach($recommendationTips as $tip)
+                                                <li>{{ $tip }}</li>
+                                            @endforeach
+                                        </ul>
+                                    @endif
+                                    <div class="ai-path__actions">
+                                        <a href="{{ $recommendationPath['plans_url'] ?? route('meal-plans.index') }}" class="ai-btn ai-btn--primary ai-btn--sm">
+                                            {{ __('ai.view_plans') }}
+                                        </a>
+                                        <a href="{{ $recommendationPath['store_url'] ?? route('store.index') }}" class="ai-btn ai-btn--ghost ai-btn--sm">
+                                            {{ __('ai.browse_store') }}
+                                        </a>
+                                    </div>
+                                </article>
+                            @endif
+
+                            @if($recommendationPlans !== [])
+                                <div class="ai-rec-section">
+                                    <h3 class="ai-rec-section__title">{{ __('ai.recommend_plans_title') }}</h3>
+                                    <p class="ai-rec-section__hint">{{ __('ai.recommend_plans_hint') }}</p>
+                                    <ul class="ai-plan-list">
+                                        @foreach($recommendationPlans as $plan)
+                                            <li class="ai-plan-card" wire:key="ai-plan-rec-{{ (int) $plan['id'] }}">
+                                                <div class="ai-plan-card__top">
+                                                    <div class="ai-plan-card__main">
+                                                        @if(!empty($plan['image']))
+                                                            <img src="{{ $plan['image'] }}" alt="" class="ai-plan-card__img" loading="lazy">
+                                                        @endif
+                                                        <div>
+                                                            <h4 class="ai-plan-card__name">
+                                                                @if(!empty($plan['url']))
+                                                                    <a href="{{ $plan['url'] }}" target="_blank" rel="noopener">{{ $plan['name'] }}</a>
+                                                                @else
+                                                                    {{ $plan['name'] }}
+                                                                @endif
+                                                            </h4>
+                                                            @if((int) ($plan['calories_per_day'] ?? 0) > 0)
+                                                                <p class="ai-plan-card__meta">{{ (int) $plan['calories_per_day'] }} {{ __('ai.kcal_day') }}</p>
+                                                            @endif
+                                                        </div>
+                                                    </div>
+                                                    <span class="ai-fit-badge">{{ (int) ($plan['fit_score'] ?? 0) }}%</span>
+                                                </div>
+                                                @if(!empty($plan['reason']))
+                                                    <p class="ai-plan-card__reason">{{ $plan['reason'] }}</p>
+                                                @endif
+                                                <div class="ai-plan-card__foot">
+                                                    @if((int) ($plan['min_price'] ?? 0) > 0)
+                                                        <span class="ai-meal-card__price">{{ __('From') }} {{ number_format((int) $plan['min_price']) }} {{ __('SAR') }}</span>
+                                                    @endif
+                                                    @if(!empty($plan['url']))
+                                                        <a href="{{ $plan['url'] }}" class="ai-btn ai-btn--primary ai-btn--sm" target="_blank" rel="noopener">
+                                                            {{ __('ai.view_plan') }}
+                                                        </a>
+                                                    @endif
+                                                </div>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @endif
+
+                            @if($recommendations !== [])
+                                <div class="ai-rec-section">
+                                    <h3 class="ai-rec-section__title">{{ __('ai.recommend_meals_title') }}</h3>
+                                    <p class="ai-rec-section__hint">{{ __('ai.recommend_meals_hint') }}</p>
                             <ul class="ai-meal-list">
                                 @foreach($recommendations as $rec)
                                     <li class="ai-meal-card" wire:key="ai-rec-{{ (int) $rec['meal_id'] }}">
@@ -356,6 +441,8 @@
                                     </li>
                                 @endforeach
                             </ul>
+                                </div>
+                            @endif
                         @endif
                     @endif
                 </section>
@@ -790,6 +877,44 @@
 .ai-report__pitch-label { display: block; font-size: .65rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; opacity: .9; margin-bottom: .25rem; }
 .ai-report__pitch p { margin: 0; font-size: .82rem; line-height: 1.5; }
 .ai-report__caution { font-size: .75rem; color: #B45309; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; padding: .5rem .65rem; margin-top: .65rem; }
+
+.ai-path {
+    margin-top: .85rem; padding: 1rem; border-radius: 14px;
+    background: linear-gradient(135deg, rgba(39,159,249,.08), rgba(63,181,54,.07));
+    border: 1px solid rgba(39,159,249,.18);
+}
+.ai-path__badge {
+    display: inline-flex; padding: .2rem .55rem; border-radius: 999px;
+    font-size: .65rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+    background: #fff; color: var(--ai-blue); border: 1px solid var(--ai-blue-border);
+}
+.ai-path__title { margin: .55rem 0 .35rem; font-size: .98rem; font-weight: 800; color: var(--ai-text); }
+.ai-path__summary { margin: 0 0 .65rem; font-size: .82rem; line-height: 1.55; color: #374151; }
+.ai-path__steps { margin: 0 0 .65rem; padding-inline-start: 1.15rem; font-size: .78rem; color: #374151; line-height: 1.5; }
+.ai-path__steps li { margin-bottom: .35rem; }
+.ai-path__note { margin: 0 0 .55rem; font-size: .76rem; color: #64748B; font-style: italic; }
+.ai-path__tips { margin: 0; padding-inline-start: 1.1rem; font-size: .76rem; color: #475569; }
+.ai-path__tips li { margin-bottom: .25rem; }
+.ai-path__actions { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .75rem; }
+
+.ai-rec-section { margin-top: 1rem; }
+.ai-rec-section__title { margin: 0 0 .25rem; font-size: .92rem; font-weight: 800; color: var(--ai-text); }
+.ai-rec-section__hint { margin: 0 0 .55rem; font-size: .74rem; color: var(--ai-muted); line-height: 1.45; }
+
+.ai-plan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+.ai-plan-card {
+    border: 1px solid #C7E8C8; border-radius: 12px; padding: .75rem;
+    background: linear-gradient(180deg, #fff, #F8FFF8);
+}
+.ai-plan-card__top { display: flex; justify-content: space-between; gap: .5rem; align-items: flex-start; }
+.ai-plan-card__main { display: flex; gap: .55rem; align-items: center; min-width: 0; }
+.ai-plan-card__img { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; border: 1px solid #E5E7EB; flex-shrink: 0; }
+.ai-plan-card__name { margin: 0; font-size: .88rem; font-weight: 800; }
+.ai-plan-card__name a { color: inherit; text-decoration: none; }
+.ai-plan-card__name a:hover { color: var(--ai-blue); text-decoration: underline; }
+.ai-plan-card__meta { margin: .15rem 0 0; font-size: .72rem; color: var(--ai-muted); }
+.ai-plan-card__reason { margin: .5rem 0 0; font-size: .77rem; color: #374151; line-height: 1.45; }
+.ai-plan-card__foot { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: .55rem; flex-wrap: wrap; }
 .ai-metrics--compact { margin-bottom: .75rem; }
     </style>
     @endonce

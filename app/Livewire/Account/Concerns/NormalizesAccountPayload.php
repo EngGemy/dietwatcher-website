@@ -234,6 +234,10 @@ trait NormalizesAccountPayload
             ?? $data['amount']
             ?? null;
 
+        if (is_array($amount)) {
+            $amount = $amount['amount'] ?? $amount['value'] ?? null;
+        }
+
         return is_numeric($amount) ? (float) $amount : null;
     }
 }

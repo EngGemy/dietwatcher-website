@@ -11,6 +11,7 @@ use App\Models\Payment;
 use App\Services\AccountApiService;
 use App\Services\Payment\MoyasarPaymentService;
 use App\Services\SmsService;
+use App\Support\SubscriptionCheckoutPayload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -295,8 +296,13 @@ class PaymentController extends Controller
             return redirect()->route('home');
         }
 
+        $cart = is_array($payment->cart_items) ? $payment->cart_items : [];
+        $isSubscription = $payment->kind === PaymentKind::Subscription
+            && SubscriptionCheckoutPayload::isSubscriptionCart($cart);
+
         return view('pages.payment-result-premium', [
             'payment' => $payment,
+            'isSubscription' => $isSubscription,
             'success' => $payment->status === PaymentStatus::PAID,
             'errorMessage' => session('payment_error'),
             'autoDownloadInvoice' => $request->boolean('auto_download', true),

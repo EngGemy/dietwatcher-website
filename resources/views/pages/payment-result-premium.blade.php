@@ -8,115 +8,233 @@
         @if($success)
             @php
                 $isAr = app()->getLocale() === 'ar';
-                $firstItem = collect($payment->cart_items ?? [])->first();
-                $planTitle = $firstItem['name'] ?? __('payment.subscription_plan');
-                $itemOptions = $firstItem['options'] ?? [];
-                $mealType = trim((string) ($itemOptions['mealType'] ?? ''));
-                if ($mealType === '') {
-                    $mealType = __('payment.mixed');
-                }
-                $calories = $itemOptions['calories'] ?? null;
-                $durationRaw = strtolower((string) ($payment->duration ?? ''));
-                $durationMap = [
-                    'once' => __('Once'),
-                    'weekly' => __('Weekly'),
-                    'monthly' => __('Monthly'),
-                    '3months' => __('3 Months'),
-                ];
-                $durationLabel = $durationMap[$durationRaw] ?? ($payment->duration ? __(ucfirst($payment->duration)) : __('Monthly'));
-                $startDateLabel = $payment->start_date ?: now()->format('d M Y');
+                $cartItems = collect($payment->cart_items ?? []);
+                $firstItem = $cartItems->first();
+                $itemsCount = (int) $cartItems->sum(fn ($item) => (int) ($item['quantity'] ?? 1));
                 $deliveryLabel = $payment->delivery_type === 'pickup' ? __('Pickup from Branch') : __('Home Delivery');
-                $caloriesLabel = $calories ? ((string) $calories . ' ' . __('kcal')) : __('payment.as_selected');
+                $deliveryDateLabel = $payment->start_date ?: now()->format('d-m-Y');
+                $addressParts = array_filter([
+                    $payment->city ? __(ucfirst((string) $payment->city)) : null,
+                    $payment->street,
+                    $payment->building,
+                ]);
+                $addressLabel = $addressParts !== [] ? implode('، ', $addressParts) : null;
             @endphp
-            <div class="confirm-page space-y-8" data-confirm-page>
-                <header class="confirm-hero text-center md:text-start">
-                    <img src="{{ asset('assets/images/icons/check-success.svg') }}" class="confirm-check mb-3 size-24 md:size-32" alt="" />
-                    <h2 class="section-header__title">{{ __('payment.confirmed_title') }}</h2>
-                    <p class="section-header__desc max-w-none">
-                        {{ __('payment.confirmed_subtitle') }}
-                    </p>
-                </header>
 
-                <div class="confirm-summary rounded-md bg-white p-6 shadow-sm">
-                    <div class="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                        <h3 class="text-xl font-bold text-gray-900 md:text-2xl">{{ $planTitle }}</h3>
-                        <p class="text-lg md:text-xl">
-                            {{ __('payment.total_paid') }}:
-                            <span class="text-green font-semibold"><x-sar /> {{ number_format($payment->amount_in_sar, 2) }}</span>
+            @if($isSubscription)
+                @php
+                    $planTitle = $firstItem['name'] ?? __('payment.subscription_plan');
+                    $itemOptions = $firstItem['options'] ?? [];
+                    $mealType = trim((string) ($itemOptions['mealType'] ?? ''));
+                    if ($mealType === '') {
+                        $mealType = __('payment.mixed');
+                    }
+                    $calories = $itemOptions['calories'] ?? null;
+                    $durationRaw = strtolower((string) ($payment->duration ?? ''));
+                    $durationMap = [
+                        'once' => __('Once'),
+                        'weekly' => __('Weekly'),
+                        'monthly' => __('Monthly'),
+                        '3months' => __('3 Months'),
+                    ];
+                    $durationLabel = $durationMap[$durationRaw] ?? ($payment->duration ? __(ucfirst($payment->duration)) : __('Monthly'));
+                    $startDateLabel = $payment->start_date ?: now()->format('d M Y');
+                    $caloriesLabel = $calories ? ((string) $calories . ' ' . __('kcal')) : __('payment.as_selected');
+                @endphp
+                <div class="confirm-page space-y-8" data-confirm-page>
+                    <header class="confirm-hero text-center md:text-start">
+                        <img src="{{ asset('assets/images/icons/check-success.svg') }}" class="confirm-check mb-3 size-24 md:size-32" alt="" />
+                        <h2 class="section-header__title">{{ __('payment.confirmed_title') }}</h2>
+                        <p class="section-header__desc max-w-none">
+                            {{ __('payment.confirmed_subtitle') }}
                         </p>
-                    </div>
+                    </header>
 
-                    <div class="grid grid-cols-1 gap-y-5 md:grid-cols-2 md:gap-x-10">
-                        <div class="space-y-3">
-                            <div class="confirm-row">
-                                <span class="confirm-row__label">{{ __('payment.meal_type') }}</span>
-                                <span class="confirm-row__value">{{ $mealType }}</span>
-                            </div>
-                            <div class="confirm-row">
-                                <span class="confirm-row__label">{{ __('Calories') }}</span>
-                                <span class="confirm-row__value" dir="ltr">{{ $caloriesLabel }}</span>
-                            </div>
-                            <div class="confirm-row">
-                                <span class="confirm-row__label">{{ __('payment.order_number_label') }}</span>
-                                <span class="confirm-row__value font-mono" dir="ltr">{{ $payment->order_number }}</span>
-                            </div>
+                    <div class="confirm-summary rounded-md bg-white p-6 shadow-sm">
+                        <div class="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <h3 class="text-xl font-bold text-gray-900 md:text-2xl">{{ $planTitle }}</h3>
+                            <p class="text-lg md:text-xl">
+                                {{ __('payment.total_paid') }}:
+                                <span class="text-green font-semibold"><x-sar /> {{ number_format($payment->amount_in_sar, 2) }}</span>
+                            </p>
                         </div>
 
-                        <div class="space-y-3">
-                            <div class="confirm-row">
-                                <span class="confirm-row__label">{{ __('Duration') }}</span>
-                                <span class="confirm-row__value">{{ $durationLabel }}</span>
+                        <div class="grid grid-cols-1 gap-y-5 md:grid-cols-2 md:gap-x-10">
+                            <div class="space-y-3">
+                                <div class="confirm-row">
+                                    <span class="confirm-row__label">{{ __('payment.meal_type') }}</span>
+                                    <span class="confirm-row__value">{{ $mealType }}</span>
+                                </div>
+                                <div class="confirm-row">
+                                    <span class="confirm-row__label">{{ __('Calories') }}</span>
+                                    <span class="confirm-row__value" dir="ltr">{{ $caloriesLabel }}</span>
+                                </div>
+                                <div class="confirm-row">
+                                    <span class="confirm-row__label">{{ __('payment.order_number_label') }}</span>
+                                    <span class="confirm-row__value font-mono" dir="ltr">{{ $payment->order_number }}</span>
+                                </div>
                             </div>
-                            <div class="confirm-row">
-                                <span class="confirm-row__label">{{ __('Start Date') }}</span>
-                                <span class="confirm-row__value" dir="ltr">{{ $startDateLabel }}</span>
-                            </div>
-                            <div class="confirm-row">
-                                <span class="confirm-row__label">{{ __('Delivery') }}</span>
-                                <span class="confirm-row__value">{{ $deliveryLabel }}</span>
+
+                            <div class="space-y-3">
+                                <div class="confirm-row">
+                                    <span class="confirm-row__label">{{ __('Duration') }}</span>
+                                    <span class="confirm-row__value">{{ $durationLabel }}</span>
+                                </div>
+                                <div class="confirm-row">
+                                    <span class="confirm-row__label">{{ __('Start Date') }}</span>
+                                    <span class="confirm-row__value" dir="ltr">{{ $startDateLabel }}</span>
+                                </div>
+                                <div class="confirm-row">
+                                    <span class="confirm-row__label">{{ __('Delivery') }}</span>
+                                    <span class="confirm-row__value">{{ $deliveryLabel }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="confirm-alert bg-red/20 flex gap-4 rounded-md px-6 py-4">
-                    <svg class="size-8 shrink-0 text-black"><use href="{{ asset('assets/images/icons/sprite.svg#messages') }}"></use></svg>
-                    <p class="text-lg">{{ __('payment.confirmed_notice') }}</p>
-                </div>
+                    <div class="confirm-alert bg-red/20 flex gap-4 rounded-md px-6 py-4">
+                        <svg class="size-8 shrink-0 text-black"><use href="{{ asset('assets/images/icons/sprite.svg#messages') }}"></use></svg>
+                        <p class="text-lg">{{ __('payment.confirmed_notice') }}</p>
+                    </div>
 
-                <div class="confirm-app bg-yellow grid items-center gap-6 rounded-md px-8 py-10 text-white md:grid-cols-2 md:px-20">
-                    <div>
-                        <h2 class="section-header__title">{{ __('payment.manage_meals_title') }}</h2>
-                        <p class="section-header__desc text-white !max-w-none">
-                            {{ __('payment.manage_meals_subtitle') }}
+                    <div class="confirm-app bg-yellow grid items-center gap-6 rounded-md px-8 py-10 text-white md:grid-cols-2 md:px-20">
+                        <div>
+                            <h2 class="section-header__title">{{ __('payment.manage_meals_title') }}</h2>
+                            <p class="section-header__desc text-white !max-w-none">
+                                {{ __('payment.manage_meals_subtitle') }}
+                            </p>
+                            <div class="mt-6 md:mt-12">
+                                <p class="mb-4 text-lg font-semibold md:text-2xl">{{ __('Download app') }}</p>
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <a href="{{ $playStoreUrl }}" target="_blank" rel="noopener" class="confirm-store">
+                                        <img src="{{ asset('assets/images/play.png') }}" alt="{{ __('Google Play') }}" />
+                                    </a>
+                                    <a href="{{ $appStoreUrl }}" target="_blank" rel="noopener" class="confirm-store">
+                                        <img src="{{ asset('assets/images/store.png') }}" alt="{{ __('App Store') }}" />
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <img src="{{ asset('assets/images/app-screens-2.png') }}" class="confirm-phone mx-auto w-full max-w-[415px]" alt="{{ __('App') }}" />
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-center gap-3">
+                        <a href="{{ route('account.dashboard') }}" class="btn btn--primary btn--md btn--arrow">
+                            {{ __('account.go_to_dashboard') }}
+                        </a>
+                        <a href="{{ route('payment.invoice', ['order' => $payment->order_number]) }}" class="btn btn--outline btn--md" id="invoice-download-link">
+                            {{ __('payment.download_invoice') }}
+                        </a>
+                        <a href="{{ route('home') }}" class="btn btn--outline btn--md">{{ __('payment.back_to_home') }}</a>
+                    </div>
+                </div>
+            @else
+                @php
+                    $orderTitle = $cartItems->count() === 1
+                        ? (string) ($firstItem['name'] ?? __('payment.success_heading'))
+                        : __('payment.products');
+                @endphp
+                <div class="confirm-page space-y-8" data-confirm-page>
+                    <header class="confirm-hero text-center md:text-start">
+                        <img src="{{ asset('assets/images/icons/check-success.svg') }}" class="confirm-check mb-3 size-24 md:size-32" alt="" />
+                        <h2 class="section-header__title">{{ __('payment.order_confirmed_title') }}</h2>
+                        <p class="section-header__desc max-w-none">
+                            {{ __('payment.order_confirmed_subtitle') }}
                         </p>
-                        <div class="mt-6 md:mt-12">
-                            <p class="mb-4 text-lg font-semibold md:text-2xl">{{ __('Download app') }}</p>
-                            <div class="flex flex-wrap items-center gap-1.5">
-                                <a href="{{ $playStoreUrl }}" target="_blank" rel="noopener" class="confirm-store">
-                                    <img src="{{ asset('assets/images/play.png') }}" alt="{{ __('Google Play') }}" />
-                                </a>
-                                <a href="{{ $appStoreUrl }}" target="_blank" rel="noopener" class="confirm-store">
-                                    <img src="{{ asset('assets/images/store.png') }}" alt="{{ __('App Store') }}" />
-                                </a>
+                    </header>
+
+                    <div class="confirm-summary rounded-md bg-white p-6 shadow-sm">
+                        <div class="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <h3 class="text-xl font-bold text-gray-900 md:text-2xl">{{ $orderTitle }}</h3>
+                            <p class="text-lg md:text-xl">
+                                {{ __('payment.total_paid') }}:
+                                <span class="text-green font-semibold"><x-sar /> {{ number_format($payment->amount_in_sar, 2) }}</span>
+                            </p>
+                        </div>
+
+                        @if($cartItems->count() > 1)
+                            <ul class="mb-6 space-y-2 border-b border-dashed border-gray-200 pb-5">
+                                @foreach($cartItems as $item)
+                                    <li class="flex items-center justify-between gap-3 text-sm">
+                                        <span class="font-semibold text-gray-900">{{ $item['name'] ?? '' }}</span>
+                                        <span class="text-gray-500">× {{ (int) ($item['quantity'] ?? 1) }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endif
+
+                        <div class="grid grid-cols-1 gap-y-5 md:grid-cols-2 md:gap-x-10">
+                            <div class="space-y-3">
+                                <div class="confirm-row">
+                                    <span class="confirm-row__label">{{ __('payment.order_number_label') }}</span>
+                                    <span class="confirm-row__value font-mono" dir="ltr">{{ $payment->order_number }}</span>
+                                </div>
+                                <div class="confirm-row">
+                                    <span class="confirm-row__label">{{ __('payment.delivery_date') }}</span>
+                                    <span class="confirm-row__value" dir="ltr">{{ $deliveryDateLabel }}</span>
+                                </div>
+                                <div class="confirm-row">
+                                    <span class="confirm-row__label">{{ __('payment.items_count') }}</span>
+                                    <span class="confirm-row__value">{{ $itemsCount }}</span>
+                                </div>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div class="confirm-row">
+                                    <span class="confirm-row__label">{{ __('Delivery') }}</span>
+                                    <span class="confirm-row__value">{{ $deliveryLabel }}</span>
+                                </div>
+                                @if($addressLabel)
+                                    <div class="confirm-row">
+                                        <span class="confirm-row__label">{{ __('Address') }}</span>
+                                        <span class="confirm-row__value">{{ $addressLabel }}</span>
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     </div>
-                    <div>
-                        <img src="{{ asset('assets/images/app-screens-2.png') }}" class="confirm-phone mx-auto w-full max-w-[415px]" alt="{{ __('App') }}" />
+
+                    <div class="confirm-alert bg-red/20 flex gap-4 rounded-md px-6 py-4">
+                        <svg class="size-8 shrink-0 text-black"><use href="{{ asset('assets/images/icons/sprite.svg#messages') }}"></use></svg>
+                        <p class="text-lg">{{ __('payment.order_confirmed_notice') }}</p>
+                    </div>
+
+                    <div class="confirm-app bg-yellow grid items-center gap-6 rounded-md px-8 py-10 text-white md:grid-cols-2 md:px-20">
+                        <div>
+                            <h2 class="section-header__title">{{ __('payment.track_order_title') }}</h2>
+                            <p class="section-header__desc text-white !max-w-none">
+                                {{ __('payment.track_order_subtitle') }}
+                            </p>
+                            <div class="mt-6 md:mt-12">
+                                <p class="mb-4 text-lg font-semibold md:text-2xl">{{ __('Download app') }}</p>
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <a href="{{ $playStoreUrl }}" target="_blank" rel="noopener" class="confirm-store">
+                                        <img src="{{ asset('assets/images/play.png') }}" alt="{{ __('Google Play') }}" />
+                                    </a>
+                                    <a href="{{ $appStoreUrl }}" target="_blank" rel="noopener" class="confirm-store">
+                                        <img src="{{ asset('assets/images/store.png') }}" alt="{{ __('App Store') }}" />
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <img src="{{ asset('assets/images/app-screens-2.png') }}" class="confirm-phone mx-auto w-full max-w-[415px]" alt="{{ __('App') }}" />
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-center gap-3">
+                        <a href="{{ route('account.orders.index') }}" class="btn btn--primary btn--md btn--arrow">
+                            {{ __('account.my_orders') }}
+                        </a>
+                        <a href="{{ route('payment.invoice', ['order' => $payment->order_number]) }}" class="btn btn--outline btn--md" id="invoice-download-link">
+                            {{ __('payment.download_invoice') }}
+                        </a>
+                        <a href="{{ route('home') }}" class="btn btn--outline btn--md">{{ __('payment.back_to_home') }}</a>
                     </div>
                 </div>
-
-                <div class="flex flex-wrap items-center justify-center gap-3">
-                    <a href="{{ route('account.dashboard') }}" class="btn btn--primary btn--md btn--arrow">
-                        {{ __('account.go_to_dashboard') }}
-                    </a>
-                    <a href="{{ route('payment.invoice', ['order' => $payment->order_number]) }}" class="btn btn--outline btn--md" id="invoice-download-link">
-                        {{ __('payment.download_invoice') }}
-                    </a>
-                    <a href="{{ route('home') }}" class="btn btn--outline btn--md">{{ __('payment.back_to_home') }}</a>
-                </div>
-            </div>
+            @endif
         @else
             <div class="rounded-xl border border-gray-200 bg-white p-6 md:p-10 shadow-sm text-center">
                 <div class="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-100">

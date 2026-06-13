@@ -40,10 +40,14 @@ class Index extends Component
             return;
         }
 
-        $this->subscriptions = $this->extractRowsFromApiResult(
-            $result,
-            ['subscriptions'],
-            ['subscription'],
+        $this->subscriptions = $this->filterValidRows(
+            $this->extractRowsFromApiResult(
+                $result,
+                ['subscriptions'],
+                ['subscription'],
+            ),
+            fn (array $row): bool => (int) ($row['id'] ?? 0) > 0
+                || trim((string) ($row['plan']['name'] ?? $row['program']['name'] ?? $row['name'] ?? '')) !== '',
         );
 
         $this->loading = false;

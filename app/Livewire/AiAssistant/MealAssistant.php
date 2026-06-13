@@ -69,6 +69,15 @@ class MealAssistant extends Component
     /** @var array<int, array<string, mixed>> */
     public array $recommendations = [];
 
+    /** @var array<int, array<string, mixed>> */
+    public array $recommendationPlans = [];
+
+    /** @var array<string, mixed> */
+    public array $recommendationPath = [];
+
+    /** @var array<int, string> */
+    public array $recommendationTips = [];
+
     public bool $loadingRecommendations = false;
 
     public string $recommendationSource = '';
@@ -336,6 +345,9 @@ class MealAssistant extends Component
 
         $this->loadingRecommendations = true;
         $this->recommendations = [];
+        $this->recommendationPlans = [];
+        $this->recommendationPath = [];
+        $this->recommendationTips = [];
         $this->recommendationSource = '';
         $this->catalogUnavailable = false;
 
@@ -347,30 +359,43 @@ class MealAssistant extends Component
             return;
         }
 
+        $this->recommendationPlans = $this->buildPlanRecommendations();
+        $path = $this->buildLocalNutritionistPath($this->recommendationPlans);
+
         $gemini = app(GeminiService::class);
         if ($gemini->isConfigured()) {
+            $aiPath = $this->fetchGeminiNutritionistPath($gemini, $this->recommendationPlans);
+            if ($aiPath !== []) {
+                $path = $this->mergeNutritionistPath($path, $aiPath);
+            }
+
             $aiResults = $this->fetchGeminiRecommendations($gemini, $meals);
             if ($aiResults !== []) {
                 if (count($aiResults) < 6) {
                     $existingIds = collect($aiResults)->pluck('meal_id')->all();
-                    $fill = collect($this->localRecommendations($meals))
+                    $fill = collect($this->diversifiedLocalRecommendations($meals, 6))
                         ->reject(fn (array $row): bool => in_array((int) ($row['meal_id'] ?? 0), $existingIds, true))
-                        ->take(8 - count($aiResults))
+                        ->take(6 - count($aiResults))
                         ->values()
                         ->all();
                     $aiResults = array_merge($aiResults, $fill);
                 }
 
-                $this->recommendations = array_slice($aiResults, 0, 8);
+                $this->recommendations = array_slice($aiResults, 0, 6);
                 $this->recommendationSource = 'gemini';
-                $this->loadingRecommendations = false;
-
-                return;
+            } else {
+                $this->recommendations = $this->diversifiedLocalRecommendations($meals, 6);
+                $this->recommendationSource = 'local';
             }
+        } else {
+            $this->recommendations = $this->diversifiedLocalRecommendations($meals, 6);
+            $this->recommendationSource = 'local';
         }
 
-        $this->recommendations = $this->localRecommendations($meals);
-        $this->recommendationSource = 'local';
+        $this->recommendationPath = $path;
+        $this->recommendationTips = is_array($path['tips'] ?? null)
+            ? array_values(array_filter(array_map('strval', $path['tips'])))
+            : [];
         $this->loadingRecommendations = false;
     }
 
@@ -719,7 +744,7 @@ PROMPT;
 
         $system = <<<PROMPT
 You are a senior nutrition consultant and meal sales advisor for Diet Watchers in Saudi Arabia.
-Return ONLY valid JSON: an array of exactly 8 objects with keys:
+Return ONLY valid JSON: an array of exactly 6 objects with keys:
 - meal_id (int, must exist in catalog)
 - reason_ar (string, 1-2 sentences in Arabic — specific to goal, macros, restrictions)
 - reason_en (string, 1-2 sentences in English)
@@ -788,7 +813,7 @@ PROMPT;
             })
             ->filter()
             ->values()
-            ->take(8)
+            ->take(6)
             ->all();
     }
 
@@ -798,35 +823,7 @@ PROMPT;
      */
     private function localRecommendations(Collection $meals): array
     {
-        $locale = app()->getLocale();
-        $mealsPerDay = max(1, $this->mealsPerDay);
-        $targetCal = (float) ($this->targetCalories ?? 0);
-        $perMealCal = max(120, $targetCal / $mealsPerDay);
-
-        $ranked = $this->rankMealsWithScores($meals)->take(8);
-
-        if ($ranked->isEmpty()) {
-            $ranked = $meals->take(8)->map(fn (array $meal): array => ['meal' => $meal, 'distance' => 0.5]);
-        }
-
-        return $ranked
-            ->map(function (array $row) use ($locale, $perMealCal): array {
-                $meal = $row['meal'];
-                $fit = (int) max(58, min(98, round(100 - ($row['distance'] * 55))));
-                $mealCal = (int) ($meal['calories'] ?? 0);
-
-                $reason = $locale === 'ar'
-                    ? ($mealCal > 0
-                        ? sprintf('وجبة من متجرنا بـ %d سعرة — قريبة من هدفك لكل وجبة (~%d سعرة).', $mealCal, (int) round($perMealCal))
-                        : 'وجبة من متجرنا تناسب أهدافك الغذائية — اضغط لعرض التفاصيل.')
-                    : ($mealCal > 0
-                        ? sprintf('Store meal at %d kcal — close to your per-meal target (~%d kcal).', $mealCal, (int) round($perMealCal))
-                        : 'A store meal that fits your nutrition goals — tap to view details.');
-
-                return $this->formatRecommendationCard($meal, $reason, $fit);
-            })
-            ->values()
-            ->all();
+        return $this->diversifiedLocalRecommendations($meals, 6);
     }
 
     /**
@@ -852,7 +849,7 @@ PROMPT;
                 $fat = (float) ($meal['fat'] ?? 0);
 
                 if ($cal <= 0) {
-                    return ['meal' => $meal, 'distance' => 0.75];
+                    return ['meal' => $meal, 'distance' => 1.35];
                 }
 
                 $score = (
@@ -864,6 +861,9 @@ PROMPT;
 
                 if ($this->goal === 'lose' && $cal > $perMealCal * 1.35) {
                     $score += 0.35;
+                }
+                if ($this->goal === 'lose' && $this->isTreatMeal($meal)) {
+                    $score += 0.45;
                 }
                 if ($this->goal === 'gain' && $protein < $perMealProtein * 0.6) {
                     $score += 0.2;
@@ -882,6 +882,334 @@ PROMPT;
     private function rankMealsCollection(Collection $meals): Collection
     {
         return $this->rankMealsWithScores($meals)->pluck('meal')->values();
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rankedPlans
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildPlanRecommendations(): array
+    {
+        $locale = app()->getLocale();
+        $targetCal = (int) ($this->targetCalories ?? 0);
+
+        return collect($this->rankedPlansForUser(2))
+            ->map(function (array $plan) use ($locale, $targetCal): array {
+                $planCal = (int) ($plan['calories_per_day'] ?? 0);
+                $fit = 88;
+                if ($targetCal > 0 && $planCal > 0) {
+                    $fit = (int) max(62, min(98, round(100 - (abs($planCal - $targetCal) / $targetCal * 65))));
+                }
+
+                $reason = $locale === 'ar'
+                    ? ($planCal > 0
+                        ? sprintf('باقة يومية ~%d سعرة — الأقرب لهدفك (%d سعرة) مع وجبات محسوبة وتوصيل منتظم.', $planCal, $targetCal)
+                        : 'باقة اشتراك مناسبة لالتزامك اليومي دون عناء حساب السعرات.')
+                    : ($planCal > 0
+                        ? sprintf('~%d kcal/day plan — closest to your %d kcal target with scheduled delivery.', $planCal, $targetCal)
+                        : 'A subscription plan for daily consistency without manual calorie tracking.');
+
+                return array_merge($plan, [
+                    'fit_score' => $fit,
+                    'reason' => $reason,
+                ]);
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $plans
+     * @return array<string, mixed>
+     */
+    private function buildLocalNutritionistPath(array $plans): array
+    {
+        $locale = app()->getLocale();
+        $goalLabel = (string) __('ai.goal_'.$this->goal);
+        $targetCal = (int) ($this->targetCalories ?? 0);
+        $primaryPlan = $plans[0] ?? null;
+        $primaryPlanName = (string) ($primaryPlan['name'] ?? '');
+        $pathType = in_array($this->goal, ['lose', 'maintain'], true) || $this->mealsPerDay >= 3
+            ? 'subscription'
+            : 'both';
+
+        if (! empty($this->aiReport['recommended_plan_type'])) {
+            $reportType = (string) $this->aiReport['recommended_plan_type'];
+            if (in_array($reportType, ['subscription', 'store', 'both'], true)) {
+                $pathType = $reportType;
+            }
+        }
+
+        if ($locale === 'ar') {
+            $headline = 'مسارك الغذائي المقترح';
+            $summary = ! empty($this->aiReport['plan_pitch'])
+                ? (string) $this->aiReport['plan_pitch']
+                : sprintf(
+                    'بصفتي مستشاراً غذائياً: هدفك %s وسعراتك المستهدفة %s سعرة. %s',
+                    $goalLabel,
+                    number_format($targetCal),
+                    $pathType === 'subscription'
+                        ? 'الاشتراك في باقة وجبات هو الأساس، والمتجر للتنويع أو الوجبات الإضافية.'
+                        : 'يمكنك الجمع بين باقة اشتراك للانتظام ووجبات المتجر للمرونة.'
+                );
+            $steps = [
+                $primaryPlanName !== ''
+                    ? sprintf('ابدأ بباقة «%s» — أقرب خيار لسعراتك اليومية.', $primaryPlanName)
+                    : 'اختر باقة اشتراك قريبة من سعراتك اليومية من صفحة الباقات.',
+                'وزّع '.$this->mealsPerDay.' وجبات على مدار اليوم مع بروtein في كل وجبة.',
+                'استخدم المتجر لوجبة مرنة أو تكميل أسبوعي — وليس كأساس يومي إن كان هدفك '.$goalLabel.'.',
+                'راجع وزنك كل 7–10 أيام وعدّل نشاطك أو حصصك تدريجياً.',
+            ];
+            $tips = [
+                'اشرب 2–3 لتر ماء يومياً.',
+                'نام 7–8 ساعات — النوم يؤثر مباشرة على الجوع والمتابعة.',
+                ! empty($this->aiReport['weekly_focus'])
+                    ? (string) $this->aiReport['weekly_focus']
+                    : 'التزم بسعراتك 5 أيام من 7 مع يوم مرونة واحد.',
+            ];
+            $storeRole = 'المتجر ممتاز لوجبة واحدة أو تنويع؛ الاشتراك أفضل للالتزام اليومي.';
+        } else {
+            $headline = 'Your recommended nutrition path';
+            $summary = ! empty($this->aiReport['plan_pitch'])
+                ? (string) $this->aiReport['plan_pitch']
+                : sprintf(
+                    'As your nutrition advisor: your goal is %s at ~%s kcal/day. %s',
+                    $goalLabel,
+                    number_format($targetCal),
+                    $pathType === 'subscription'
+                        ? 'A meal subscription should be your foundation; use the store for variety or add-ons.'
+                        : 'Combine a subscription for consistency with store meals for flexibility.'
+                );
+            $steps = [
+                $primaryPlanName !== ''
+                    ? sprintf('Start with the «%s» plan — closest match to your daily calories.', $primaryPlanName)
+                    : 'Pick a subscription plan close to your daily calorie target.',
+                'Split '.$this->mealsPerDay.' meals across the day with protein in each.',
+                'Use the store for flexible extras — not as your daily base if your goal is '.$goalLabel.'.',
+                'Weigh yourself every 7–10 days and adjust gradually.',
+            ];
+            $tips = [
+                'Drink 2–3 liters of water daily.',
+                'Sleep 7–8 hours — it directly affects hunger and adherence.',
+                ! empty($this->aiReport['weekly_focus'])
+                    ? (string) $this->aiReport['weekly_focus']
+                    : 'Hit your calories 5 of 7 days with one flexible day.',
+            ];
+            $storeRole = 'The store is great for single meals or variety; subscriptions work best for daily adherence.';
+        }
+
+        return [
+            'headline' => $headline,
+            'summary' => $summary,
+            'path_type' => $pathType,
+            'steps' => $steps,
+            'tips' => array_values(array_filter($tips)),
+            'store_role' => $storeRole,
+            'primary_plan_id' => (int) ($primaryPlan['id'] ?? 0),
+            'plans_url' => route('meal-plans.index'),
+            'store_url' => route('store.index'),
+            'checkout_url' => route('checkout.index'),
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $plans
+     * @return array<string, mixed>
+     */
+    private function fetchGeminiNutritionistPath(GeminiService $gemini, array $plans): array
+    {
+        $locale = app()->getLocale();
+        $lang = $locale === 'ar' ? 'Arabic' : 'English';
+
+        $system = <<<PROMPT
+You are a senior clinical nutritionist advising a Diet Watchers customer in Saudi Arabia.
+Return ONLY valid JSON with keys (all text in {$lang}):
+- headline (motivating expert title)
+- summary (2-3 sentences — speak directly to the customer like a doctor consultation)
+- steps (array of 3-4 numbered actionable steps as strings)
+- tips (array of 2-3 lifestyle tips as strings)
+- path_type (subscription|store|both)
+- store_role (one sentence explaining when store vs subscription)
+Be specific with numbers from the profile. Recommend subscription as primary when goal is weight loss or meals_per_day >= 3.
+PROMPT;
+
+        $user = json_encode([
+            'profile' => $this->userProfilePayload(),
+            'recommended_plans' => $plans,
+            'report' => [
+                'headline' => $this->aiReport['headline'] ?? '',
+                'weekly_focus' => $this->aiReport['weekly_focus'] ?? '',
+                'plan_pitch' => $this->aiReport['plan_pitch'] ?? '',
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+
+        $raw = $gemini->generate($system, [
+            ['role' => 'user', 'content' => $user],
+        ], true, 0.55);
+
+        if ($raw === null) {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (! is_array($decoded)) {
+            $decoded = json_decode($this->extractJsonObject($raw), true);
+        }
+
+        if (! is_array($decoded) || ! isset($decoded['headline'])) {
+            return [];
+        }
+
+        $steps = $decoded['steps'] ?? [];
+        $tips = $decoded['tips'] ?? [];
+
+        return [
+            'headline' => (string) ($decoded['headline'] ?? ''),
+            'summary' => (string) ($decoded['summary'] ?? ''),
+            'path_type' => (string) ($decoded['path_type'] ?? 'both'),
+            'steps' => is_array($steps) ? array_values(array_filter(array_map('strval', $steps))) : [],
+            'tips' => is_array($tips) ? array_values(array_filter(array_map('strval', $tips))) : [],
+            'store_role' => (string) ($decoded['store_role'] ?? ''),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $local
+     * @param  array<string, mixed>  $ai
+     * @return array<string, mixed>
+     */
+    private function mergeNutritionistPath(array $local, array $ai): array
+    {
+        foreach (['headline', 'summary', 'store_role'] as $key) {
+            if (trim((string) ($ai[$key] ?? '')) !== '') {
+                $local[$key] = $ai[$key];
+            }
+        }
+
+        if (! empty($ai['steps']) && is_array($ai['steps'])) {
+            $local['steps'] = $ai['steps'];
+        }
+
+        if (! empty($ai['tips']) && is_array($ai['tips'])) {
+            $local['tips'] = $ai['tips'];
+        }
+
+        $pathType = (string) ($ai['path_type'] ?? '');
+        if (in_array($pathType, ['subscription', 'store', 'both'], true)) {
+            $local['path_type'] = $pathType;
+        }
+
+        return $local;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function diversifiedLocalRecommendations(Collection $meals, int $limit = 6): array
+    {
+        $locale = app()->getLocale();
+        $mealsPerDay = max(1, $this->mealsPerDay);
+        $targetCal = (float) ($this->targetCalories ?? 0);
+        $perMealCal = max(120, $targetCal / $mealsPerDay);
+
+        $ranked = $this->rankMealsWithScores($meals);
+        $withCalories = $ranked->filter(fn (array $row): bool => (int) ($row['meal']['calories'] ?? 0) > 0);
+        $pool = $withCalories->isNotEmpty() ? $withCalories : $ranked;
+
+        $picked = [];
+        $groupCounts = [];
+
+        foreach ($pool as $row) {
+            if (count($picked) >= $limit) {
+                break;
+            }
+
+            $meal = $row['meal'];
+            if ($this->shouldSkipMealForProfile($meal, $perMealCal)) {
+                continue;
+            }
+
+            $groupKey = (string) ((int) ($meal['group_id'] ?? 0) ?: ($meal['group_name'] ?? 'misc'));
+            if (($groupCounts[$groupKey] ?? 0) >= 2) {
+                continue;
+            }
+
+            $groupCounts[$groupKey] = ($groupCounts[$groupKey] ?? 0) + 1;
+            $picked[] = $row;
+        }
+
+        if (count($picked) < $limit) {
+            foreach ($ranked as $row) {
+                if (count($picked) >= $limit) {
+                    break;
+                }
+                $mealId = (int) ($row['meal']['id'] ?? 0);
+                if (collect($picked)->contains(fn (array $p): bool => (int) ($p['meal']['id'] ?? 0) === $mealId)) {
+                    continue;
+                }
+                $picked[] = $row;
+            }
+        }
+
+        return collect($picked)
+            ->map(function (array $row) use ($locale, $perMealCal): array {
+                $meal = $row['meal'];
+                $fit = (int) max(58, min(96, round(100 - ($row['distance'] * 50))));
+                $mealCal = (int) ($meal['calories'] ?? 0);
+                $groupName = trim((string) ($meal['group_name'] ?? ''));
+
+                $reason = $locale === 'ar'
+                    ? ($mealCal > 0
+                        ? sprintf('وجبة %s%s — ~%d سعرة (هدفك ~%d لكل وجبة). مناسبة كتكميل مرن من المتجر.', $groupName !== '' ? "({$groupName}) " : '', (string) ($meal['name'] ?? ''), $mealCal, (int) round($perMealCal))
+                        : sprintf('خيار من المتجر%s — راجع التفاصيل الغذائية قبل الإضافة.', $groupName !== '' ? " ({$groupName})" : ''))
+                    : ($mealCal > 0
+                        ? sprintf('Store pick%s — ~%d kcal (your per-meal target ~%d). Good as a flexible add-on.', $groupName !== '' ? " ({$groupName})" : '', $mealCal, (int) round($perMealCal))
+                        : sprintf('Store option%s — check nutrition details before adding.', $groupName !== '' ? " ({$groupName})" : ''));
+
+                return $this->formatRecommendationCard($meal, $reason, $fit);
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $meal
+     */
+    private function shouldSkipMealForProfile(array $meal, float $perMealCal): bool
+    {
+        if ($this->goal !== 'lose') {
+            return false;
+        }
+
+        if ($this->isTreatMeal($meal) && (int) ($meal['calories'] ?? 0) > $perMealCal * 1.15) {
+            return true;
+        }
+
+        if (in_array('sugar_free', $this->restrictions, true) && $this->isTreatMeal($meal)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $meal
+     */
+    private function isTreatMeal(array $meal): bool
+    {
+        $haystack = mb_strtolower(implode(' ', array_filter([
+            (string) ($meal['group_name'] ?? ''),
+            (string) ($meal['tag_name'] ?? ''),
+            (string) ($meal['name'] ?? ''),
+        ])));
+
+        foreach (['حلو', 'كيك', 'كوكيز', 'dessert', 'sweet', 'cake', 'cookie', 'cheesecake', 'تشيز'] as $needle) {
+            if (str_contains($haystack, mb_strtolower($needle))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

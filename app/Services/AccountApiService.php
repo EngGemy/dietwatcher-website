@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Services\Payment\MoyasarPaymentService;
 use App\Support\AddressCheckoutHelper;
 use App\Support\SubscriptionCheckoutPayload;
+use Carbon\Carbon;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
@@ -164,18 +165,103 @@ class AccountApiService
         if (! $this->hasToken()) {
             return $this->empty(__('account.login_required'));
         }
+
         try {
-            $params = array_filter([
+            $baseParams = array_filter([
                 'subscription_id' => $subscriptionId,
                 'date' => $date,
                 'device_id' => $this->deviceId(),
+                'per_page' => 50,
             ], fn ($v) => $v !== null && $v !== '');
 
-            return $this->decode(
-                $this->authed()->get($this->url('subscriptions'), $params)
-            );
+            $allRows = [];
+            $lastDecoded = $this->empty();
+            $page = 1;
+            $lastPage = 1;
+
+            do {
+                $decoded = $this->decode(
+                    $this->authed()->get($this->url('subscriptions'), array_merge($baseParams, ['page' => $page]))
+                );
+                $lastDecoded = $decoded;
+
+                if (! ($decoded['ok'] ?? false)) {
+                    break;
+                }
+
+                $rows = $this->extractSubscriptionRows($decoded);
+                if ($rows !== []) {
+                    $allRows = array_merge($allRows, $rows);
+                }
+
+                $meta = $this->extractPaginationMeta($decoded);
+                $lastPage = max(1, (int) ($meta['lastPage'] ?? 1));
+                $page++;
+            } while ($page <= $lastPage && $page <= 25);
+
+            $allRows = $this->dedupeRowsById($allRows);
+            $localRows = $this->localSubscriptionsFallback();
+            if ($localRows !== []) {
+                $apiIds = collect($allRows)
+                    ->map(fn (array $row): int => (int) ($row['id'] ?? 0))
+                    ->filter()
+                    ->all();
+                foreach ($localRows as $localRow) {
+                    $localId = (int) ($localRow['id'] ?? 0);
+                    if ($localId > 0 && in_array($localId, $apiIds, true)) {
+                        continue;
+                    }
+                    $allRows[] = $localRow;
+                }
+                $allRows = $this->dedupeRowsById($allRows);
+            }
+
+            if ($allRows !== []) {
+                $normalized = array_map(fn (array $row): array => $this->normalizeSubscriptionRow($row), $allRows);
+
+                return [
+                    'ok' => true,
+                    'status' => (int) ($lastDecoded['status'] ?? 200),
+                    'data' => ['subscriptions' => $normalized],
+                    'message' => '',
+                    'raw' => is_array($lastDecoded['raw'] ?? null) ? $lastDecoded['raw'] : [],
+                ];
+            }
+
+            if ($localRows !== []) {
+                return [
+                    'ok' => true,
+                    'status' => 200,
+                    'data' => [
+                        'subscriptions' => array_map(
+                            fn (array $row): array => $this->normalizeSubscriptionRow($row),
+                            $localRows,
+                        ),
+                    ],
+                    'message' => '',
+                    'raw' => [],
+                ];
+            }
+
+            return $lastDecoded;
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::listSubscriptions failed', ['error' => $e->getMessage()]);
+
+            $localRows = $this->localSubscriptionsFallback();
+            if ($localRows !== []) {
+                return [
+                    'ok' => true,
+                    'status' => 200,
+                    'data' => [
+                        'subscriptions' => array_map(
+                            fn (array $row): array => $this->normalizeSubscriptionRow($row),
+                            $localRows,
+                        ),
+                    ],
+                    'message' => '',
+                    'raw' => [],
+                ];
+            }
 
             return $this->empty();
         }
@@ -342,20 +428,40 @@ class AccountApiService
 
         try {
             foreach ($paths as $path) {
-                $decoded = $this->decode(
-                    $this->authed()->get($this->url($path), $params)
-                );
-                $last = $decoded;
+                $allRows = [];
+                $lastDecoded = $this->empty();
+                $page = 1;
+                $lastPage = 1;
 
-                if (! ($decoded['ok'] ?? false)) {
-                    continue;
-                }
+                do {
+                    $decoded = $this->decode(
+                        $this->authed()->get($this->url($path), array_merge($params, [
+                            'page' => $page,
+                            'per_page' => 50,
+                        ]))
+                    );
+                    $lastDecoded = $decoded;
 
-                $rows = $this->extractInvoiceRows($decoded);
-                if ($rows !== []) {
-                    $decoded['data'] = ['invoices' => $rows];
+                    if (! ($decoded['ok'] ?? false)) {
+                        break;
+                    }
 
-                    return $decoded;
+                    $rows = $this->extractInvoiceRows($decoded);
+                    if ($rows !== []) {
+                        $allRows = array_merge($allRows, $rows);
+                    }
+
+                    $meta = $this->extractPaginationMeta($decoded);
+                    $lastPage = max(1, (int) ($meta['lastPage'] ?? 1));
+                    $page++;
+                } while ($page <= $lastPage && $page <= 25);
+
+                $last = $lastDecoded;
+
+                if ($allRows !== []) {
+                    $last['data'] = ['invoices' => $this->finalizeInvoiceRows($this->dedupeRowsById($allRows), $subscriptionId)];
+
+                    return $last;
                 }
             }
 
@@ -364,7 +470,7 @@ class AccountApiService
                 return [
                     'ok' => true,
                     'status' => 200,
-                    'data' => ['invoices' => $localRows],
+                    'data' => ['invoices' => $this->finalizeInvoiceRows($localRows, $subscriptionId)],
                     'message' => '',
                     'raw' => [],
                 ];
@@ -379,7 +485,7 @@ class AccountApiService
                 return [
                     'ok' => true,
                     'status' => 200,
-                    'data' => ['invoices' => $localRows],
+                    'data' => ['invoices' => $this->finalizeInvoiceRows($localRows, $subscriptionId)],
                     'message' => '',
                     'raw' => [],
                 ];
@@ -2044,20 +2150,53 @@ class AccountApiService
             return $this->empty(__('account.login_required'));
         }
         try {
-            $params = array_filter([
+            $baseParams = array_filter([
                 'status' => $status,
                 'device_id' => $this->deviceId(),
+                'per_page' => 50,
             ], fn ($v) => $v !== null && $v !== '');
 
             $cacheKey = 'account_orders_'.md5((string) session('external_api_token', '').'|'.$status.'|'.app()->getLocale());
-            $decoded = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($params) {
-                return $this->decode(
-                    $this->authed()->get($this->url('orders'), $params)
-                );
+            $decoded = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($baseParams) {
+                $allRows = [];
+                $lastDecoded = $this->empty();
+                $page = 1;
+                $lastPage = 1;
+
+                do {
+                    $lastDecoded = $this->decode(
+                        $this->authed()->get($this->url('orders'), array_merge($baseParams, ['page' => $page]))
+                    );
+
+                    if (! ($lastDecoded['ok'] ?? false)) {
+                        break;
+                    }
+
+                    $rows = $this->extractRowsFromDecoded($lastDecoded['data'] ?? null);
+                    if ($rows !== []) {
+                        $allRows = array_merge($allRows, $rows);
+                    }
+
+                    $meta = $this->extractPaginationMeta($lastDecoded);
+                    $lastPage = max(1, (int) ($meta['lastPage'] ?? 1));
+                    $page++;
+                } while ($page <= $lastPage && $page <= 25);
+
+                if ($allRows !== []) {
+                    $lastDecoded['data'] = ['orders' => $this->dedupeRowsById($allRows)];
+                }
+
+                return $lastDecoded;
             });
 
-            $apiRows = $this->extractRowsFromDecoded($decoded['data'] ?? null);
-            $localRows = $this->localOrdersFallback($status);
+            $apiRows = array_map(
+                fn (array $row): array => $this->normalizeOrderRow($row),
+                $this->extractRowsFromDecoded($decoded['data'] ?? null),
+            );
+            $localRows = array_map(
+                fn (array $row): array => $this->normalizeOrderRow($row),
+                $this->localOrdersFallback($status),
+            );
 
             if ($apiRows === []) {
                 if ($decoded['ok'] ?? false) {
@@ -2089,7 +2228,11 @@ class AccountApiService
 
                 if ($mergedLocal !== []) {
                     $decoded['data'] = ['orders' => array_values(array_merge($apiRows, $mergedLocal))];
+                } else {
+                    $decoded['data'] = ['orders' => $apiRows];
                 }
+            } else {
+                $decoded['data'] = ['orders' => $apiRows];
             }
 
             return $decoded;
@@ -2099,7 +2242,10 @@ class AccountApiService
             return [
                 'ok' => true,
                 'status' => 200,
-                'data' => ['orders' => $this->localOrdersFallback($status)],
+                'data' => ['orders' => array_map(
+                    fn (array $row): array => $this->normalizeOrderRow($row),
+                    $this->localOrdersFallback($status),
+                )],
                 'message' => '',
                 'raw' => [],
             ];
@@ -2490,6 +2636,419 @@ class AccountApiService
             Log::warning('AccountApiService::markNotificationsRead failed', ['error' => $e->getMessage()]);
 
             return $this->empty();
+        }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function extractSubscriptionRows(array $decoded): array
+    {
+        $containers = array_values(array_filter([
+            $decoded['data'] ?? null,
+            is_array($decoded['raw'] ?? null) ? ($decoded['raw']['data'] ?? $decoded['raw']) : null,
+        ], 'is_array'));
+
+        $rows = [];
+        foreach ($containers as $container) {
+            if (array_is_list($container)) {
+                $rows = array_merge($rows, array_values(array_filter($container, 'is_array')));
+
+                continue;
+            }
+
+            foreach (['subscriptions', 'items', 'rows', 'list', 'records', 'result', 'data'] as $key) {
+                $candidate = $container[$key] ?? null;
+                if (! is_array($candidate)) {
+                    continue;
+                }
+                if (array_is_list($candidate)) {
+                    $rows = array_merge($rows, array_values(array_filter($candidate, 'is_array')));
+                } elseif (isset($candidate['data']) && is_array($candidate['data']) && array_is_list($candidate['data'])) {
+                    $rows = array_merge($rows, array_values(array_filter($candidate['data'], 'is_array')));
+                }
+            }
+
+            foreach (['subscription', 'active_subscription', 'current_subscription'] as $key) {
+                $single = $container[$key] ?? null;
+                if (is_array($single) && (isset($single['id']) || isset($single['status']))) {
+                    $rows[] = $single;
+                }
+            }
+
+            if (isset($container['id']) && (is_numeric($container['id']) || is_string($container['id']))) {
+                $rows[] = $container;
+            }
+        }
+
+        return $this->dedupeRowsById($rows);
+    }
+
+    /**
+     * @param  array<string, mixed>  $decoded
+     * @return array<string, int>
+     */
+    protected function extractPaginationMeta(array $decoded): array
+    {
+        $raw = is_array($decoded['raw'] ?? null) ? $decoded['raw'] : [];
+        $data = is_array($decoded['data'] ?? null) ? $decoded['data'] : [];
+        $meta = is_array($raw['meta'] ?? null)
+            ? $raw['meta']
+            : (is_array($data['meta'] ?? null) ? $data['meta'] : []);
+
+        $currentPage = (int) ($meta['currentPage'] ?? $meta['current_page'] ?? 1);
+        $lastPage = (int) ($meta['lastPage'] ?? $meta['last_page'] ?? 1);
+
+        return [
+            'currentPage' => max(1, $currentPage),
+            'lastPage' => max(1, $lastPage),
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    protected function dedupeRowsById(array $rows): array
+    {
+        $seen = [];
+        $unique = [];
+
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $id = (int) ($row['id'] ?? $row['subscription_id'] ?? $row['invoice_id'] ?? 0);
+            $number = trim((string) ($row['number'] ?? $row['invoice_number'] ?? $row['order_number'] ?? ''));
+            $key = $id > 0
+                ? 'id:'.$id
+                : ($number !== '' ? 'num:'.$number : 'hash:'.md5(json_encode($row) ?: ''));
+
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $unique[] = $row;
+        }
+
+        return array_values($unique);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function localSubscriptionsFallback(): array
+    {
+        $phoneNorm = $this->normalizePhone((string) session('phone_verified', ''));
+        if ($phoneNorm === '') {
+            return [];
+        }
+
+        return Payment::query()
+            ->where('customer_phone_normalized', $phoneNorm)
+            ->where('kind', PaymentKind::Subscription)
+            ->whereIn('status', [
+                PaymentStatus::PAID->value,
+                PaymentStatus::AUTHORIZED->value,
+                PaymentStatus::REFUNDED->value,
+            ])
+            ->whereNotNull('external_subscription_id')
+            ->orderByDesc('created_at')
+            ->get()
+            ->unique(fn (Payment $payment): int => (int) $payment->external_subscription_id)
+            ->map(function (Payment $payment): array {
+                $payload = is_array($payment->checkout_payload) ? $payment->checkout_payload : [];
+                $planName = $payload['program_name']
+                    ?? $payload['plan_name']
+                    ?? data_get($payload, 'program.name')
+                    ?? data_get($payload, 'plan.name')
+                    ?? '';
+
+                return [
+                    'id' => (int) $payment->external_subscription_id,
+                    'status' => PaymentStatus::PAID->value,
+                    'plan' => ['name' => $planName],
+                    'program' => ['name' => $planName],
+                    'start_at' => $payment->start_date,
+                    'started_at' => $payment->start_date,
+                    'total' => $payment->amount_in_sar,
+                    'amount' => $payment->amount_in_sar,
+                    'source' => 'web_payment',
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    protected function finalizeInvoiceRows(array $rows, ?int $subscriptionFilter = null): array
+    {
+        $localBySubscription = $this->localInvoiceAmountIndex();
+
+        $normalized = array_map(
+            fn (array $row): array => $this->normalizeInvoiceRow($row, $localBySubscription),
+            $rows,
+        );
+
+        if ($subscriptionFilter === null || $subscriptionFilter <= 0) {
+            return array_values($normalized);
+        }
+
+        return array_values(array_filter(
+            $normalized,
+            fn (array $row): bool => (int) ($row['subscription_id'] ?? 0) === $subscriptionFilter,
+        ));
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<int, float>  $localBySubscription
+     * @return array<string, mixed>
+     */
+    public function normalizeInvoiceRow(array $row, array $localBySubscription = []): array
+    {
+        if ($localBySubscription === []) {
+            $localBySubscription = $this->localInvoiceAmountIndex();
+        }
+
+        $subscriptionId = $this->resolveInvoiceSubscriptionId($row);
+        if ($subscriptionId !== null) {
+            $row['subscription_id'] = $subscriptionId;
+        }
+
+        $amount = $this->resolveInvoiceAmount($row, $localBySubscription);
+        if ($amount !== null) {
+            $row['total'] = $amount;
+            $row['amount'] = $amount;
+        }
+
+        $rawDate = (string) ($row['created_at'] ?? $row['date'] ?? $row['issued_at'] ?? '');
+        if ($rawDate !== '') {
+            $row['created_at'] = $this->formatAccountDate($rawDate);
+            $row['date'] = $row['created_at'];
+        }
+
+        return $row;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    public function normalizeSubscriptionRow(array $row): array
+    {
+        $amount = $this->resolveRowMoneyAmount($row, [
+            'total',
+            'amount',
+            'price',
+            'grand_total',
+        ], [
+            'payment.total',
+            'payment.amount',
+            'checkout.total',
+            'plan.price',
+            'program.price',
+        ]);
+
+        if ($amount !== null) {
+            $row['total'] = $amount;
+            $row['amount'] = $amount;
+        }
+
+        foreach (['start_at', 'started_at', 'end_at', 'ended_at'] as $key) {
+            if (! empty($row[$key])) {
+                $row[$key] = $this->formatAccountDate((string) $row[$key]);
+            }
+        }
+
+        return $row;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    public function normalizeOrderRow(array $row): array
+    {
+        $amount = $this->resolveRowMoneyAmount($row, [
+            'total',
+            'amount',
+            'grand_total',
+            'order_total',
+        ], [
+            'payment.total',
+            'payment.amount',
+            'checkout.total',
+            'checkout.order_total',
+            'price',
+        ]);
+
+        if ($amount !== null) {
+            $row['total'] = $amount;
+            $row['amount'] = $amount;
+        }
+
+        foreach (['delivery_date', 'date', 'created_at'] as $key) {
+            if (! empty($row[$key])) {
+                $row[$key] = $this->formatAccountDate((string) $row[$key]);
+            }
+        }
+
+        return $row;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    protected function resolveInvoiceSubscriptionId(array $row): ?int
+    {
+        $subscriptionId = (int) (
+            $row['subscription_id']
+            ?? data_get($row, 'subscription.id')
+            ?? data_get($row, 'subscription_id')
+            ?? 0
+        );
+        if ($subscriptionId > 0) {
+            return $subscriptionId;
+        }
+
+        $number = trim((string) ($row['number'] ?? $row['invoice_number'] ?? ''));
+        if ($number !== '' && preg_match('/SUB-(\d+)/i', $number, $matches)) {
+            return (int) $matches[1];
+        }
+
+        $invoiceId = (int) ($row['id'] ?? $row['invoice_id'] ?? 0);
+
+        return $invoiceId > 0 ? $invoiceId : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<int, float>  $localBySubscription
+     */
+    protected function resolveInvoiceAmount(array $row, array $localBySubscription): ?float
+    {
+        $nestedCandidates = [
+            data_get($row, 'payment.total'),
+            data_get($row, 'payment.amount'),
+            data_get($row, 'checkout.total'),
+            data_get($row, 'checkout.order_total'),
+            data_get($row, 'price'),
+            data_get($row, 'subscription.total'),
+            data_get($row, 'subscription.price'),
+            $row['grand_total'] ?? null,
+            $row['total'] ?? null,
+        ];
+
+        foreach ($nestedCandidates as $candidate) {
+            $amount = $this->moneyAmount($candidate);
+            if ($amount > 1) {
+                return round($amount, 2);
+            }
+        }
+
+        foreach (['total', 'amount', 'paid_amount', 'grand_total'] as $key) {
+            $raw = $row[$key] ?? null;
+            if ($raw === null) {
+                continue;
+            }
+
+            $amount = is_array($raw) ? $this->moneyAmount($raw) : (is_numeric($raw) ? (float) $raw : 0.0);
+            if ($amount > 1) {
+                return round($amount, 2);
+            }
+        }
+
+        $subscriptionId = $this->resolveInvoiceSubscriptionId($row);
+        if ($subscriptionId !== null && isset($localBySubscription[$subscriptionId])) {
+            return round((float) $localBySubscription[$subscriptionId], 2);
+        }
+
+        $fallback = $this->moneyAmount($row['total'] ?? $row['amount'] ?? null);
+
+        return $fallback > 0 ? round($fallback, 2) : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<int, string>  $flatKeys
+     * @param  array<int, string>  $nestedKeys
+     */
+    protected function resolveRowMoneyAmount(array $row, array $flatKeys, array $nestedKeys): ?float
+    {
+        foreach ($nestedKeys as $path) {
+            $amount = $this->moneyAmount(data_get($row, $path));
+            if ($amount > 0) {
+                return round($amount, 2);
+            }
+        }
+
+        foreach ($flatKeys as $key) {
+            if (! array_key_exists($key, $row)) {
+                continue;
+            }
+
+            $amount = $this->moneyAmount($row[$key]);
+            if ($amount > 0) {
+                return round($amount, 2);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<int, float>
+     */
+    protected function localInvoiceAmountIndex(): array
+    {
+        $phoneNorm = $this->normalizePhone((string) session('phone_verified', ''));
+        if ($phoneNorm === '') {
+            return [];
+        }
+
+        $index = [];
+        Payment::query()
+            ->where('customer_phone_normalized', $phoneNorm)
+            ->whereIn('status', [PaymentStatus::PAID->value, PaymentStatus::REFUNDED->value])
+            ->orderByDesc('created_at')
+            ->limit(100)
+            ->get()
+            ->each(function (Payment $payment) use (&$index): void {
+                $payload = is_array($payment->checkout_payload) ? $payment->checkout_payload : [];
+                $subscriptionId = (int) ($payment->external_subscription_id ?? $payload['subscription_id'] ?? 0);
+                if ($subscriptionId <= 0) {
+                    return;
+                }
+
+                if (! isset($index[$subscriptionId]) || $payment->amount_in_sar > $index[$subscriptionId]) {
+                    $index[$subscriptionId] = $payment->amount_in_sar;
+                }
+            });
+
+        return $index;
+    }
+
+    public function formatAccountDate(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        try {
+            return Carbon::parse($value)->timezone(config('app.timezone'))->format('d-m-Y');
+        } catch (\Throwable) {
+            if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $value, $matches)) {
+                return Carbon::parse($matches[1])->format('d-m-Y');
+            }
+
+            return $value;
         }
     }
 }
