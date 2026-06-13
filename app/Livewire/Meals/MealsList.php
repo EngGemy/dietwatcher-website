@@ -283,6 +283,22 @@ class MealsList extends Component
         $payload = $this->fetchMealsPage($service);
         $this->lastPage = $payload['lastPage'];
 
+        $selectedGroupLabel = '';
+        if ($this->selectedGroup) {
+            foreach ($this->groups as $group) {
+                if ((int) ($group['value'] ?? 0) === (int) $this->selectedGroup) {
+                    $name = $group['name'] ?? '';
+                    if (is_array($name)) {
+                        $locale = app()->getLocale();
+                        $selectedGroupLabel = (string) ($name[$locale] ?? $name['en'] ?? reset($name) ?? '');
+                    } else {
+                        $selectedGroupLabel = (string) $name;
+                    }
+                    break;
+                }
+            }
+        }
+
         $rawCart = session()->get(CartManager::SESSION_MARKET, []);
         $cartItems = array_filter(
             $rawCart,
@@ -294,6 +310,7 @@ class MealsList extends Component
             'meals' => $payload['meals'],
             'cartItems' => $cartItems,
             'clientSearchFallback' => $payload['clientSearchFallback'],
+            'selectedGroupLabel' => $selectedGroupLabel,
         ]);
     }
 }

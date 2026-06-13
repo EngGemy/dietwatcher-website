@@ -731,8 +731,11 @@ class ExternalDataService
                 $meta['total'] = count($rows);
             }
 
+            $data = array_map([$this, 'transformMeal'], $rows);
+            $data = $this->enrichMealsWithRequestedGroup($data, $groupId, $menuId);
+
             return [
-                'data' => array_map([$this, 'transformMeal'], $rows),
+                'data' => $data,
                 'meta' => $meta,
             ];
         }, $empty);
@@ -1653,6 +1656,52 @@ class ExternalDataService
                 'tags' => $this->normalizeFilterBucket($payload['tags'] ?? []),
             ];
         }, $empty);
+    }
+
+    /**
+     * When GET /meals is filtered by group/menu, the API often omits group fields on each row.
+     * Inject the requested bucket label so the store UI matches the active filter tab.
+     *
+     * @param  array<int, array<string, mixed>>  $meals
+     * @return array<int, array<string, mixed>>
+     */
+    protected function enrichMealsWithRequestedGroup(array $meals, mixed $groupId, mixed $menuId): array
+    {
+        $filterId = $groupId ? (int) $groupId : ($menuId ? (int) $menuId : 0);
+        if ($filterId <= 0 || $meals === []) {
+            return $meals;
+        }
+
+        $resolvedName = $this->resolveFilterBucketName($filterId);
+        if ($resolvedName === '') {
+            return $meals;
+        }
+
+        return array_map(function (array $meal) use ($filterId, $resolvedName): array {
+            if (empty($meal['group_id'])) {
+                $meal['group_id'] = $filterId;
+            }
+            if (trim((string) ($meal['group_name'] ?? '')) === '') {
+                $meal['group_name'] = $resolvedName;
+                $meal['category_name'] = $resolvedName;
+            }
+
+            return $meal;
+        }, $meals);
+    }
+
+    protected function resolveFilterBucketName(int $id): string
+    {
+        $filters = $this->getMealFilters();
+        foreach (['groups', 'menus'] as $bucket) {
+            foreach ($filters[$bucket] ?? [] as $item) {
+                if ((int) ($item['value'] ?? 0) === $id) {
+                    return $this->localizedString($item['name'] ?? '');
+                }
+            }
+        }
+
+        return '';
     }
 
     /**

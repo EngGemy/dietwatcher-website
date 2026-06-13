@@ -213,7 +213,15 @@
             if ($tagName !== '') {
                 $tagName = (string) __($tagName);
             }
-            $metaLabels = array_values(array_unique(array_filter([$tagName, $categoryName], static fn ($v): bool => $v !== '')));
+            $groupNameRaw = trim((string) ($meal['group_name'] ?? $meal['category_name'] ?? ''));
+            if ($groupNameRaw === '' && ! empty($selectedGroupLabel)) {
+                $groupNameRaw = trim((string) $selectedGroupLabel);
+            }
+            if ($groupNameRaw !== '') {
+                $groupNameRaw = (string) __($groupNameRaw);
+            }
+            $cardCategoryLabel = $groupNameRaw !== '' ? $groupNameRaw : $tagName;
+            $metaLabels = $cardCategoryLabel !== '' ? [$cardCategoryLabel] : [];
             $cartQty    = $cartItems['meal_' . $meal['id']]['quantity'] ?? 0;
             $discount   = $hasOffer ? round((1 - $meal['offer_price'] / $meal['price']) * 100) : 0;
             $detailUrl = route('store.show', $meal['id']);
