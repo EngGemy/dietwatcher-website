@@ -43,7 +43,10 @@
       "Bash(git add:*)",
       "mcp__claude_ai_Figma__get_design_context",
       "mcp__claude_ai_Figma__get_screenshot",
-      "mcp__claude_ai_Figma__whoami"
+      "mcp__claude_ai_Figma__whoami",
+      "mcp__plugin_laravel-boost_laravel-boost__browser-logs",
+      "mcp__plugin_laravel-boost_laravel-boost__get-absolute-url",
+      "mcp__claude_ai_Playwright_mcp__navigate_and_screenshot"
     ]
   }
 }

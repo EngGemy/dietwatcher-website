@@ -378,11 +378,14 @@
                     @endphp
                     @php
                         $isPlaceholderMeal = ! empty($meal['_placeholder']);
+                        // كاروسيل متحرّك أفقياً: lazy-loading يخلّي المتصفح يؤجّل صور
+                        // الكروت اللي خارج الـ viewport للأبد (لأنها لا "تدخل" الشاشة
+                        // بالـ scroll) فتظهر فاضية. لذا كل صور الـ rail eager.
                         if ($isRailCloneSegment) {
                             $railImgLoading = 'eager';
                             $railImgFetchPriority = 'low';
                         } else {
-                            $railImgLoading = $loop->iteration <= 4 ? 'eager' : 'lazy';
+                            $railImgLoading = 'eager';
                             $railImgFetchPriority = $loop->iteration <= 4 ? 'high' : 'low';
                         }
                     @endphp
@@ -546,8 +549,13 @@
             <div class="testimonials-rail" data-testimonials-rail data-rail-min-width="280">
                 <div class="testimonials-rail__viewport" data-testimonials-viewport>
                     <div class="testimonials-rail__track" data-testimonials-track>
+                @foreach (['original', 'clone'] as $tSegmentType)
+                    @php $isTCloneSegment = $tSegmentType === 'clone'; @endphp
+                    <div class="infinite-rail__segment"
+                         data-rail-segment="{{ $tSegmentType }}"
+                         @if($isTCloneSegment) aria-hidden="true" data-rail-clone="1" @endif>
                 @foreach ($homeTestimonials as $testimonial)
-                    <article class="hs-carousel-slide testimonials-card-wrap testimonials-rail__item" data-testimonial-item>
+                    <article class="hs-carousel-slide testimonials-card-wrap testimonials-rail__item" data-testimonial-item @if($isTCloneSegment) data-rail-clone="1" @endif>
                         <div class="review-card testimonials-card">
                             <svg class="review-card__quote">
                                 <use href="{{ asset('assets/images/icons/sprite.svg#quote') }}"></use>
@@ -578,6 +586,8 @@
                             </div>
                         </div>
                     </article>
+                @endforeach
+                    </div>
                 @endforeach
                     </div>
                 </div>
@@ -1178,6 +1188,11 @@
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: x proximity;
     scrollbar-width: none;
+    /* RTL fix: نُثبّت سياق LTR على الـ viewport نفسه حتى تكون نقطة بداية
+       الـ flex والـ scroll على اليسار (لا اليمين كما في RTL الافتراضي).
+       بدون هذا، يبدأ الـ track متزحلقاً لليمين فتخرج الكروت خارج الشاشة
+       عند تطبيق translateX السالب. النص داخل الكروت يعود لـ rtl بقواعده. */
+    direction: ltr;
 }
 .products-rail__viewport::-webkit-scrollbar,
 .testimonials-rail__viewport::-webkit-scrollbar {
@@ -1210,15 +1225,10 @@
     direction: ltr;
     backface-visibility: hidden;
 }
-.products-rail__track.is-rail-running {
-    animation: infinite-rail-marquee var(--rail-duration, 35s) linear infinite;
-}
-.products-rail__track.is-rail-running.is-rail-paused {
-    animation-play-state: paused;
-}
+/* is-rail-running / is-rail-paused: state classes only — motion is rAF-driven */
 @keyframes infinite-rail-marquee {
     from { transform: translate3d(0, 0, 0); }
-    to { transform: translate3d(-50%, 0, 0); }
+    to   { transform: translate3d(-50%, 0, 0); }
 }
 .infinite-rail__segment {
     display: flex;
@@ -1472,12 +1482,7 @@
     direction: ltr;
     backface-visibility: hidden;
 }
-.testimonials-rail__track.is-rail-running {
-    animation: infinite-rail-marquee var(--rail-duration, 35s) linear infinite;
-}
-.testimonials-rail__track.is-rail-running.is-rail-paused {
-    animation-play-state: paused;
-}
+/* testimonials rail: motion rAF-driven, same as products rail */
 .testimonials-rail__item {
     width: var(--t-card-w);
     min-width: var(--t-card-w);
@@ -1978,18 +1983,23 @@
             var speed = parseFloat(section.getAttribute('data-rail-speed') || '') || cfg.speed || 0.12;
             if (isNaN(speed) || speed <= 0) speed = 0.12;
 
-            var listeners  = [];
-            var visObs     = null;
+            var listeners   = [];
+            var visObs      = null;
             var resizeTimer = null;
+            // rAF state
+            var rafId      = null;
+            var posX       = 0;       // current X offset in px  (0 .. -segW)
+            var lastTs     = null;    // last rAF timestamp
+            var cachedSegW = 0;       // segment width, measured once + on resize
             var state = {
-                animating:     false,
-                isDragging:    false,
-                isPaused:      false,
+                animating:      false,
+                isDragging:     false,
+                isPaused:       false,
                 hasBeenVisible: false,
-                pointerId:     null,
-                dragStartX:    0,
-                dragOffsetX:   0,
-                resumeTimer:   null,
+                pointerId:      null,
+                dragStartX:     0,
+                dragOffsetX:    0,
+                resumeTimer:    null,
             };
 
             function on(el, evt, fn, opts) {
@@ -1997,81 +2007,105 @@
                 listeners.push({ el: el, evt: evt, fn: fn, opts: opts });
             }
 
-            // Track must always be LTR; card direction handled by CSS [dir=rtl] selector
             track.style.direction = 'ltr';
             track.style.transform = 'translate3d(0,0,0)';
 
-            /* ── Measurement ─────────────────────────────── */
+            /* ── Segment width ───────────────────────── */
             function getSegmentWidth() {
                 var orig  = track.querySelector('[data-rail-segment="original"]');
                 var clone = track.querySelector('[data-rail-segment="clone"]');
-                // Prefer distance between segment starts (excludes track padding correctly)
+                // الأدق: المسافة بين بداية النسخة الأصلية وبداية النسخة المستنسخة
+                // (تشمل الـ gap الفاصل بين الـ segments) → wrap بلا فراغ.
                 if (orig && clone) {
                     var d = clone.offsetLeft - orig.offsetLeft;
                     if (d > 0) return d;
                 }
-                if (orig && orig.offsetWidth > 0) return orig.offsetWidth;
+                // احتياطي: العرض الفعلي للنسخة الأصلية (للحالات بلا clone)
+                if (orig) {
+                    var w = orig.getBoundingClientRect().width;
+                    if (w > 0) return w;
+                    if (orig.offsetWidth > 0) return orig.offsetWidth;
+                }
                 return 0;
             }
 
-            function getDuration() {
-                var w = getSegmentWidth();
-                return w > 0 ? w / (speed * 1000) : 35;
+            /* ── rAF loop ────────────────────────────── */
+            function tick(ts) {
+                // أعد قياس عرض الـ segment طالما لم نحصل على قيمة موثوقة بعد.
+                // هذا يزيل تأخّر البدء (الصور/الخطوط قد لا تكون جاهزة في أول إطار)
+                // ويمنع استمرار الحركة بقيمة 0 التي تترك فراغاً في النهاية.
+                if (cachedSegW <= 0) {
+                    cachedSegW = getSegmentWidth();
+                }
+
+                if (lastTs !== null && cachedSegW > 0) {
+                    var elapsed = Math.min(ts - lastTs, 100);
+                    posX -= speed * elapsed;
+                    // لفّ فوري بمجرد انتهاء النسخة الأولى — بلا أي فراغ.
+                    // modulo يضمن استمرار النسخة المستنسخة في مكان النسخة الأصلية تماماً.
+                    while (posX <= -cachedSegW) {
+                        posX += cachedSegW;
+                    }
+                    track.style.transform = 'translate3d(' + posX.toFixed(3) + 'px,0,0)';
+                }
+                lastTs = ts;
+                rafId = requestAnimationFrame(tick);
             }
 
-            /* ── Animation control ───────────────────────── */
-            function stopAnim() {
-                track.classList.remove('is-rail-running', 'is-rail-paused');
-                track.style.animationDelay = '';
-                section.classList.remove('is-marquee-active');
+            function startLoop() {
+                if (rafId !== null) return;
+                lastTs = null;
+                rafId = requestAnimationFrame(tick);
             }
 
-            function startAnim(negDelaySec) {
-                stopAnim();
-                var dur = getDuration();
-                track.style.setProperty('--rail-duration', dur.toFixed(3) + 's');
-                track.style.transform = 'translate3d(0,0,0)';
-                track.style.animationDelay =
-                    (typeof negDelaySec === 'number' && isFinite(negDelaySec) && negDelaySec < 0)
-                        ? negDelaySec.toFixed(4) + 's'
-                        : '0s';
-                // Force reflow so removing+re-adding class restarts the animation from scratch
-                void track.offsetWidth;
-                track.classList.add('is-rail-running');
+            function stopLoop() {
+                if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+                lastTs = null;
+            }
+
+            /* ── Animation control ───────────────────── */
+            function startAnim(startPx) {
+                stopLoop();
+                // حماية إضافية ضد بداية scroll متزحلقة في RTL:
+                // نُصفّر أي إزاحة scroll أفقية على الـ viewport قبل بدء الحركة.
+                if (viewport.scrollLeft !== 0) {
+                    try { viewport.scrollLeft = 0; } catch (e) {}
+                }
+                posX = typeof startPx === 'number' ? startPx : 0;
+                track.style.transform = 'translate3d(' + posX.toFixed(3) + 'px,0,0)';
                 section.classList.add('is-marquee-active');
+                track.classList.add('is-rail-running');
+                track.classList.remove('is-rail-paused');
                 state.animating = true;
-                if (state.isPaused) track.classList.add('is-rail-paused');
+                startLoop();
+            }
+
+            function stopAnim() {
+                stopLoop();
+                track.classList.remove('is-rail-running', 'is-rail-paused');
+                section.classList.remove('is-marquee-active');
+                state.animating = false;
             }
 
             function syncPause() {
-                track.classList.toggle('is-rail-paused', state.isPaused || state.isDragging);
+                if (state.isPaused || state.isDragging) {
+                    stopLoop();
+                    track.classList.add('is-rail-paused');
+                } else {
+                    track.classList.remove('is-rail-paused');
+                    if (state.animating && rafId === null) startLoop();
+                }
             }
 
-            /* ── Read current animated X in px ──────────── */
-            function readAnimatedX() {
-                var t = window.getComputedStyle(track).transform;
-                if (!t || t === 'none') return 0;
-                try {
-                    if (typeof DOMMatrixReadOnly !== 'undefined') {
-                        return new DOMMatrixReadOnly(t).m41;
-                    }
-                    var m = t.match(/matrix(3d)?\(([^)]+)\)/);
-                    if (!m) return 0;
-                    var p = m[2].split(',').map(Number);
-                    return m[1] === '3d' ? (p[12] || 0) : (p[4] || 0);
-                } catch (e) { return 0; }
-            }
-
-            /* ── Drag ────────────────────────────────────── */
+            /* ── Drag ────────────────────────────────── */
             function pointerDown(e) {
                 if (cfg.ignoreDragSelector && e.target.closest(cfg.ignoreDragSelector)) return;
-                // Capture current pixel position BEFORE stopping animation
-                state.dragOffsetX = readAnimatedX();
-                state.isDragging  = true;
-                state.pointerId   = e.pointerId;
-                state.dragStartX  = e.clientX;
-                stopAnim();
-                track.style.transform = 'translate3d(' + state.dragOffsetX + 'px,0,0)';
+                state.dragOffsetX = posX;          // capture before stopping loop
+                stopLoop();                        // pause rAF; is-marquee-active stays
+                state.isDragging = true;
+                state.pointerId  = e.pointerId;
+                state.dragStartX = e.clientX;
+                track.style.transform = 'translate3d(' + posX.toFixed(3) + 'px,0,0)';
                 viewport.classList.add('is-dragging');
                 try { viewport.setPointerCapture(e.pointerId); } catch (err) {}
             }
@@ -2079,21 +2113,21 @@
             function pointerMove(e) {
                 if (!state.isDragging || e.pointerId !== state.pointerId) return;
                 var x = state.dragOffsetX + (e.clientX - state.dragStartX);
-                track.style.transform = 'translate3d(' + x + 'px,0,0)';
+                track.style.transform = 'translate3d(' + x.toFixed(3) + 'px,0,0)';
             }
 
             function commitDrag(finalClientX) {
-                var finalX   = state.dragOffsetX + (finalClientX - state.dragStartX);
-                var segW     = getSegmentWidth();
-                var dur      = getDuration();
-                var progress = segW > 0 ? (((-finalX % segW) + segW) % segW / segW) : 0;
+                var finalX = state.dragOffsetX + (finalClientX - state.dragStartX);
+                var segW   = getSegmentWidth();
+                // Normalise to (-segW, 0]
+                posX = segW > 0 ? -((((-finalX % segW) + segW) % segW)) : 0;
+                state.isDragging = false;
                 viewport.classList.remove('is-dragging');
-                startAnim(-(progress * dur));
+                startAnim(posX);
             }
 
             function pointerUp(e) {
                 if (!state.isDragging || e.pointerId !== state.pointerId) return;
-                state.isDragging = false;
                 try { viewport.releasePointerCapture(e.pointerId); } catch (err) {}
                 commitDrag(e.clientX);
             }
@@ -2102,10 +2136,10 @@
                 if (!state.isDragging) return;
                 state.isDragging = false;
                 viewport.classList.remove('is-dragging');
-                startAnim(0);
+                startAnim(posX);
             }
 
-            /* ── Pause / resume ──────────────────────────── */
+            /* ── Pause / resume ──────────────────────── */
             function pauseRail(autoResumeMs) {
                 state.isPaused = true;
                 syncPause();
@@ -2126,7 +2160,7 @@
                 }, delayMs || 0);
             }
 
-            /* ── Boot ────────────────────────────────────── */
+            /* ── Boot ────────────────────────────────── */
             function reveal() {
                 section.classList.add('is-initialized');
                 section.classList.remove('is-rail-rebuilding');
@@ -2134,12 +2168,19 @@
             }
 
             function boot() {
-                // Make clone images eager (same URLs as originals, already cached)
+                // أجبر كل صور الـ rail على التحميل الفوري: في كاروسيل متحرّك
+                // الصور خارج الشاشة لا "تدخل" الـ viewport أبداً، فالمتصفح يؤجّلها
+                // للأبد (lazy intervention) وتظهر فاضية. eager يضمن ظهورها.
+                track.querySelectorAll('img').forEach(function(img) {
+                    img.loading = 'eager';
+                    if (img.getAttribute('decoding') !== 'async') {
+                        img.setAttribute('decoding', 'async');
+                    }
+                });
+
                 var cloneSeg = track.querySelector('[data-rail-segment="clone"]');
                 if (cloneSeg) {
-                    cloneSeg.querySelectorAll('img').forEach(function(img) {
-                        img.loading = 'eager';
-                    });
+                    cloneSeg.querySelectorAll('img').forEach(function(img) { img.loading = 'eager'; });
                 }
 
                 if (prefersReduced) {
@@ -2149,16 +2190,41 @@
                     return;
                 }
 
-                // Two rAFs: first lets layout flush, second fires after first paint
+                // Two rAFs: let layout flush before measuring segment width
                 requestAnimationFrame(function() {
                     requestAnimationFrame(function() {
                         reveal();
+                        cachedSegW = getSegmentWidth();
                         startAnim(0);
                     });
                 });
+
+                // إعادة قياس بعد اكتمال تحميل الصور والخطوط: قبل ذلك تكون أبعاد
+                // البطاقات غير نهائية فيخرج عرض الـ segment خاطئاً (سبب الفراغ والتأخير).
+                function remeasure() {
+                    var w = getSegmentWidth();
+                    if (w > 0) {
+                        cachedSegW = w;
+                        if (posX < -cachedSegW) {
+                            posX = posX % cachedSegW;
+                        }
+                    }
+                }
+
+                track.querySelectorAll('img').forEach(function(img) {
+                    if (!img.complete) {
+                        img.addEventListener('load', remeasure, { once: true });
+                        img.addEventListener('error', remeasure, { once: true });
+                    }
+                });
+
+                if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
+                    document.fonts.ready.then(remeasure);
+                }
+                window.addEventListener('load', remeasure, { once: true });
             }
 
-            /* ── Events ──────────────────────────────────── */
+            /* ── Events ──────────────────────────────── */
             if (!prefersReduced) {
                 if (canHoverPause) {
                     on(section, 'mouseenter', function() { pauseRail(1500); });
@@ -2171,7 +2237,7 @@
                 on(viewport, 'lostpointercapture', onLostCapture);
             }
 
-            // Pause only when scrolled completely out of view
+            // Pause when out of view, resume when back
             if ('IntersectionObserver' in window) {
                 visObs = new IntersectionObserver(function(entries) {
                     entries.forEach(function(entry) {
@@ -2184,20 +2250,18 @@
                 visObs.observe(section);
             }
 
-            // On resize: preserve current visual position, recalc duration
+            // On resize: invalidate cached width and re-normalise posX
             on(window, 'resize', function() {
                 clearTimeout(resizeTimer);
                 resizeTimer = setTimeout(function() {
-                    if (!state.animating || state.isDragging) return;
-                    var x    = readAnimatedX();
-                    var segW = getSegmentWidth();
-                    var dur  = getDuration();
-                    var p    = segW > 0 ? (((-x % segW) + segW) % segW / segW) : 0;
-                    startAnim(-(p * dur));
+                    cachedSegW = getSegmentWidth();
+                    if (cachedSegW > 0 && posX < -cachedSegW) {
+                        posX = posX % cachedSegW;   // wrap to (-segW, 0]
+                    }
                 }, 200);
             }, { passive: true });
 
-            /* ── Destroy ─────────────────────────────────── */
+            /* ── Destroy ─────────────────────────────── */
             function destroy() {
                 stopAnim();
                 clearTimeout(state.resumeTimer);
@@ -2230,12 +2294,9 @@
             section._railApi = {
                 destroy:   destroy,
                 rebuild:   function() {
-                    if (state.animating && !state.isDragging) {
-                        var x    = readAnimatedX();
-                        var segW = getSegmentWidth();
-                        var dur  = getDuration();
-                        var p    = segW > 0 ? (((-x % segW) + segW) % segW / segW) : 0;
-                        startAnim(-(p * dur));
+                    cachedSegW = getSegmentWidth();
+                    if (state.animating && !state.isDragging && cachedSegW > 0 && posX < -cachedSegW) {
+                        posX = posX % cachedSegW;
                     }
                 },
                 direction: getPageDirection,

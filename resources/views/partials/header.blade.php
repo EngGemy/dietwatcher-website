@@ -204,17 +204,19 @@
                 $customerInitial = $customerName !== ''
                     ? mb_strtoupper(mb_substr($customerName, 0, 1))
                     : '';
+
+                $profileState = [
+                    'open' => false,
+                    'loggedIn' => $isLoggedIn,
+                    'customerName' => $customerName,
+                    'customerInitial' => $customerInitial,
+                ];
             @endphp
 
             <div
                 class="hs-dropdown relative inline-flex header__action-chip header__action-chip--profile"
                 style="--ha-i:0"
-                x-data="{
-                    open: false,
-                    loggedIn: @json($isLoggedIn),
-                    customerName: @json($customerName),
-                    customerInitial: @json($customerInitial),
-                }"
+                x-data="@js($profileState)"
                 @checkout-session-updated.window="
                     loggedIn = !!$event.detail.loggedIn;
                     customerName = $event.detail.customerName || '';
