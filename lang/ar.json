@@ -783,6 +783,7 @@
     "checkout.area_not_served": "عذرًا، لا نخدم هذه المنطقة حاليًا. نخدم الرياض والأحياء المغطاة فقط.",
     "checkout.start_date_adjusted_notice": "تغيّر أقرب تاريخ متاح للبدء. يرجى مراجعة اختيارك.",
     "checkout.confirm_saved_address_before_payment": "أكد عنوان التوصيل على الخريطة لحفظه في حسابك قبل الدفع.",
+    "checkout.complete_before_payment_title": "أكمل الخطوات التالية لفتح الدفع",
     "checkout.api_temporarily_unavailable": "خدمة الاشتراك غير متاحة مؤقتاً. يرجى المحاولة بعد قليل.",
     "checkout.subscription_payment_unavailable": "تعذر بدء الدفع لهذا الاشتراك. حدّث الصفحة وحاول مرة أخرى.",
     "checkout.address_already_saved": "هذا الموقع محفوظ مسبقاً في عناوينك.",

@@ -845,6 +845,7 @@
     "checkout.area_not_served": "Sorry, we do not serve this area currently. We serve Riyadh and covered districts only.",
     "checkout.start_date_adjusted_notice": "The earliest available start date has changed. Please review your selection.",
     "checkout.confirm_saved_address_before_payment": "Confirm your delivery address on the map so it is saved to your account before paying.",
+    "checkout.complete_before_payment_title": "Complete checkout to unlock payment",
     "checkout.api_temporarily_unavailable": "The subscription service is temporarily unavailable. Please try again in a moment.",
     "checkout.subscription_payment_unavailable": "We could not start payment for this subscription. Please refresh the page and try again.",
     "checkout.address_already_saved": "This location is already in your saved addresses.",

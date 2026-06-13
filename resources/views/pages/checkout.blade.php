@@ -596,22 +596,43 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                     <p x-show="newAddressError" x-cloak class="text-sm text-red-600" x-text="newAddressError"></p>
                                 </div>
                         </div>
+
+                        {{-- Next-step hint: shown here (not in payment) until checkout is complete --}}
+                        <div
+                            x-show="phoneVerified && !canProceedToPayment() && checkoutSetupHint()"
+                            x-cloak
+                            class="checkout-setup-hint mt-6"
+                            role="status"
+                            aria-live="polite"
+                        >
+                            <div class="checkout-setup-hint__icon" aria-hidden="true">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                                </svg>
+                            </div>
+                            <div class="checkout-setup-hint__body">
+                                <p class="checkout-setup-hint__title">{{ __('checkout.complete_before_payment_title') }}</p>
+                                <p class="checkout-setup-hint__text" x-text="checkoutSetupHint()"></p>
+                            </div>
+                        </div>
                     </div>
 
-                    {{-- Payment: Moyasar (fields visible, pay button disabled until phone verified) --}}
-                    <div class="mt-6 rounded-md border border-gray-200 bg-white p-5"
-                         x-ref="paymentCard"
-                         :class="{ 'checkout-pay-locked': !phoneVerified }"
+                    {{-- Payment: Moyasar — only after phone verified and all checkout steps complete --}}
+                    <div
+                        x-show="showPaymentSection()"
+                        x-cloak
+                        x-transition:enter="transition ease-out duration-300"
+                        x-transition:enter-start="opacity-0 translate-y-2"
+                        x-transition:enter-end="opacity-100 translate-y-0"
+                        class="mt-6 rounded-md border border-gray-200 bg-white p-5"
+                        x-ref="paymentCard"
                     >
                         <h3 class="mb-2 text-2xl font-semibold md:text-2xl">{{ __('Payment') }}</h3>
                         <p class="mb-4 text-sm text-gray-600">{{ __('payment.pay_with_moyasar') }}</p>
 
-                        <div class="mb-3 flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3">
-                            <svg x-show="phoneVerified" xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                        <div class="mb-3 flex items-start gap-3 rounded-lg border border-green-200 bg-green-50/80 p-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-                            <svg x-show="!phoneVerified" x-cloak xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                             </svg>
                             <div>
                                 <p class="text-sm font-semibold text-gray-800">{{ __('payment.secure_checkout') }}</p>
@@ -627,27 +648,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             x-text="syncAddressErrorDisplay()"
                         ></div>
 
-                        <div class="relative min-h-[160px] rounded-xl border border-gray-200 bg-gray-50 p-4">
-                            <div
-                                x-show="phoneVerified && !canProceedToPayment() && paymentBlockerMessage()"
-                                x-cloak
-                                class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-                                x-text="paymentBlockerMessage()"></div>
-                            {{-- Info banner when phone not verified --}}
-                            <div
-                                x-show="!phoneVerified"
-                                x-cloak
-                                x-transition:leave="transition ease-in duration-200"
-                                x-transition:leave-start="opacity-100 max-h-20"
-                                x-transition:leave-end="opacity-0 max-h-0"
-                                class="mb-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
-                                </svg>
-                                <span>{{ __('payment.verify_phone_to_pay') }}</span>
-                            </div>
-
+                        <div class="relative rounded-xl border border-gray-200 bg-gray-50 p-4">
                             <div id="moyasar-form-checkout" class="relative z-[1] min-h-[120px] w-full"></div>
                         </div>
                     </div>
@@ -1426,6 +1427,46 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
         border: 1px solid rgba(239, 68, 68, 0.3);
         background: #fef2f2;
         color: #991b1b;
+    }
+
+    .checkout-setup-hint {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.85rem;
+        padding: 1rem 1.1rem;
+        border-radius: 12px;
+        border: 1px solid rgba(245, 158, 11, 0.35);
+        background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
+        box-shadow: 0 1px 2px rgba(180, 83, 9, 0.06);
+    }
+    .checkout-setup-hint__icon {
+        display: flex;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: 9999px;
+        background: rgba(251, 191, 36, 0.25);
+        color: #b45309;
+    }
+    .checkout-setup-hint__icon svg {
+        width: 1.25rem;
+        height: 1.25rem;
+    }
+    .checkout-setup-hint__title {
+        margin: 0 0 0.25rem;
+        font-size: 0.875rem;
+        font-weight: 700;
+        line-height: 1.4;
+        color: #78350f;
+    }
+    .checkout-setup-hint__text {
+        margin: 0;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        line-height: 1.55;
+        color: #92400e;
     }
 
     #moyasar-form-checkout .mysr-form {
@@ -3061,9 +3102,24 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     && this.deliveryTimeReady();
             },
 
-            paymentBlockerMessage() {
-                if (! this.phoneVerified) {
+            showPaymentSection() {
+                return this.phoneVerified && this.canProceedToPayment();
+            },
+
+            checkoutSetupHint() {
+                if (! this.phoneVerified || this.canProceedToPayment()) {
                     return '';
+                }
+
+                const hasSelectedDuration = this.isPlanCheckout
+                    ? (this.selectedDurationValue() !== '' || Number(this.cartDurationDaysHint || 0) > 0)
+                    : this.selectedDurationValue() !== '';
+
+                if (this.isPlanCheckout && ! hasSelectedDuration) {
+                    return @json(__('checkout.payment_blocker_home'));
+                }
+                if (this.isPlanCheckout && ! this.startDateValid()) {
+                    return @json(__('checkout.start_date_required'));
                 }
                 if (this.deliveryType === 'pickup') {
                     return @json(__('checkout.payment_blocker_pickup'));
@@ -3074,8 +3130,18 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         return this.syncAddressError;
                     }
                 }
+                if (! this.deliveryTimeReady()) {
+                    return @json(__('checkout.select_delivery_time'));
+                }
+                if (! this.selectedAddressId) {
+                    return @json(__('checkout.confirm_saved_address_before_payment'));
+                }
 
-                return @json(__('checkout.confirm_saved_address_before_payment'));
+                return @json(__('checkout.payment_blocker_home'));
+            },
+
+            paymentBlockerMessage() {
+                return this.checkoutSetupHint();
             },
 
             // Computed: subscription line total is fixed; meals use duration multiplier
