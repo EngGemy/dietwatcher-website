@@ -351,7 +351,17 @@ class MealAssistant extends Component
         if ($gemini->isConfigured()) {
             $aiResults = $this->fetchGeminiRecommendations($gemini, $meals);
             if ($aiResults !== []) {
-                $this->recommendations = $aiResults;
+                if (count($aiResults) < 6) {
+                    $existingIds = collect($aiResults)->pluck('meal_id')->all();
+                    $fill = collect($this->localRecommendations($meals))
+                        ->reject(fn (array $row): bool => in_array((int) ($row['meal_id'] ?? 0), $existingIds, true))
+                        ->take(8 - count($aiResults))
+                        ->values()
+                        ->all();
+                    $aiResults = array_merge($aiResults, $fill);
+                }
+
+                $this->recommendations = array_slice($aiResults, 0, 8);
                 $this->recommendationSource = 'gemini';
                 $this->loadingRecommendations = false;
 
@@ -680,8 +690,13 @@ PROMPT;
      */
     private function fetchGeminiRecommendations(GeminiService $gemini, Collection $meals): array
     {
-        $catalog = $meals
-            ->take(80)
+        $locale = app()->getLocale();
+        $lang = $locale === 'ar' ? 'Arabic' : 'English';
+        $mealsPerDay = max(1, $this->mealsPerDay);
+        $perMealCal = (int) round(max(120, (float) ($this->targetCalories ?? 0) / $mealsPerDay));
+
+        $catalog = $this->rankMealsCollection($meals)
+            ->take(100)
             ->map(fn (array $meal): array => [
                 'id' => (int) ($meal['id'] ?? 0),
                 'name' => (string) ($meal['name'] ?? ''),
@@ -690,28 +705,46 @@ PROMPT;
                 'carbs' => (float) ($meal['carbs'] ?? 0),
                 'fat' => (float) ($meal['fat'] ?? 0),
                 'price' => (float) ($meal['price'] ?? 0),
-                'group_name' => (string) ($meal['group_name'] ?? ''),
-                'tags' => array_column($meal['tags'] ?? [], 'name'),
+                'group_name' => (string) ($meal['group_name'] ?? $meal['category_name'] ?? ''),
+                'tags' => collect($meal['tags'] ?? [])
+                    ->map(fn ($tag) => is_array($tag)
+                        ? (string) ($tag['display_name'] ?? $tag['name'] ?? '')
+                        : '')
+                    ->filter()
+                    ->values()
+                    ->all(),
             ])
             ->values()
             ->all();
 
-        $lang = $locale === 'ar' ? 'Arabic' : 'English';
-
         $system = <<<PROMPT
-You are a nutrition assistant and meal sales advisor for Diet Watchers in Saudi Arabia.
-Return ONLY valid JSON: an array of objects with keys meal_id (int), reason_ar (string), reason_en (string), fit_score (int 0-100), upsell_tip (string in {$lang} — one sentence on why to buy today).
-Pick the best 8 meals from the catalog for the user's full profile. Reasons must be specific to their goal, restrictions, and macros.
+You are a senior nutrition consultant and meal sales advisor for Diet Watchers in Saudi Arabia.
+Return ONLY valid JSON: an array of exactly 8 objects with keys:
+- meal_id (int, must exist in catalog)
+- reason_ar (string, 1-2 sentences in Arabic — specific to goal, macros, restrictions)
+- reason_en (string, 1-2 sentences in English)
+- fit_score (int 0-100)
+- upsell_tip (string in {$lang} — one persuasive sentence to buy today)
+
+Rules:
+- Pick ONLY from catalog meal_id values. Never invent meals.
+- Respect restrictions and diet_style from the profile (exclude incompatible meals).
+- Prioritize meals whose calories are within ±25% of per_meal_calorie_target.
+- For weight loss (goal=lose): favor lower calories and higher protein.
+- For muscle gain (goal=gain): favor higher protein and adequate calories.
+- Reasons must mention concrete numbers (calories, protein) and the customer's goal.
 PROMPT;
 
         $user = json_encode([
-            'profile' => $this->userProfilePayload(),
+            'profile' => array_merge($this->userProfilePayload(), [
+                'per_meal_calorie_target' => $perMealCal,
+            ]),
             'catalog' => $catalog,
         ], JSON_UNESCAPED_UNICODE);
 
         $raw = $gemini->generate($system, [
             ['role' => 'user', 'content' => $user],
-        ], true, 0.45);
+        ], true, 0.5);
 
         if ($raw === null) {
             return [];
@@ -765,36 +798,12 @@ PROMPT;
      */
     private function localRecommendations(Collection $meals): array
     {
+        $locale = app()->getLocale();
         $mealsPerDay = max(1, $this->mealsPerDay);
         $targetCal = (float) ($this->targetCalories ?? 0);
         $perMealCal = max(120, $targetCal / $mealsPerDay);
-        $perMealProtein = max(5, (float) ($this->macroTargets['protein_g'] ?? 0) / $mealsPerDay);
-        $perMealCarbs = max(5, (float) ($this->macroTargets['carbs_g'] ?? 0) / $mealsPerDay);
-        $perMealFat = max(2, (float) ($this->macroTargets['fat_g'] ?? 0) / $mealsPerDay);
-        $locale = app()->getLocale();
 
-        $ranked = $meals
-            ->map(function (array $meal) use ($perMealCal, $perMealProtein, $perMealCarbs, $perMealFat): array {
-                $cal = (int) ($meal['calories'] ?? 0);
-                $protein = (float) ($meal['protein'] ?? 0);
-                $carbs = (float) ($meal['carbs'] ?? 0);
-                $fat = (float) ($meal['fat'] ?? 0);
-
-                if ($cal <= 0) {
-                    return ['meal' => $meal, 'distance' => 0.75];
-                }
-
-                $score = (
-                    abs($cal - $perMealCal) / $perMealCal * 0.5
-                    + abs($protein - $perMealProtein) / $perMealProtein * 0.25
-                    + abs($carbs - $perMealCarbs) / max($perMealCarbs, 1) * 0.15
-                    + abs($fat - $perMealFat) / max($perMealFat, 1) * 0.1
-                );
-
-                return ['meal' => $meal, 'distance' => $score];
-            })
-            ->sortBy('distance')
-            ->take(8);
+        $ranked = $this->rankMealsWithScores($meals)->take(8);
 
         if ($ranked->isEmpty()) {
             $ranked = $meals->take(8)->map(fn (array $meal): array => ['meal' => $meal, 'distance' => 0.5]);
@@ -818,6 +827,61 @@ PROMPT;
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * Rank catalog meals by macro/calorie fit for the current profile.
+     *
+     * @param  Collection<int, array<string, mixed>>  $meals
+     * @return Collection<int, array{meal: array<string, mixed>, distance: float}>
+     */
+    private function rankMealsWithScores(Collection $meals): Collection
+    {
+        $mealsPerDay = max(1, $this->mealsPerDay);
+        $targetCal = (float) ($this->targetCalories ?? 0);
+        $perMealCal = max(120, $targetCal / $mealsPerDay);
+        $perMealProtein = max(5, (float) ($this->macroTargets['protein_g'] ?? 0) / $mealsPerDay);
+        $perMealCarbs = max(5, (float) ($this->macroTargets['carbs_g'] ?? 0) / $mealsPerDay);
+        $perMealFat = max(2, (float) ($this->macroTargets['fat_g'] ?? 0) / $mealsPerDay);
+
+        return $meals
+            ->map(function (array $meal) use ($perMealCal, $perMealProtein, $perMealCarbs, $perMealFat): array {
+                $cal = (int) ($meal['calories'] ?? 0);
+                $protein = (float) ($meal['protein'] ?? 0);
+                $carbs = (float) ($meal['carbs'] ?? 0);
+                $fat = (float) ($meal['fat'] ?? 0);
+
+                if ($cal <= 0) {
+                    return ['meal' => $meal, 'distance' => 0.75];
+                }
+
+                $score = (
+                    abs($cal - $perMealCal) / $perMealCal * 0.5
+                    + abs($protein - $perMealProtein) / $perMealProtein * 0.25
+                    + abs($carbs - $perMealCarbs) / max($perMealCarbs, 1) * 0.15
+                    + abs($fat - $perMealFat) / max($perMealFat, 1) * 0.1
+                );
+
+                if ($this->goal === 'lose' && $cal > $perMealCal * 1.35) {
+                    $score += 0.35;
+                }
+                if ($this->goal === 'gain' && $protein < $perMealProtein * 0.6) {
+                    $score += 0.2;
+                }
+
+                return ['meal' => $meal, 'distance' => $score];
+            })
+            ->sortBy('distance')
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $meals
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function rankMealsCollection(Collection $meals): Collection
+    {
+        return $this->rankMealsWithScores($meals)->pluck('meal')->values();
     }
 
     /**
@@ -1203,12 +1267,14 @@ PROMPT;
     private function catalogSummaryForPrompt(): array
     {
         $meals = $this->catalogMeals()
-            ->take(25)
+            ->when($this->metricsReady, fn (Collection $c) => $this->rankMealsCollection($c))
+            ->take(40)
             ->map(fn (array $meal): array => [
                 'id' => (int) ($meal['id'] ?? 0),
                 'name' => (string) ($meal['name'] ?? ''),
                 'calories' => (int) ($meal['calories'] ?? 0),
                 'protein' => (float) ($meal['protein'] ?? 0),
+                'group_name' => (string) ($meal['group_name'] ?? ''),
                 'price' => (float) ($meal['price'] ?? 0),
             ])
             ->values()
