@@ -366,6 +366,25 @@ class ApiAuthService
     }
 
     /**
+     * Stored delivery days only — no checkout defaults when nothing is saved.
+     *
+     * @param  array<string, mixed>|null  $address
+     * @return array<int, int>
+     */
+    public function resolveAddressDeliveryDaysForDisplay(string $token, int $addressId, ?array $address = null): array
+    {
+        $address ??= $this->findAddressById($token, $addressId, false);
+        if (is_array($address) && is_array($address['days'] ?? null) && $address['days'] !== []) {
+            return SubscriptionCheckoutPayload::extractDeliveryDaysOnly($address, null);
+        }
+
+        $daysResult = $this->getAddressDeliveryDays($token, $addressId);
+        $daysData = is_array($daysResult['data'] ?? null) ? $daysResult['data'] : null;
+
+        return SubscriptionCheckoutPayload::extractDeliveryDaysOnly($address, $daysData);
+    }
+
+    /**
      * Same rule as AddressDayUpdateAction: reject when more than one other address is active.
      */
     public function countOtherActiveAddresses(string $token, int $addressId): int

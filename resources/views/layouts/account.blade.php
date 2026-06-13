@@ -194,7 +194,49 @@
 
         .acc-tab-group { display:flex; gap:.35rem; padding:.25rem; background:#F1F5F9; border-radius:12px; }
         .acc-tab { padding:.45rem .9rem; border-radius:10px; font-weight:600; font-size:.82rem; color:#64748B; cursor:pointer; background:transparent; border:0; transition:background .15s, color .15s; }
-        .acc-tab.is-active { background:#fff; color:#0F172A; box-shadow:0 1px 2px rgba(15,23,42,.08); }
+        .acc-tab.is-active { background:#fff; color:#279ff9; box-shadow:0 1px 2px rgba(15,23,42,.08); }
+
+        .acc-record-list { display:flex; flex-direction:column; gap:.75rem; padding:1rem; }
+        .acc-record {
+            border:1px solid #EEF0F4; border-radius:14px; padding:1rem 1.1rem;
+            background:#fff; transition:border-color .15s, box-shadow .15s;
+        }
+        .acc-record:hover { border-color:#BFDBFE; box-shadow:0 4px 14px rgba(39,159,249,.08); }
+        .acc-record__head { display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap; margin-bottom:.75rem; }
+        .acc-record__id { font-weight:800; color:#0F172A; font-size:.95rem; letter-spacing:.01em; }
+        .acc-record__meta { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:.65rem .85rem; }
+        @media (min-width: 640px) { .acc-record__meta { grid-template-columns:repeat(4, minmax(0, 1fr)); } }
+        .acc-record__field label { display:block; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#94A3B8; margin-bottom:.15rem; }
+        .acc-record__field span { font-size:.88rem; font-weight:600; color:#334155; }
+        .acc-record__actions { margin-top:.85rem; display:flex; justify-content:flex-end; gap:.5rem; }
+
+        .acc-address-card { padding:1.1rem 1.25rem; }
+        .acc-address-card + .acc-address-card { border-top:1px solid #F1F5F9; }
+        .acc-day-row { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.55rem; }
+        .acc-day-pill {
+            display:inline-flex; align-items:center; justify-content:center;
+            min-width:2.4rem; padding:.28rem .55rem; border-radius:999px;
+            font-size:.72rem; font-weight:700; border:1px solid #E2E8F0;
+            background:#F8FAFC; color:#94A3B8;
+        }
+        .acc-day-pill.is-selected { background:#EFF6FF; border-color:#93C5FD; color:#1D4ED8; }
+        .acc-day-picker { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:.5rem; }
+        @media (min-width: 480px) { .acc-day-picker { grid-template-columns:repeat(4, minmax(0, 1fr)); } }
+        .acc-day-picker__btn {
+            border:1px solid #E2E8F0; border-radius:12px; padding:.65rem .5rem;
+            font-size:.82rem; font-weight:700; color:#64748B; background:#fff;
+            cursor:pointer; transition:all .15s;
+        }
+        .acc-day-picker__btn.is-selected {
+            background:linear-gradient(135deg, rgba(39,159,249,.12), rgba(63,181,54,.1));
+            border-color:#279ff9; color:#0369A1;
+            box-shadow:0 0 0 1px rgba(39,159,249,.15);
+        }
+        .acc-day-picker__btn:hover:not(.is-selected) { background:#F8FAFC; border-color:#CBD5E1; }
+
+        .acc-desktop-only { display:none; }
+        @media (min-width: 768px) { .acc-desktop-only { display:block; } .acc-mobile-only { display:none !important; } }
+        @media (max-width: 767px) { .acc-mobile-only { display:block; } }
 
         .acc-mobile-toggle {
             display:none;
@@ -276,6 +318,16 @@
         $displayName = trim((string) ($profile['name'] ?? '')) ?: __('account.customer');
         $initial = mb_strtoupper(mb_substr($displayName, 0, 1));
         $unreadNotifications = app(AccountApiService::class)->unreadNotificationCount();
+        $pageTitle = match (true) {
+            str_starts_with($active, 'account.orders') => __('account.my_orders'),
+            str_starts_with($active, 'account.invoices') => __('account.invoices'),
+            str_starts_with($active, 'account.notifications') => __('account.notifications'),
+            str_starts_with($active, 'account.addresses') => __('account.my_addresses'),
+            str_starts_with($active, 'account.subscriptions') => __('account.subscriptions'),
+            $active === 'account.wallet' => __('account.wallet'),
+            $active === 'account.profile' => __('account.profile'),
+            default => __('account.dashboard'),
+        };
     @endphp
 
     {{-- Sidebar --}}
@@ -356,7 +408,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5"/>
                     </svg>
                 </button>
-                <div class="acc-topbar__title">@yield('page-title', __('account.dashboard'))</div>
+                <div class="acc-topbar__title">{{ $pageTitle }}</div>
             </div>
             <div class="acc-topbar__user">
                 <a href="{{ route('home') }}" class="acc-btn acc-btn--muted acc-btn--sm" title="{{ __('account.back_to_site') }}">

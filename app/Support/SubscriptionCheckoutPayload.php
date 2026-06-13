@@ -615,6 +615,42 @@ final class SubscriptionCheckoutPayload
     }
 
     /**
+     * Same as extractDeliveryDays but returns [] when nothing is stored (for account display).
+     *
+     * @return array<int, int>
+     */
+    public static function extractDeliveryDaysOnly(?array $address, ?array $daysData): array
+    {
+        $days = self::extractDeliveryDays($address, $daysData, true);
+        $defaults = self::defaultDeliveryWeekdays(true);
+
+        if ($days === $defaults) {
+            $hasStored = false;
+            if (is_array($address['days'] ?? null) && $address['days'] !== []) {
+                $hasStored = true;
+            }
+            if (! $hasStored && is_array($daysData)) {
+                foreach (['selected', 'days'] as $key) {
+                    if (is_array($daysData[$key] ?? null) && $daysData[$key] !== []) {
+                        $hasStored = true;
+                        break;
+                    }
+                }
+                for ($i = 0; $i < 7; $i++) {
+                    if (is_numeric($daysData["days[{$i}]"] ?? null)) {
+                        $hasStored = true;
+                        break;
+                    }
+                }
+            }
+
+            return $hasStored ? $days : [];
+        }
+
+        return $days;
+    }
+
+    /**
      * @param  array<string, mixed>|null  $address
      * @param  array<string, mixed>|null  $daysData
      * @param  array<int, array<string, mixed>>  $durationRows

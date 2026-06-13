@@ -76,7 +76,76 @@ trait NormalizesAccountPayload
             $single = $this->extractOne($result['raw'], $singleKeys);
         }
 
-        return $single !== [] ? [$single] : [];
+        if ($single !== [] && $this->isValidDataRow($single, $singleKeys)) {
+            return [$single];
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  callable(array<string, mixed>): bool  $validator
+     * @return array<int, array<string, mixed>>
+     */
+    protected function filterValidRows(array $rows, callable $validator): array
+    {
+        return array_values(array_filter(
+            $rows,
+            static fn ($row): bool => is_array($row) && $validator($row),
+        ));
+    }
+
+    protected function isValidInvoiceRow(array $row): bool
+    {
+        if ((int) ($row['id'] ?? $row['invoice_id'] ?? 0) > 0) {
+            return true;
+        }
+
+        foreach (['number', 'invoice_number'] as $key) {
+            if (trim((string) ($row[$key] ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        $amount = $row['total'] ?? $row['amount'] ?? $row['grand_total'] ?? null;
+        $date = trim((string) ($row['created_at'] ?? $row['date'] ?? $row['issued_at'] ?? ''));
+
+        return is_numeric($amount) && $date !== '';
+    }
+
+    protected function isValidOrderRow(array $row): bool
+    {
+        if ((int) ($row['id'] ?? $row['order_id'] ?? 0) > 0) {
+            return true;
+        }
+
+        foreach (['order_number', 'number', 'external_order_number'] as $key) {
+            if (trim((string) ($row[$key] ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<int, string>  $singleKeys
+     */
+    protected function isValidDataRow(array $row, array $singleKeys): bool
+    {
+        if ($this->isValidInvoiceRow($row) || $this->isValidOrderRow($row)) {
+            return true;
+        }
+
+        foreach ($singleKeys as $key) {
+            if (in_array($key, ['invoice', 'subscription', 'order'], true)) {
+                return $this->isValidInvoiceRow($row) || $this->isValidOrderRow($row);
+            }
+        }
+
+        return isset($row['id']) && (is_numeric($row['id']) || is_string($row['id']));
     }
 
     /**

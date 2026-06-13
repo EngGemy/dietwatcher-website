@@ -54,7 +54,10 @@ class Index extends Component
             return;
         }
 
-        $this->orders = $this->extractRows($result['data'] ?? null, ['orders', 'items', 'rows']);
+        $this->orders = $this->filterValidRows(
+            $this->extractRowsFromApiResult($result, ['orders'], ['order']),
+            fn (array $row): bool => $this->isValidOrderRow($row),
+        );
         $this->loading = false;
     }
 

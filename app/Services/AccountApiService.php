@@ -326,20 +326,161 @@ class AccountApiService
         if (! $this->hasToken()) {
             return $this->empty(__('account.login_required'));
         }
-        try {
-            $params = array_filter([
-                'subscription_id' => $subscriptionId,
-                'device_id' => $this->deviceId(),
-            ], fn ($v) => $v !== null && $v !== '');
 
-            return $this->decode(
-                $this->authed()->get($this->url('subscriptions/invoices/index'), $params)
-            );
+        $params = array_filter([
+            'subscription_id' => $subscriptionId,
+            'device_id' => $this->deviceId(),
+        ], fn ($v) => $v !== null && $v !== '');
+
+        $paths = [
+            'subscriptions/invoices/index',
+            'subscriptions/invoices',
+            'invoices',
+        ];
+
+        $last = $this->empty();
+
+        try {
+            foreach ($paths as $path) {
+                $decoded = $this->decode(
+                    $this->authed()->get($this->url($path), $params)
+                );
+                $last = $decoded;
+
+                if (! ($decoded['ok'] ?? false)) {
+                    continue;
+                }
+
+                $rows = $this->extractInvoiceRows($decoded);
+                if ($rows !== []) {
+                    $decoded['data'] = ['invoices' => $rows];
+
+                    return $decoded;
+                }
+            }
+
+            $localRows = $this->localInvoicesFallback($subscriptionId);
+            if ($localRows !== []) {
+                return [
+                    'ok' => true,
+                    'status' => 200,
+                    'data' => ['invoices' => $localRows],
+                    'message' => '',
+                    'raw' => [],
+                ];
+            }
+
+            return $last;
         } catch (\Throwable $e) {
             Log::warning('AccountApiService::listInvoices failed', ['error' => $e->getMessage()]);
 
+            $localRows = $this->localInvoicesFallback($subscriptionId);
+            if ($localRows !== []) {
+                return [
+                    'ok' => true,
+                    'status' => 200,
+                    'data' => ['invoices' => $localRows],
+                    'message' => '',
+                    'raw' => [],
+                ];
+            }
+
             return $this->empty();
         }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function extractInvoiceRows(array $decoded): array
+    {
+        $data = $decoded['data'] ?? null;
+        if (! is_array($data)) {
+            return [];
+        }
+
+        $rows = $this->extractRowsFromDecoded($data);
+        if ($rows === []) {
+            foreach (['invoices', 'items', 'rows', 'list', 'records', 'result'] as $key) {
+                $candidate = $data[$key] ?? null;
+                if (! is_array($candidate)) {
+                    continue;
+                }
+                if (array_is_list($candidate)) {
+                    $rows = array_values(array_filter($candidate, 'is_array'));
+                } elseif (isset($candidate['data']) && is_array($candidate['data']) && array_is_list($candidate['data'])) {
+                    $rows = array_values(array_filter($candidate['data'], 'is_array'));
+                }
+                if ($rows !== []) {
+                    break;
+                }
+            }
+        }
+
+        return array_values(array_filter($rows, function (array $row): bool {
+            if ((int) ($row['id'] ?? $row['invoice_id'] ?? 0) > 0) {
+                return true;
+            }
+            foreach (['number', 'invoice_number'] as $key) {
+                if (trim((string) ($row[$key] ?? '')) !== '') {
+                    return true;
+                }
+            }
+            $amount = $row['total'] ?? $row['amount'] ?? $row['grand_total'] ?? null;
+            $date = trim((string) ($row['created_at'] ?? $row['date'] ?? $row['issued_at'] ?? ''));
+
+            return is_numeric($amount) && $date !== '';
+        }));
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function localInvoicesFallback(?int $subscriptionId = null): array
+    {
+        $verifiedPhone = (string) session('phone_verified', '');
+        $phoneNorm = $this->normalizePhone($verifiedPhone);
+        if ($phoneNorm === '') {
+            return [];
+        }
+
+        $rows = Payment::query()
+            ->where('customer_phone_normalized', $phoneNorm)
+            ->whereIn('status', [PaymentStatus::PAID->value, PaymentStatus::REFUNDED->value])
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get()
+            ->filter(function (Payment $payment) use ($phoneNorm, $subscriptionId): bool {
+                if ((string) $payment->customer_phone_normalized !== $phoneNorm) {
+                    return false;
+                }
+                if ($subscriptionId !== null && $subscriptionId > 0) {
+                    $payload = is_array($payment->checkout_payload) ? $payment->checkout_payload : [];
+                    $subId = (int) ($payload['subscription_id'] ?? $payment->external_subscription_id ?? 0);
+
+                    return $subId === $subscriptionId;
+                }
+
+                return true;
+            });
+
+        return $rows->map(function (Payment $payment): array {
+            $payload = is_array($payment->checkout_payload) ? $payment->checkout_payload : [];
+
+            return [
+                'id' => null,
+                'invoice_id' => null,
+                'number' => $payment->order_number,
+                'invoice_number' => $payment->order_number,
+                'created_at' => optional($payment->created_at)?->toDateString(),
+                'date' => optional($payment->created_at)?->toDateString(),
+                'subscription_id' => (int) ($payload['subscription_id'] ?? $payment->external_subscription_id ?? 0) ?: null,
+                'total' => $payment->amount_in_sar,
+                'amount' => $payment->amount_in_sar,
+                'pdf_url' => route('payment.invoice', ['order' => $payment->order_number]),
+                'source' => 'web_payment',
+            ];
+        })->values()->all();
     }
 
     public function subscriptionInvoicePdfUrl(int $invoiceId): string
@@ -2003,7 +2144,7 @@ class AccountApiService
             return array_values(array_filter($data, 'is_array'));
         }
 
-        foreach (['orders', 'items', 'rows', 'data', 'response'] as $key) {
+        foreach (['orders', 'invoices', 'items', 'rows', 'data', 'response'] as $key) {
             $candidate = $data[$key] ?? null;
             if (! is_array($candidate)) {
                 continue;
@@ -2309,17 +2450,36 @@ class AccountApiService
             return $this->empty(__('account.login_required'));
         }
 
-        try {
-            $url = $this->url('notifications/read-all');
-            $last = $this->empty(__('account.request_failed'));
+        $paths = [
+            'notifications/readAll',
+            'notifications/read-all',
+            'notifications/read_all',
+            'notifications/mark-as-read',
+            'notifications/markAllAsRead',
+        ];
 
-            foreach (['post', 'put', 'get'] as $method) {
-                $response = match ($method) {
-                    'post' => $this->authed()->post($url),
-                    'put' => $this->authed()->put($url),
-                    default => $this->authed()->get($url),
-                };
-                $last = $this->decode($response);
+        $params = array_filter([
+            'device_id' => $this->deviceId(),
+        ], fn ($v) => $v !== null && $v !== '');
+
+        $last = $this->empty(__('account.request_failed'));
+
+        try {
+            foreach ($paths as $path) {
+                $url = $this->url($path);
+
+                foreach (['post', 'put'] as $method) {
+                    $response = match ($method) {
+                        'post' => $this->authed()->asForm()->post($url, $params),
+                        default => $this->authed()->asForm()->put($url, $params),
+                    };
+                    $last = $this->decode($response);
+                    if ($last['ok'] ?? false) {
+                        return $last;
+                    }
+                }
+
+                $last = $this->decode($this->authed()->get($url, $params));
                 if ($last['ok'] ?? false) {
                     return $last;
                 }

@@ -22,7 +22,11 @@
 
     <div class="acc-card">
         @if($loading)
-            <div class="acc-empty">{{ __('account.loading') }}</div>
+            <div class="acc-card-body space-y-3">
+                @for($i = 0; $i < 4; $i++)
+                    <div class="acc-skeleton acc-skeleton-line" style="width: {{ 65 + ($i * 8) }}%; height: 4.5rem;"></div>
+                @endfor
+            </div>
         @elseif(empty($orders))
             <div class="acc-empty">
                 <div class="acc-empty__icon">
@@ -32,11 +36,76 @@
                 <a href="{{ route('meals.index') }}" class="acc-btn acc-btn--primary mt-3 inline-flex">{{ __('account.browse_meals') }}</a>
             </div>
         @else
-            <div class="overflow-x-auto">
+            {{-- Mobile cards --}}
+            <div class="acc-mobile-only acc-record-list">
+                @foreach($orders as $order)
+                    @php
+                        $oid = $order['id'] ?? $order['order_id'] ?? null;
+                        $orderNumber = trim((string) ($order['order_number'] ?? $order['number'] ?? $order['external_order_number'] ?? ''));
+                        $displayRef = $orderNumber !== '' ? $orderNumber : ($oid ? '#'.$oid : '—');
+                        $isLocalWebOrder = (string) ($order['source'] ?? '') === 'web_payment';
+                        $oDate = $order['delivery_date'] ?? $order['date'] ?? $order['created_at'] ?? '';
+                        $items = $order['items'] ?? $order['meals'] ?? [];
+                        $count = is_array($items) ? count($items) : (int) ($order['quantity'] ?? $order['items_count'] ?? 0);
+                        $oStatus = strtolower((string) ($order['status'] ?? ''));
+                        $oStatusKey = 'account.status_'.$oStatus;
+                        $oStatusLabel = __($oStatusKey);
+                        if ($oStatusLabel === $oStatusKey) {
+                            $oStatusLabel = $oStatus !== '' ? ucfirst($oStatus) : '—';
+                        }
+                        $chipClass = match ($oStatus) {
+                            'paid', 'completed', 'active', 'delivered', 'authorized' => 'acc-chip--success',
+                            'pending' => 'acc-chip--warn',
+                            'cancelled', 'failed', 'expired' => 'acc-chip--danger',
+                            default => 'acc-chip--muted',
+                        };
+                        $oTotal = $order['total'] ?? $order['amount'] ?? $order['grand_total'] ?? null;
+                        $detailsUrl = $oid
+                            ? route('account.orders.show', ['id' => $oid])
+                            : ($isLocalWebOrder && $orderNumber !== '' ? route('payment.result', ['order' => $orderNumber]) : '#');
+                    @endphp
+                    <article class="acc-record">
+                        <div class="acc-record__head">
+                            <span class="acc-record__id">{{ $displayRef }}</span>
+                            @if($oStatus)
+                                <span class="acc-chip {{ $chipClass }}">{{ $oStatusLabel }}</span>
+                            @endif
+                        </div>
+                        <div class="acc-record__meta">
+                            <div class="acc-record__field">
+                                <label>{{ __('account.delivery_date') }}</label>
+                                <span>{{ $oDate ?: '—' }}</span>
+                            </div>
+                            <div class="acc-record__field">
+                                <label>{{ __('account.items') }}</label>
+                                <span>{{ $count > 0 ? $count : '—' }}</span>
+                            </div>
+                            <div class="acc-record__field">
+                                <label>{{ __('account.total') }}</label>
+                                <span>
+                                    @if($oTotal !== null)
+                                        <x-sar :amount="(float) $oTotal" class="text-xs text-gray-900" />
+                                    @else
+                                        —
+                                    @endif
+                                </span>
+                            </div>
+                        </div>
+                        @if($detailsUrl !== '#')
+                            <div class="acc-record__actions">
+                                <a href="{{ $detailsUrl }}" class="acc-btn acc-btn--ghost acc-btn--sm">{{ __('account.details') }}</a>
+                            </div>
+                        @endif
+                    </article>
+                @endforeach
+            </div>
+
+            {{-- Desktop table --}}
+            <div class="acc-desktop-only overflow-x-auto">
                 <table class="acc-table">
                     <thead>
                         <tr>
-                            <th>#</th>
+                            <th>{{ __('account.order_number') }}</th>
                             <th>{{ __('account.delivery_date') }}</th>
                             <th>{{ __('account.items') }}</th>
                             <th>{{ __('account.status') }}</th>
@@ -47,37 +116,46 @@
                     <tbody>
                         @foreach($orders as $order)
                             @php
-                                $oid   = $order['id'] ?? $order['order_id'] ?? null;
-                                $orderNumber = (string) ($order['order_number'] ?? '');
+                                $oid = $order['id'] ?? $order['order_id'] ?? null;
+                                $orderNumber = trim((string) ($order['order_number'] ?? $order['number'] ?? $order['external_order_number'] ?? ''));
+                                $displayRef = $orderNumber !== '' ? $orderNumber : ($oid ? '#'.$oid : '—');
                                 $isLocalWebOrder = (string) ($order['source'] ?? '') === 'web_payment';
                                 $oDate = $order['delivery_date'] ?? $order['date'] ?? $order['created_at'] ?? '';
                                 $items = $order['items'] ?? $order['meals'] ?? [];
-                                $count = is_array($items) ? count($items) : 0;
+                                $count = is_array($items) ? count($items) : (int) ($order['quantity'] ?? $order['items_count'] ?? 0);
                                 $oStatus = strtolower((string) ($order['status'] ?? ''));
                                 $oStatusKey = 'account.status_'.$oStatus;
                                 $oStatusLabel = __($oStatusKey);
-                                if ($oStatusLabel === $oStatusKey) $oStatusLabel = ucfirst($oStatus);
+                                if ($oStatusLabel === $oStatusKey) {
+                                    $oStatusLabel = $oStatus !== '' ? ucfirst($oStatus) : '—';
+                                }
+                                $chipClass = match ($oStatus) {
+                                    'paid', 'completed', 'active', 'delivered', 'authorized' => 'acc-chip--success',
+                                    'pending' => 'acc-chip--warn',
+                                    'cancelled', 'failed', 'expired' => 'acc-chip--danger',
+                                    default => 'acc-chip--muted',
+                                };
                                 $oTotal = $order['total'] ?? $order['amount'] ?? $order['grand_total'] ?? null;
                                 $detailsUrl = $oid
                                     ? route('account.orders.show', ['id' => $oid])
                                     : ($isLocalWebOrder && $orderNumber !== '' ? route('payment.result', ['order' => $orderNumber]) : '#');
                             @endphp
                             <tr>
-                                <td class="font-semibold">#{{ $oid ?: ($orderNumber !== '' ? $orderNumber : '—') }}</td>
+                                <td class="font-semibold text-gray-900">{{ $displayRef }}</td>
                                 <td>{{ $oDate ?: '—' }}</td>
-                                <td>{{ $count }}</td>
+                                <td>{{ $count > 0 ? $count : '—' }}</td>
                                 <td>
                                     @if($oStatus)
-                                        <span class="acc-chip acc-chip--muted">{{ $oStatusLabel }}</span>
+                                        <span class="acc-chip {{ $chipClass }}">{{ $oStatusLabel }}</span>
                                     @else — @endif
                                 </td>
                                 <td class="text-end font-semibold">
                                     @if($oTotal !== null) <x-sar :amount="(float) $oTotal" class="text-xs text-gray-900" /> @else — @endif
                                 </td>
                                 <td class="text-end">
-                                    <a href="{{ $detailsUrl }}" class="acc-btn acc-btn--ghost acc-btn--sm">
-                                        {{ __('account.details') }}
-                                    </a>
+                                    @if($detailsUrl !== '#')
+                                        <a href="{{ $detailsUrl }}" class="acc-btn acc-btn--ghost acc-btn--sm">{{ __('account.details') }}</a>
+                                    @endif
                                 </td>
                             </tr>
                         @endforeach

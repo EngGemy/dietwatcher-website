@@ -30,7 +30,10 @@ class InvoiceExportController extends Controller
                 ->with('error', $result['message'] ?: __('account.export_failed'));
         }
 
-        $invoices = $this->extractRowsFromApiResult($result, ['invoices'], ['invoice']);
+        $invoices = $this->filterValidRows(
+            $this->extractRowsFromApiResult($result, ['invoices'], ['invoice']),
+            fn (array $row): bool => $this->isValidInvoiceRow($row),
+        );
         if ($invoices === []) {
             return redirect()
                 ->route('account.invoices.index', array_filter(['subscription' => $subscriptionId]))

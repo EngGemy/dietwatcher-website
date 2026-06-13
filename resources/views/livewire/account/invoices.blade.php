@@ -49,11 +49,56 @@
                 <p>{{ __('account.no_invoices') }}</p>
             </div>
         @else
-            <div class="overflow-x-auto">
+            <div class="acc-mobile-only acc-record-list">
+                @foreach($invoices as $inv)
+                    @php
+                        $invId = $inv['id'] ?? $inv['invoice_id'] ?? null;
+                        $invNumber = trim((string) ($inv['number'] ?? $inv['invoice_number'] ?? ''));
+                        $displayRef = $invNumber !== '' ? $invNumber : ($invId ? '#'.$invId : '—');
+                        $invDate = $inv['created_at'] ?? $inv['date'] ?? $inv['issued_at'] ?? '';
+                        $subId = $inv['subscription_id'] ?? $inv['subscription']['id'] ?? null;
+                        $amount = $inv['total'] ?? $inv['amount'] ?? $inv['grand_total'] ?? null;
+                        $downloadUrl = $api->resolveInvoiceDownloadUrl($inv);
+                    @endphp
+                    <article class="acc-record">
+                        <div class="acc-record__head">
+                            <span class="acc-record__id">{{ $displayRef }}</span>
+                            @if($subId)
+                                <span class="acc-chip acc-chip--muted">#{{ $subId }}</span>
+                            @endif
+                        </div>
+                        <div class="acc-record__meta">
+                            <div class="acc-record__field">
+                                <label>{{ __('account.date') }}</label>
+                                <span>{{ $invDate ?: '—' }}</span>
+                            </div>
+                            <div class="acc-record__field">
+                                <label>{{ __('account.total') }}</label>
+                                <span>
+                                    @if($amount !== null)
+                                        <x-sar :amount="(float) $amount" class="text-xs text-gray-900" />
+                                    @else
+                                        —
+                                    @endif
+                                </span>
+                            </div>
+                        </div>
+                        @if($downloadUrl)
+                            <div class="acc-record__actions">
+                                <a href="{{ $downloadUrl }}" target="_blank" rel="noopener" class="acc-btn acc-btn--ghost acc-btn--sm">
+                                    {{ __('account.download_invoice') }}
+                                </a>
+                            </div>
+                        @endif
+                    </article>
+                @endforeach
+            </div>
+
+            <div class="acc-desktop-only overflow-x-auto">
                 <table class="acc-table">
                     <thead>
                         <tr>
-                            <th>#</th>
+                            <th>{{ __('account.invoice_number') }}</th>
                             <th>{{ __('account.date') }}</th>
                             <th>{{ __('account.subscription') }}</th>
                             <th class="text-end">{{ __('account.total') }}</th>
@@ -64,17 +109,19 @@
                         @foreach($invoices as $inv)
                             @php
                                 $invId = $inv['id'] ?? $inv['invoice_id'] ?? null;
+                                $invNumber = trim((string) ($inv['number'] ?? $inv['invoice_number'] ?? ''));
+                                $displayRef = $invNumber !== '' ? $invNumber : ($invId ? '#'.$invId : '—');
                                 $invDate = $inv['created_at'] ?? $inv['date'] ?? $inv['issued_at'] ?? '';
                                 $subId = $inv['subscription_id'] ?? $inv['subscription']['id'] ?? null;
                                 $amount = $inv['total'] ?? $inv['amount'] ?? $inv['grand_total'] ?? null;
                                 $downloadUrl = $api->resolveInvoiceDownloadUrl($inv);
                             @endphp
                             <tr>
-                                <td class="font-semibold">#{{ $invId ?? '—' }}</td>
+                                <td class="font-semibold text-gray-900">{{ $displayRef }}</td>
                                 <td>{{ $invDate ?: '—' }}</td>
                                 <td>
                                     @if($subId)
-                                        <a href="{{ route('account.subscriptions.show', ['id' => $subId]) }}" class="text-blue-600 font-semibold">#{{ $subId }}</a>
+                                        <a href="{{ route('account.subscriptions.show', ['id' => $subId]) }}" class="text-blue-600 font-semibold hover:underline">#{{ $subId }}</a>
                                     @else
                                         —
                                     @endif

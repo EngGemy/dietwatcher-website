@@ -27,6 +27,11 @@ class Addresses extends Component
     /** @var array<int, int> */
     public array $selectedDays = [];
 
+    /** @var array<int, array{id: int, duration: string, durationText: string, time: string, label: string}> */
+    public array $deliveryTimeSlots = [];
+
+    public string $deliveryTimeLabel = '';
+
     public bool $savingAddress = false;
 
     public function mount(ApiAuthService $auth): void
@@ -56,7 +61,9 @@ class Addresses extends Component
             if ($addressId <= 0) {
                 continue;
             }
-            $this->addresses[$index]['days'] = $auth->resolveAddressDeliveryDays($token, $addressId, $row);
+            $this->addresses[$index]['days'] = $auth->resolveAddressDeliveryDaysForDisplay($token, $addressId, $row);
+            $enriched = AddressCheckoutHelper::enrichAddressDistrictDurations($row, $this->addresses);
+            $this->addresses[$index]['delivery_time_label'] = $this->resolveDeliveryTimeLabel($enriched);
         }
         $this->loading = false;
     }
@@ -71,21 +78,82 @@ class Addresses extends Component
 
         $this->editingAddressId = $addressId;
         $this->selectedDays = [];
+        $this->deliveryTimeSlots = [];
+        $this->deliveryTimeLabel = '';
 
         $addr = collect($this->addresses)->firstWhere('id', $addressId)
             ?? collect($this->addresses)->firstWhere(fn ($a) => (int) ($a['id'] ?? 0) === $addressId);
 
-        $this->selectedDays = $auth->resolveAddressDeliveryDays(
+        if (! is_array($addr)) {
+            $addr = $auth->findAddressById($token, $addressId, false);
+        }
+
+        $this->selectedDays = $auth->resolveAddressDeliveryDaysForDisplay(
             $token,
             $addressId,
             is_array($addr) ? $addr : null,
         );
+
+        if (is_array($addr)) {
+            $districtId = AddressCheckoutHelper::districtId($addr);
+            $this->deliveryTimeSlots = $auth->findDistrictRegionDurations($token, $districtId, $addressId);
+            $this->deliveryTimeLabel = $this->resolveDeliveryTimeLabel($addr, $this->deliveryTimeSlots);
+        }
+    }
+
+    public function toggleDay(int $day): void
+    {
+        if ($day < 1 || $day > 7) {
+            return;
+        }
+
+        if (in_array($day, $this->selectedDays, true)) {
+            $this->selectedDays = array_values(array_filter(
+                $this->selectedDays,
+                static fn (int $value): bool => $value !== $day,
+            ));
+        } else {
+            $this->selectedDays[] = $day;
+        }
+
+        sort($this->selectedDays);
+    }
+
+    /**
+     * @param  array<string, mixed>  $address
+     * @param  array<int, array{id: int, duration: string, durationText: string, time: string, label: string}>  $slots
+     */
+    protected function resolveDeliveryTimeLabel(array $address, array $slots = []): string
+    {
+        $regionId = AddressCheckoutHelper::firstRegionDurationId($address);
+        if ($regionId > 0 && $slots !== []) {
+            foreach ($slots as $slot) {
+                if ((int) ($slot['id'] ?? 0) === $regionId) {
+                    return (string) ($slot['label'] ?? '');
+                }
+            }
+        }
+
+        $nested = $address['region_duration'] ?? $address['regionDuration'] ?? null;
+        if (is_array($nested)) {
+            return AddressCheckoutHelper::regionDurationLabel($nested);
+        }
+
+        foreach (AddressCheckoutHelper::districtDurations($address) as $row) {
+            if ((int) ($row['id'] ?? 0) === $regionId) {
+                return AddressCheckoutHelper::regionDurationLabel($row);
+            }
+        }
+
+        return '';
     }
 
     public function closeDeliveryDays(): void
     {
         $this->editingAddressId = null;
         $this->selectedDays = [];
+        $this->deliveryTimeSlots = [];
+        $this->deliveryTimeLabel = '';
     }
 
     public function saveDeliveryDays(ApiAuthService $auth): void

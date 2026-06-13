@@ -50,10 +50,13 @@ class Invoices extends Component
             return;
         }
 
-        $this->invoices = $this->extractRowsFromApiResult(
-            $result,
-            ['invoices'],
-            ['invoice'],
+        $this->invoices = $this->filterValidRows(
+            $this->extractRowsFromApiResult(
+                $result,
+                ['invoices'],
+                ['invoice'],
+            ),
+            fn (array $row): bool => $this->isValidInvoiceRow($row),
         );
         $this->loading = false;
     }
