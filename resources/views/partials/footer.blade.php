@@ -10,16 +10,11 @@
                 </p>
 
                 <div class="footer__socials">
-                    @if($socialInstagram)
-                        <a href="{{ $socialInstagram }}" class="footer__social-link footer__social-link--wow" data-platform="instagram" data-tooltip="{{ __('Instagram') }}" target="_blank" rel="noopener" aria-label="{{ __('Instagram') }}">
+                    @if(!empty($socialWhatsapp) && $socialWhatsapp !== '#')
+                        <a href="{{ $socialWhatsapp }}" class="footer__social-link footer__social-link--wow" data-platform="whatsapp" data-tooltip="{{ __('WhatsApp') }}" target="_blank" rel="noopener" aria-label="{{ __('WhatsApp') }}">
                             <svg class="icon footer__social-icon-svg">
-                                <use href="{{ asset('assets/images/icons/sprite.svg#instagram') }}"></use>
+                                <use href="{{ asset('assets/images/icons/sprite.svg#whatsapp') }}"></use>
                             </svg>
-                        </a>
-                    @endif
-                    @if($socialFacebook)
-                        <a href="{{ $socialFacebook }}" class="footer__social-link footer__social-link--wow" data-platform="facebook" data-tooltip="{{ __('Facebook') }}" target="_blank" rel="noopener" aria-label="{{ __('Facebook') }}">
-                            <img src="{{ asset('assets/images/icons/facebook.svg') }}" alt="" class="footer__social-icon-img" style="width:20px;height:20px;object-fit:contain;filter:brightness(0) invert(1);" />
                         </a>
                     @endif
                     @if($socialTwitter)
@@ -27,15 +22,15 @@
                             <img src="{{ asset('assets/images/icons/twitter.svg') }}" alt="" class="footer__social-icon-img" style="width:20px;height:20px;object-fit:contain;filter:brightness(0) invert(1);" />
                         </a>
                     @endif
-                    @if(!empty($socialLinkedIn) && $socialLinkedIn !== '#')
-                        <a href="{{ $socialLinkedIn }}" class="footer__social-link footer__social-link--wow" data-platform="linkedin" data-tooltip="{{ __('LinkedIn') }}" target="_blank" rel="noopener" aria-label="{{ __('LinkedIn') }}">
-                            <img src="{{ asset('assets/images/icons/linkedint.svg') }}" alt="" class="footer__social-icon-img" style="width:20px;height:20px;object-fit:contain;filter:brightness(0) invert(1);" />
+                    @if(!empty($socialSnapchat) && $socialSnapchat !== '#')
+                        <a href="{{ $socialSnapchat }}" class="footer__social-link footer__social-link--wow" data-platform="snapchat" data-tooltip="{{ __('Snapchat') }}" target="_blank" rel="noopener" aria-label="{{ __('Snapchat') }}">
+                            <img src="{{ asset('assets/images/icons/snapchat.svg') }}" alt="" class="footer__social-icon-img" style="width:20px;height:20px;object-fit:contain;filter:brightness(0) invert(1);" />
                         </a>
                     @endif
-                    @if($socialYouTube)
-                        <a href="{{ $socialYouTube }}" class="footer__social-link footer__social-link--wow" data-platform="youtube" data-tooltip="{{ __('YouTube') }}" target="_blank" rel="noopener" aria-label="{{ __('YouTube') }}">
-                            <svg class="icon footer__social-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-                                <path fill="currentColor" d="M21.6 7.2a2.7 2.7 0 0 0-1.9-1.9C18 4.8 12 4.8 12 4.8s-6 0-7.7.5A2.7 2.7 0 0 0 2.4 7.2 28 28 0 0 0 2 12a28 28 0 0 0 .4 4.8 2.7 2.7 0 0 0 1.9 1.9c1.7.5 7.7.5 7.7.5s6 0 7.7-.5a2.7 2.7 0 0 0 1.9-1.9A28 28 0 0 0 22 12a28 28 0 0 0-.4-4.8ZM10 15.5v-7l6 3.5-6 3.5Z"/>
+                    @if($socialInstagram)
+                        <a href="{{ $socialInstagram }}" class="footer__social-link footer__social-link--wow" data-platform="instagram" data-tooltip="{{ __('Instagram') }}" target="_blank" rel="noopener" aria-label="{{ __('Instagram') }}">
+                            <svg class="icon footer__social-icon-svg">
+                                <use href="{{ asset('assets/images/icons/sprite.svg#instagram') }}"></use>
                             </svg>
                         </a>
                     @endif

@@ -282,13 +282,6 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                         <div class="checkout-verify-gate__body">
                             <p class="checkout-verify-gate__step">{{ __('checkout.step_verify_phone') }}</p>
                             <p class="checkout-verify-gate__title">{{ __('checkout.verify_phone_before_address') }}</p>
-                            <button
-                                type="button"
-                                class="btn btn--primary btn--sm mt-3"
-                                @click="promptPhoneVerificationForDelivery()"
-                            >
-                                {{ __('checkout.verify_phone_first_btn') }}
-                            </button>
                         </div>
                     </div>
 
@@ -338,77 +331,84 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             @enderror
                         </div>
 
-                        <div x-show="phoneVerified && deliveryType === 'home' && savedAddresses.length > 0" x-cloak class="mb-6 rounded-lg border border-blue-100 bg-blue-50/80 p-4">
-                            <div class="mb-2 flex items-center justify-between gap-2">
-                                <p class="text-sm font-semibold text-gray-900">{{ __('checkout.saved_addresses_title') }}</p>
+                        <div x-show="phoneVerified && deliveryType === 'home' && savedAddresses.length > 0" x-cloak class="checkout-saved-addr-panel mb-6">
+                            <div class="checkout-saved-addr-panel__head">
+                                <div>
+                                    <p class="checkout-saved-addr-panel__title">{{ __('checkout.saved_addresses_title') }}</p>
+                                    <p class="checkout-saved-addr-panel__hint">{{ __('checkout.saved_addresses_hint') }}</p>
+                                </div>
                                 <button type="button"
-                                        class="inline-flex items-center gap-1 rounded-lg border border-blue-500 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
+                                        class="checkout-saved-addr-panel__add"
                                         @click="startAddingAddress()">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                     </svg>
                                     <span x-text="newAddressToggleLabel()"></span>
                                 </button>
                             </div>
-                            <p class="mb-3 text-xs text-gray-600">{{ __('checkout.saved_addresses_hint') }}</p>
-                            <p x-show="savedAddresses.length > 0 && deliverableSavedAddresses().length === 0" x-cloak class="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                            <p x-show="savedAddresses.length > 0 && deliverableSavedAddresses().length === 0" x-cloak class="checkout-saved-addr-panel__warn">
                                 {{ __('checkout.address_not_in_delivery_zone') }}
                             </p>
-                            <ul class="max-h-64 space-y-2 overflow-y-auto" x-show="!addingNewAddress && deliverableSavedAddresses().length > 0">
+                            <ul class="checkout-addr-list" x-show="!addingNewAddress && deliverableSavedAddresses().length > 0">
                                 <template x-for="addr in deliverableSavedAddresses()" :key="addr.id">
                                     <li>
-                                        <div class="w-full rounded-lg border px-3 py-2.5 text-sm text-gray-800 transition hover:border-blue-400 hover:bg-blue-50/50"
-                                             :class="String(addr.id) === String(selectedAddressId) ? 'border-blue-500 bg-white shadow-sm ring-1 ring-blue-200' : 'border-gray-200 bg-white'">
-                                            <div class="flex items-start justify-between gap-3">
-                                                <div class="min-w-0 flex-1">
-                                                    <span class="line-clamp-2 block text-left" x-text="addr.description || addr.title || ''"></span>
-                                                    <span class="mt-1 block text-xs text-gray-500 text-left" x-text="savedAddressDistrict(addr)"></span>
-                                                    <div class="mt-2 space-y-2" x-show="addressDeliveryTimes(addr).length > 0" x-cloak>
-                                                        <div class="flex flex-wrap items-center gap-2 text-xs text-gray-700">
-                                                            <span class="font-medium text-gray-800">{{ __('checkout.delivery_time') }}:</span>
-                                                            <span x-text="deliveryTimeLabelForAddress(addr)"></span>
-                                                            <button type="button"
-                                                                    class="rounded border border-blue-300 px-2 py-0.5 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-50"
-                                                                    x-show="String(addr.id) !== String(editingDeliveryTimeAddressId)"
-                                                                    @click.stop="startEditingDeliveryTime(addr)">
-                                                                {{ __('checkout.edit_delivery_time') }}
-                                                            </button>
-                                                        </div>
-                                                        <div x-show="String(addr.id) === String(editingDeliveryTimeAddressId) || String(addr.id) === String(selectedAddressId)" x-cloak>
-                                                            <select class="form-control form-control--sm w-full text-xs"
-                                                                    :value="selectedRegionDurationId"
-                                                                    @change="onSavedAddressDeliveryTimeChange(addr, $event.target.value)">
-                                                                <option value="">{{ __('checkout.select_delivery_time') }}</option>
-                                                                <template x-for="slot in addressDeliveryTimes(addr)" :key="slot.id">
-                                                                    <option :value="String(slot.id)" x-text="slot.label || slot.time || slot.durationText || slot.id"></option>
-                                                                </template>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-                                                    <p x-show="addressDeliveryTimes(addr).length === 0 && String(addr.id) === String(selectedAddressId)" x-cloak class="mt-2 text-xs text-amber-800">
-                                                        {{ __('checkout.no_delivery_time_slots') }}
-                                                    </p>
-                                                </div>
-                                                <div class="flex shrink-0 flex-col gap-1.5 sm:flex-row">
-                                                <button type="button"
-                                                        class="rounded-md border border-blue-500 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-500 hover:text-white"
-                                                        @click="selectSavedAddress(addr)">
-                                                    {{ __('Select') }}
-                                                </button>
-                                                <button type="button"
-                                                        class="rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50"
-                                                        :disabled="deletingAddressId === String(addr.id)"
-                                                        @click="deleteSavedAddress(addr)">
-                                                    <span x-show="deletingAddressId !== String(addr.id)">{{ __('Delete') }}</span>
-                                                    <span x-show="deletingAddressId === String(addr.id)" x-cloak>...</span>
-                                                </button>
-                                                </div>
+                                        <div class="checkout-addr-card"
+                                             :class="{ 'is-selected': String(addr.id) === String(selectedAddressId) }"
+                                             role="button"
+                                             tabindex="0"
+                                             :aria-pressed="String(addr.id) === String(selectedAddressId) ? 'true' : 'false'"
+                                             @click="selectSavedAddress(addr)"
+                                             @keydown.enter.prevent="selectSavedAddress(addr)"
+                                             @keydown.space.prevent="selectSavedAddress(addr)">
+                                            <div class="checkout-addr-card__radio" aria-hidden="true">
+                                                <span class="checkout-addr-card__radio-dot"></span>
                                             </div>
+                                            <div class="checkout-addr-card__main">
+                                                <p class="checkout-addr-card__title" x-text="addr.description || addr.title || ''"></p>
+                                                <p class="checkout-addr-card__district" x-text="savedAddressDistrict(addr)"></p>
+                                                <div class="checkout-addr-card__time" x-show="addressDeliveryTimes(addr).length > 0" x-cloak>
+                                                    <div class="checkout-addr-card__time-row">
+                                                        <span class="checkout-addr-card__time-label">{{ __('checkout.delivery_time') }}</span>
+                                                        <span class="checkout-addr-card__time-value" x-text="deliveryTimeLabelForAddress(addr)"></span>
+                                                        <button type="button"
+                                                                class="checkout-addr-card__time-edit"
+                                                                x-show="String(addr.id) !== String(editingDeliveryTimeAddressId)"
+                                                                @click.stop="startEditingDeliveryTime(addr)">
+                                                            {{ __('checkout.edit_delivery_time') }}
+                                                        </button>
+                                                    </div>
+                                                    <div class="checkout-addr-card__time-picker"
+                                                         x-show="String(addr.id) === String(editingDeliveryTimeAddressId) || String(addr.id) === String(selectedAddressId)"
+                                                         x-cloak
+                                                         @click.stop>
+                                                        <select class="form-control form-control--sm w-full text-xs"
+                                                                :value="selectedRegionDurationId"
+                                                                @change="onSavedAddressDeliveryTimeChange(addr, $event.target.value)">
+                                                            <option value="">{{ __('checkout.select_delivery_time') }}</option>
+                                                            <template x-for="slot in addressDeliveryTimes(addr)" :key="slot.id">
+                                                                <option :value="String(slot.id)" x-text="slot.label || slot.time || slot.durationText || slot.id"></option>
+                                                            </template>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <p x-show="addressDeliveryTimes(addr).length === 0 && String(addr.id) === String(selectedAddressId)" x-cloak class="checkout-addr-card__warn">
+                                                    {{ __('checkout.no_delivery_time_slots') }}
+                                                </p>
+                                            </div>
+                                            <button type="button"
+                                                    class="checkout-addr-card__delete"
+                                                    :disabled="deletingAddressId === String(addr.id)"
+                                                    :aria-label="@json(__('Delete'))"
+                                                    @click.stop="deleteSavedAddress(addr)">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                                </svg>
+                                            </button>
                                         </div>
                                     </li>
                                 </template>
                             </ul>
-                            <p x-show="addingNewAddress" x-cloak class="text-xs text-blue-700">
+                            <p x-show="addingNewAddress" x-cloak class="checkout-saved-addr-panel__new-hint">
                                 {{ __('Fill the map and address fields below, then tap "Save address".') }}
                             </p>
                         </div>
@@ -1431,6 +1431,194 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
         line-height: 1.55;
         color: #1e3a5f;
     }
+
+    .checkout-saved-addr-panel {
+        border-radius: 16px;
+        border: 1px solid rgba(39, 159, 249, 0.18);
+        background: linear-gradient(180deg, #f8fbff 0%, #f0f7ff 100%);
+        padding: 1.1rem 1.15rem;
+        box-shadow: 0 8px 24px rgba(39, 159, 249, 0.07);
+    }
+    .checkout-saved-addr-panel__head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.85rem;
+    }
+    .checkout-saved-addr-panel__title {
+        margin: 0 0 0.2rem;
+        font-size: 0.9375rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .checkout-saved-addr-panel__hint {
+        margin: 0;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        color: #64748b;
+    }
+    .checkout-saved-addr-panel__add {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-shrink: 0;
+        border-radius: 999px;
+        border: 1px solid rgba(39, 159, 249, 0.35);
+        background: #fff;
+        padding: 0.45rem 0.85rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #0369a1;
+        transition: transform .2s ease, background-color .2s ease, color .2s ease, box-shadow .2s ease;
+    }
+    .checkout-saved-addr-panel__add:hover {
+        background: #279ff9;
+        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 8px 16px rgba(39, 159, 249, 0.25);
+    }
+    .checkout-saved-addr-panel__warn,
+    .checkout-saved-addr-panel__new-hint {
+        margin: 0 0 0.75rem;
+        border-radius: 10px;
+        padding: 0.55rem 0.75rem;
+        font-size: 0.75rem;
+        line-height: 1.45;
+    }
+    .checkout-saved-addr-panel__warn {
+        border: 1px solid rgba(245, 158, 11, 0.35);
+        background: #fffbeb;
+        color: #92400e;
+    }
+    .checkout-saved-addr-panel__new-hint {
+        border: 1px solid rgba(39, 159, 249, 0.2);
+        background: rgba(255, 255, 255, 0.75);
+        color: #0369a1;
+    }
+    .checkout-addr-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        max-height: 18rem;
+        overflow-y: auto;
+        padding-inline-end: 0.15rem;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(39, 159, 249, 0.35) transparent;
+    }
+    .checkout-addr-card {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: start;
+        gap: 0.75rem;
+        width: 100%;
+        border-radius: 14px;
+        border: 1.5px solid #e2e8f0;
+        background: #fff;
+        padding: 0.85rem 0.9rem;
+        text-align: start;
+        cursor: pointer;
+        transition: border-color .22s ease, box-shadow .22s ease, transform .22s ease, background-color .22s ease;
+    }
+    .checkout-addr-card:hover {
+        border-color: rgba(39, 159, 249, 0.45);
+        box-shadow: 0 10px 22px rgba(39, 159, 249, 0.1);
+        transform: translateY(-1px);
+    }
+    .checkout-addr-card.is-selected {
+        border-color: #279ff9;
+        background: linear-gradient(180deg, #ffffff 0%, #f0f9ff 100%);
+        box-shadow: 0 0 0 3px rgba(39, 159, 249, 0.14), 0 12px 24px rgba(39, 159, 249, 0.12);
+    }
+    .checkout-addr-card__radio {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.35rem;
+        height: 1.35rem;
+        margin-top: 0.15rem;
+        border-radius: 999px;
+        border: 2px solid #cbd5e1;
+        background: #fff;
+        transition: border-color .2s ease, background-color .2s ease;
+    }
+    .checkout-addr-card.is-selected .checkout-addr-card__radio {
+        border-color: #279ff9;
+        background: #279ff9;
+    }
+    .checkout-addr-card__radio-dot {
+        width: 0.42rem;
+        height: 0.42rem;
+        border-radius: 999px;
+        background: transparent;
+        transform: scale(0);
+        transition: transform .2s ease, background-color .2s ease;
+    }
+    .checkout-addr-card.is-selected .checkout-addr-card__radio-dot {
+        background: #fff;
+        transform: scale(1);
+    }
+    .checkout-addr-card__main { min-width: 0; }
+    .checkout-addr-card__title {
+        margin: 0;
+        font-size: 0.875rem;
+        font-weight: 700;
+        line-height: 1.45;
+        color: #0f172a;
+    }
+    .checkout-addr-card__district {
+        margin: 0.2rem 0 0;
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+    .checkout-addr-card__time { margin-top: 0.65rem; }
+    .checkout-addr-card__time-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem 0.5rem;
+        font-size: 0.75rem;
+        color: #334155;
+    }
+    .checkout-addr-card__time-label { font-weight: 700; color: #0f172a; }
+    .checkout-addr-card__time-value { color: #0369a1; font-weight: 600; }
+    .checkout-addr-card__time-edit {
+        border-radius: 999px;
+        border: 1px solid rgba(39, 159, 249, 0.35);
+        background: #fff;
+        padding: 0.15rem 0.55rem;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        color: #0369a1;
+        transition: background-color .2s ease, color .2s ease;
+    }
+    .checkout-addr-card__time-edit:hover {
+        background: #e0f2fe;
+    }
+    .checkout-addr-card__time-picker { margin-top: 0.45rem; }
+    .checkout-addr-card__warn {
+        margin: 0.45rem 0 0;
+        font-size: 0.75rem;
+        color: #b45309;
+    }
+    .checkout-addr-card__delete {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        flex-shrink: 0;
+        border-radius: 999px;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        background: #fff;
+        color: #dc2626;
+        transition: background-color .2s ease, color .2s ease, transform .2s ease;
+    }
+    .checkout-addr-card__delete:hover:not(:disabled) {
+        background: #fef2f2;
+        transform: scale(1.05);
+    }
+    .checkout-addr-card__delete:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .checkout-coupon-feedback {
         display: flex;
@@ -2818,9 +3006,6 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     return;
                 }
                 this.queueMoyasarBootstrap();
-                this.$nextTick(() => {
-                    this.$refs.paymentCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                });
             },
 
             async deleteSavedAddress(addr) {

@@ -134,9 +134,9 @@
 
         /* Platform-specific hover colors + neon glow */
         .footer__social-link--wow[data-platform="instagram"]:hover { color: #E1306C; box-shadow: 0 0 0 0 rgba(225,48,108,.6), 0 0 25px 4px rgba(225,48,108,.55); }
-        .footer__social-link--wow[data-platform="facebook"]:hover  { color: #1877F2; box-shadow: 0 0 25px 4px rgba(24,119,242,.55); }
+        .footer__social-link--wow[data-platform="whatsapp"]:hover  { color: #25D366; box-shadow: 0 0 25px 4px rgba(37,211,102,.55); }
+        .footer__social-link--wow[data-platform="snapchat"]:hover { color: #FFFC00; box-shadow: 0 0 25px 4px rgba(255,252,0,.45); }
         .footer__social-link--wow[data-platform="twitter"]:hover   { color: #1DA1F2; box-shadow: 0 0 25px 4px rgba(29,161,242,.55); }
-        .footer__social-link--wow[data-platform="youtube"]:hover   { color: #FF0000; box-shadow: 0 0 25px 4px rgba(255,0,0,.5); }
 
         /* Tooltip */
         .footer__social-link--wow::after {

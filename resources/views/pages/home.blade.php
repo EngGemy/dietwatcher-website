@@ -490,29 +490,24 @@
             </div>
 
             <div class="mb-12 flex items-center justify-center gap-3 app-social-links" data-anim="fade-up" data-anim-delay="180">
-                @if(!empty($socialInstagram) && $socialInstagram !== '#')
-                    <a href="{{ $socialInstagram }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" aria-label="{{ __('Instagram') }}">
-                        <svg class="size-5"><use href="{{ asset('assets/images/icons/sprite.svg#instagram') }}"></use></svg>
-                    </a>
-                @endif
-                @if(!empty($socialFacebook) && $socialFacebook !== '#')
-                    <a href="{{ $socialFacebook }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" aria-label="{{ __('Facebook') }}">
-                        <img src="{{ asset('assets/images/icons/facebook.svg') }}" alt="" class="size-5 object-contain" />
+                @if(!empty($socialWhatsapp) && $socialWhatsapp !== '#')
+                    <a href="{{ $socialWhatsapp }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" data-platform="whatsapp" aria-label="{{ __('WhatsApp') }}">
+                        <svg class="size-5"><use href="{{ asset('assets/images/icons/sprite.svg#whatsapp') }}"></use></svg>
                     </a>
                 @endif
                 @if(!empty($socialTwitter) && $socialTwitter !== '#')
-                    <a href="{{ $socialTwitter }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" aria-label="{{ __('Twitter') }}">
+                    <a href="{{ $socialTwitter }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" data-platform="twitter" aria-label="{{ __('Twitter') }}">
                         <img src="{{ asset('assets/images/icons/twitter.svg') }}" alt="" class="size-5 object-contain" />
                     </a>
                 @endif
-                @if(!empty($socialLinkedIn) && $socialLinkedIn !== '#')
-                    <a href="{{ $socialLinkedIn }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" aria-label="{{ __('LinkedIn') }}">
-                        <img src="{{ asset('assets/images/icons/linkedint.svg') }}" alt="" class="size-5 object-contain" />
+                @if(!empty($socialSnapchat) && $socialSnapchat !== '#')
+                    <a href="{{ $socialSnapchat }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" data-platform="snapchat" aria-label="{{ __('Snapchat') }}">
+                        <img src="{{ asset('assets/images/icons/snapchat.svg') }}" alt="" class="size-5 object-contain" />
                     </a>
                 @endif
-                @if(!empty($socialYouTube) && $socialYouTube !== '#')
-                    <a href="{{ $socialYouTube }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" aria-label="{{ __('YouTube') }}">
-                        <svg class="size-5"><use href="{{ asset('assets/images/icons/sprite.svg#telegram') }}"></use></svg>
+                @if(!empty($socialInstagram) && $socialInstagram !== '#')
+                    <a href="{{ $socialInstagram }}" target="_blank" rel="noopener" class="app-social-link hero-magnetic" data-platform="instagram" aria-label="{{ __('Instagram') }}">
+                        <svg class="size-5"><use href="{{ asset('assets/images/icons/sprite.svg#instagram') }}"></use></svg>
                     </a>
                 @endif
             </div>
@@ -1429,6 +1424,22 @@
     color: #fff;
     border-color: #279ff9;
     box-shadow: 0 12px 20px rgba(39,159,249,.3);
+}
+.app-social-link[data-platform="whatsapp"]:hover {
+    background: #25D366;
+    border-color: #25D366;
+    box-shadow: 0 12px 20px rgba(37,211,102,.35);
+}
+.app-social-link[data-platform="snapchat"]:hover {
+    background: #FFFC00;
+    color: #111827;
+    border-color: #FFFC00;
+    box-shadow: 0 12px 20px rgba(255,252,0,.4);
+}
+.app-social-link[data-platform="instagram"]:hover {
+    background: #E1306C;
+    border-color: #E1306C;
+    box-shadow: 0 12px 20px rgba(225,48,108,.35);
 }
 
 /* ─── Testimonials premium single-row rail ─────────── */

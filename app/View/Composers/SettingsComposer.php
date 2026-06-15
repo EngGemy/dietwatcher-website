@@ -36,6 +36,8 @@ class SettingsComposer
             // Social links
             'socialInstagram' => Setting::getValue('social_instagram', '#'),
             'socialFacebook' => Setting::getValue('social_facebook', '#'),
+            'socialSnapchat' => Setting::getValue('social_snapchat', Setting::getValue('social_facebook', '#')),
+            'socialWhatsapp' => $this->resolveWhatsappUrl(),
             'socialTwitter' => Setting::getValue('social_twitter', '#'),
             'socialYouTube' => Setting::getValue('social_youtube', '#'),
             'socialLinkedIn' => Setting::getValue('social_linkedin', '#'),
@@ -73,5 +75,30 @@ class SettingsComposer
         
         // Otherwise assume it's an assets path
         return asset($value);
+    }
+
+    protected function resolveWhatsappUrl(): string
+    {
+        $url = trim((string) Setting::getValue('social_whatsapp', ''));
+        if ($url !== '' && $url !== '#') {
+            return $url;
+        }
+
+        $phone = preg_replace('/\D+/', '', (string) Setting::getValue('contact_phone', ''));
+        if ($phone === '') {
+            return '#';
+        }
+
+        if (str_starts_with($phone, '966')) {
+            return 'https://wa.me/'.$phone;
+        }
+
+        if (str_starts_with($phone, '0')) {
+            $phone = '966'.substr($phone, 1);
+        } elseif (strlen($phone) === 9) {
+            $phone = '966'.$phone;
+        }
+
+        return 'https://wa.me/'.$phone;
     }
 }
