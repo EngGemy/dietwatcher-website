@@ -39,23 +39,40 @@ class BlogContentGeneratorService
     public function generateDaily(?string $topic = null, bool $force = false): ?BlogPost
     {
         if (! $this->isConfigured()) {
-            Log::info('BlogContentGeneratorService: GEMINI_API_KEY not set');
+            Log::error('BlogContentGeneratorService::generateDaily aborted: GEMINI_API_KEY not configured');
 
             return null;
         }
 
         if (! $force && $this->alreadyGeneratedToday()) {
-            Log::info('BlogContentGeneratorService: post already created today');
+            Log::warning('BlogContentGeneratorService::generateDaily aborted: post already generated today and force=false');
 
             return null;
         }
 
         $payload = $this->fetchPayloadFromGemini($topic);
         if ($payload === null) {
+            Log::error('BlogContentGeneratorService::generateDaily aborted: fetchPayloadFromGemini returned null');
+
             return null;
         }
 
-        $coverImage = $this->imagePicker->pick($payload['cover_image_path'] ?? null);
+        try {
+            $coverImage = $this->imagePicker->pick($payload['cover_image_path'] ?? null);
+        } catch (\Throwable $e) {
+            Log::error('BlogContentGeneratorService::generateDaily cover image pick failed', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($coverImage === '') {
+            Log::error('BlogContentGeneratorService::generateDaily cover image pick failed: empty path returned');
+
+            return null;
+        }
+
         $payload['cover_image_path'] = $coverImage;
         $payload['status'] = 'published';
         $payload['published_at'] = now();
@@ -69,10 +86,28 @@ class BlogContentGeneratorService
             }
         }
 
-        $this->ensureTagsExist($payload['tags'] ?? []);
-        $this->ensureCategoryExists($payload['category_slug'] ?? 'nutrition');
+        try {
+            $this->ensureTagsExist($payload['tags'] ?? []);
+            $this->ensureCategoryExists($payload['category_slug'] ?? 'nutrition');
+        } catch (\Throwable $e) {
+            Log::error('BlogContentGeneratorService::generateDaily taxonomy preparation failed', [
+                'error' => $e->getMessage(),
+            ]);
 
-        return $this->writer->create($payload);
+            return null;
+        }
+
+        try {
+            return $this->writer->create($payload);
+        } catch (\Throwable $e) {
+            Log::error('BlogContentGeneratorService::generateDaily post persistence failed', [
+                'error' => $e->getMessage(),
+                'en_slug' => $payload['en']['slug'] ?? null,
+                'ar_slug' => $payload['ar']['slug'] ?? null,
+            ]);
+
+            return null;
+        }
     }
 
     /**
@@ -139,13 +174,41 @@ PROMPT;
         ], jsonMode: true, temperature: 0.55);
 
         if ($raw === null) {
+            Log::error('BlogContentGeneratorService::fetchPayloadFromGemini: Gemini returned null content');
+
             return null;
         }
 
         $decoded = json_decode($raw, true);
-        if (! is_array($decoded) || empty($decoded['en']['title']) || empty($decoded['ar']['title'])) {
-            Log::warning('BlogContentGeneratorService: invalid JSON from Gemini', [
-                'raw' => Str::limit($raw, 500),
+        if (! is_array($decoded)) {
+            Log::error('BlogContentGeneratorService::fetchPayloadFromGemini JSON decode failed', [
+                'json_error' => json_last_error_msg(),
+                'raw' => Str::limit($raw, 800),
+            ]);
+
+            return null;
+        }
+
+        $missingKeys = [];
+        foreach (['category_slug', 'tags', 'reading_time_minutes', 'en', 'ar'] as $key) {
+            if (! array_key_exists($key, $decoded)) {
+                $missingKeys[] = $key;
+            }
+        }
+
+        foreach (['title', 'slug', 'excerpt', 'content', 'meta_title', 'meta_description', 'meta_keywords', 'og_title', 'og_description'] as $key) {
+            if (! isset($decoded['en'][$key]) || trim((string) $decoded['en'][$key]) === '') {
+                $missingKeys[] = "en.{$key}";
+            }
+            if (! isset($decoded['ar'][$key]) || trim((string) $decoded['ar'][$key]) === '') {
+                $missingKeys[] = "ar.{$key}";
+            }
+        }
+
+        if ($missingKeys !== []) {
+            Log::error('BlogContentGeneratorService::fetchPayloadFromGemini missing required keys', [
+                'missing_keys' => $missingKeys,
+                'raw' => Str::limit($raw, 800),
             ]);
 
             return null;
