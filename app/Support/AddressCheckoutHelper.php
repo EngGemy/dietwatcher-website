@@ -646,7 +646,7 @@ final class AddressCheckoutHelper
         return $row;
     }
 
-     *
+    /**
      * @param  array<int, array<string, mixed>>  $subscriptions
      * @return array<int, int>
      */
