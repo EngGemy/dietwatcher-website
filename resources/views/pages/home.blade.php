@@ -147,6 +147,265 @@
                 margin-inline: auto;
             }
 
+            .cat-carousel {
+                position: relative;
+            }
+
+            .cat-carousel__fade {
+                display: none;
+                pointer-events: none;
+            }
+
+            .cat-carousel__nav {
+                display: none;
+            }
+
+            /* Shared “elevated” card state (desktop hover + mobile focus) */
+            .cat-card.is-mobile-active,
+            .cat-card:active {
+                border-color: transparent;
+                background: var(--cat-accent);
+                box-shadow: 0 18px 44px color-mix(in srgb, var(--cat-accent) 34%, transparent);
+                color: #fff;
+            }
+
+            .cat-card.is-mobile-active .cat-card__title,
+            .cat-card:active .cat-card__title {
+                color: #fff;
+            }
+
+            .cat-card.is-mobile-active .cat-card__tagline,
+            .cat-card:active .cat-card__tagline {
+                color: rgba(255, 255, 255, 0.9);
+            }
+
+            .cat-card.is-mobile-active .cat-card__icon-wrap,
+            .cat-card:active .cat-card__icon-wrap {
+                background: rgba(255, 255, 255, 0.22);
+                box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
+            }
+
+            .cat-card.is-mobile-active .cat-card__scribble path,
+            .cat-card:active .cat-card__scribble path {
+                stroke: #fff;
+                stroke-dashoffset: 0;
+            }
+
+            .cat-card.is-mobile-active .cat-card__stat,
+            .cat-card:active .cat-card__stat {
+                background: rgba(255, 255, 255, 0.2);
+            }
+
+            .cat-card.is-mobile-active .cat-card__stat-value,
+            .cat-card:active .cat-card__stat-value,
+            .cat-card.is-mobile-active .cat-card__stat-unit,
+            .cat-card:active .cat-card__stat-unit,
+            .cat-card.is-mobile-active .cat-card__stat-soon,
+            .cat-card:active .cat-card__stat-soon {
+                color: #fff;
+            }
+
+            .cat-card.is-mobile-active .cat-card__hint,
+            .cat-card:active .cat-card__hint {
+                opacity: 1;
+                transform: translateY(0);
+                color: rgba(255, 255, 255, 0.9);
+            }
+
+            @media (max-width: 639px) {
+                .cat-section {
+                    padding-top: 3.5rem;
+                    padding-bottom: 3.5rem;
+                }
+
+                .cat-section .container {
+                    padding-inline: 1rem;
+                }
+
+                .cat-carousel {
+                    margin-inline: -1rem;
+                }
+
+                .cat-carousel__fade {
+                    display: block;
+                    position: absolute;
+                    top: 0;
+                    bottom: 2.5rem;
+                    width: 2.25rem;
+                    z-index: 2;
+                }
+
+                .cat-carousel__fade--start {
+                    inset-inline-start: 0;
+                    background: linear-gradient(to var(--cat-fade-dir, right), #f8fbff 15%, transparent);
+                }
+
+                .cat-carousel__fade--end {
+                    inset-inline-end: 0;
+                    background: linear-gradient(to var(--cat-fade-dir-end, left), #fff 15%, transparent);
+                }
+
+                [dir="rtl"] .cat-carousel__fade--start {
+                    --cat-fade-dir: left;
+                }
+
+                [dir="rtl"] .cat-carousel__fade--end {
+                    --cat-fade-dir-end: right;
+                }
+
+                .cat-grid {
+                    display: flex;
+                    flex-wrap: nowrap;
+                    gap: 0.85rem;
+                    max-width: none;
+                    margin-inline: 0;
+                    padding: 0.35rem 1rem 0.85rem;
+                    overflow-x: auto;
+                    overflow-y: hidden;
+                    scroll-snap-type: x mandatory;
+                    scroll-padding-inline: 1rem;
+                    -webkit-overflow-scrolling: touch;
+                    scrollbar-width: none;
+                }
+
+                .cat-grid::-webkit-scrollbar {
+                    display: none;
+                }
+
+                .cat-card {
+                    flex: 0 0 min(82vw, 18.5rem);
+                    scroll-snap-align: center;
+                    min-height: 15.5rem;
+                    padding: 1.45rem 1.1rem 1.2rem;
+                    transform: scale(0.96);
+                    opacity: 0.82;
+                    transition:
+                        transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+                        opacity 0.35s ease,
+                        box-shadow 0.35s ease,
+                        background 0.35s ease,
+                        border-color 0.25s ease;
+                }
+
+                .cat-card.is-mobile-active {
+                    transform: scale(1);
+                    opacity: 1;
+                }
+
+                .cat-card:not(.is-mobile-active) .cat-card__icon-wrap {
+                    animation-play-state: paused;
+                }
+
+                .cat-card.is-mobile-active .cat-card__icon-wrap {
+                    animation: cat-icon-pop 2.4s ease-in-out infinite;
+                }
+
+                .cat-card:active {
+                    transform: scale(0.98);
+                }
+
+                .cat-card__icon-wrap {
+                    width: 5.25rem;
+                    height: 5.25rem;
+                    margin-bottom: 0.85rem;
+                }
+
+                .cat-card__icon {
+                    width: 3rem;
+                    height: 3rem;
+                }
+
+                .cat-card__tagline {
+                    min-height: auto;
+                    font-size: 0.8rem;
+                }
+
+                .cat-card__scribble path {
+                    stroke-dashoffset: 80;
+                    opacity: 0.65;
+                }
+
+                .cat-card.is-mobile-active .cat-card__scribble path {
+                    animation: cat-draw-line 0.8s ease forwards;
+                }
+
+                .cat-card__hint {
+                    opacity: 0.72;
+                    transform: translateY(0);
+                }
+
+                .cat-carousel__nav {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 0.65rem;
+                    margin-top: 0.35rem;
+                    padding-inline: 1rem;
+                }
+
+                .cat-carousel__dots {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 0.45rem;
+                }
+
+                .cat-carousel__dot {
+                    width: 0.45rem;
+                    height: 0.45rem;
+                    padding: 0;
+                    border: none;
+                    border-radius: 999px;
+                    background: rgba(46, 46, 48, 0.18);
+                    transition:
+                        width 0.28s ease,
+                        background 0.28s ease;
+                    cursor: pointer;
+                }
+
+                .cat-carousel__dot.is-active {
+                    width: 1.35rem;
+                    background: var(--color-blue);
+                }
+
+                .cat-carousel__dot--lifestyle.is-active {
+                    background: #3fb536;
+                }
+
+                .cat-carousel__dot--medical.is-active {
+                    background: #7c5cff;
+                }
+
+                .cat-carousel__swipe {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.4rem;
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    color: rgba(46, 46, 48, 0.45);
+                }
+
+                .cat-carousel__swipe svg {
+                    width: 1rem;
+                    height: 1rem;
+                    animation: cat-swipe-nudge 1.8s ease-in-out infinite;
+                }
+            }
+
+            @keyframes cat-swipe-nudge {
+                0%, 100% { transform: translateX(0); opacity: 0.55; }
+                50% { transform: translateX(4px); opacity: 1; }
+            }
+
+            @keyframes cat-swipe-nudge-rtl {
+                0%, 100% { transform: scaleX(-1) translateX(0); opacity: 0.55; }
+                50% { transform: scaleX(-1) translateX(4px); opacity: 1; }
+            }
+
+            [dir="rtl"] .cat-carousel__swipe svg {
+                animation: cat-swipe-nudge-rtl 1.8s ease-in-out infinite;
+            }
+
             @media (min-width: 640px) {
                 .cat-grid {
                     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -201,10 +460,125 @@
                 .cat-card:hover,
                 .cat-card:focus-visible {
                     transform: translateY(-6px);
+                }
+
+                .cat-card:hover,
+                .cat-card:focus-visible,
+                .cat-card:hover:active,
+                .cat-card:focus-visible:active {
                     border-color: transparent;
                     background: var(--cat-accent);
                     box-shadow: 0 18px 44px color-mix(in srgb, var(--cat-accent) 34%, transparent);
                     color: #fff;
+                }
+
+                .cat-card:hover .cat-card__title,
+                .cat-card:focus-visible .cat-card__title {
+                    color: #fff;
+                }
+
+                .cat-card:hover .cat-card__tagline,
+                .cat-card:focus-visible .cat-card__tagline {
+                    color: rgba(255, 255, 255, 0.9);
+                }
+
+                .cat-card:hover .cat-card__icon-wrap,
+                .cat-card:focus-visible .cat-card__icon-wrap {
+                    background: rgba(255, 255, 255, 0.22);
+                    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
+                    animation: cat-icon-pop 0.6s ease-in-out infinite;
+                }
+
+                .cat-card:hover .cat-card__scribble path,
+                .cat-card:focus-visible .cat-card__scribble path {
+                    stroke: #fff;
+                    animation: cat-draw-line 0.65s ease forwards;
+                }
+
+                .cat-card:hover .cat-card__stat,
+                .cat-card:focus-visible .cat-card__stat {
+                    background: rgba(255, 255, 255, 0.2);
+                }
+
+                .cat-card:hover .cat-card__stat-value,
+                .cat-card:focus-visible .cat-card__stat-value,
+                .cat-card:hover .cat-card__stat-unit,
+                .cat-card:focus-visible .cat-card__stat-unit,
+                .cat-card:hover .cat-card__stat-soon,
+                .cat-card:focus-visible .cat-card__stat-soon {
+                    color: #fff;
+                }
+
+                .cat-card:hover .cat-card__hint,
+                .cat-card:focus-visible .cat-card__hint {
+                    opacity: 1;
+                    transform: translateY(0);
+                    color: rgba(255, 255, 255, 0.88);
+                }
+            }
+
+            @media (min-width: 640px) {
+                .cat-card:active {
+                    background: #fff;
+                    border-color: rgba(15, 23, 42, 0.07);
+                    box-shadow:
+                        0 1px 0 rgba(255, 255, 255, 0.9) inset,
+                        0 10px 30px rgba(15, 23, 42, 0.06);
+                    color: inherit;
+                    transform: translateY(-6px) scale(0.99);
+                }
+
+                .cat-card:active .cat-card__title {
+                    color: var(--color-black);
+                }
+
+                .cat-card:active .cat-card__tagline {
+                    color: rgba(46, 46, 48, 0.58);
+                }
+            }
+
+            /* Reset mobile-only active overrides on desktop */
+            @media (min-width: 640px) {
+                .cat-card.is-mobile-active {
+                    transform: none;
+                    opacity: 1;
+                    background: #fff;
+                    border-color: rgba(15, 23, 42, 0.07);
+                    box-shadow:
+                        0 1px 0 rgba(255, 255, 255, 0.9) inset,
+                        0 10px 30px rgba(15, 23, 42, 0.06);
+                    color: inherit;
+                }
+
+                .cat-card.is-mobile-active .cat-card__title {
+                    color: var(--color-black);
+                }
+
+                .cat-card.is-mobile-active .cat-card__tagline {
+                    color: rgba(46, 46, 48, 0.58);
+                }
+
+                .cat-card.is-mobile-active .cat-card__scribble path {
+                    stroke: var(--cat-accent);
+                    stroke-dashoffset: 120;
+                    animation: none;
+                }
+
+                .cat-card.is-mobile-active .cat-card__stat {
+                    background: var(--cat-accent-soft);
+                }
+
+                .cat-card.is-mobile-active .cat-card__stat-value {
+                    color: var(--cat-accent);
+                }
+
+                .cat-card.is-mobile-active .cat-card__stat-unit,
+                .cat-card.is-mobile-active .cat-card__stat-soon {
+                    color: rgba(46, 46, 48, 0.55);
+                }
+
+                .cat-card.is-mobile-active .cat-card__hint {
+                    opacity: 0;
                 }
             }
 
@@ -596,7 +970,59 @@
                     : collect($__fallbackCategories);
             @endphp
 
-            <div class="cat-grid mb-10 md:mb-14" data-anim-stagger>
+            <div
+                class="cat-carousel mb-10 md:mb-14"
+                x-data="{
+                    active: 0,
+                    _scrollRaf: null,
+                    init() {
+                        this.$nextTick(() => {
+                            this.syncActive();
+                            this.$refs.track?.addEventListener('scroll', () => this.onTrackScroll(), { passive: true });
+                            window.addEventListener('resize', () => this.syncActive(), { passive: true });
+                        });
+                    },
+                    onTrackScroll() {
+                        if (this._scrollRaf) return;
+                        this._scrollRaf = requestAnimationFrame(() => {
+                            this._scrollRaf = null;
+                            this.syncActive();
+                        });
+                    },
+                    syncActive() {
+                        const track = this.$refs.track;
+                        if (!track) return;
+                        const cards = [...track.querySelectorAll('.cat-card')];
+                        if (!cards.length) return;
+                        const trackRect = track.getBoundingClientRect();
+                        const trackCenter = trackRect.left + trackRect.width / 2;
+                        let best = 0;
+                        let bestDist = Infinity;
+                        cards.forEach((card, i) => {
+                            const rect = card.getBoundingClientRect();
+                            const dist = Math.abs((rect.left + rect.width / 2) - trackCenter);
+                            if (dist < bestDist) {
+                                bestDist = dist;
+                                best = i;
+                            }
+                        });
+                        this.active = best;
+                        const isMobile = window.matchMedia('(max-width: 639px)').matches;
+                        cards.forEach((card, i) => {
+                            card.classList.toggle('is-mobile-active', isMobile && i === best);
+                        });
+                    },
+                    goTo(index) {
+                        const card = this.$refs.track?.querySelectorAll('.cat-card')[index];
+                        if (!card) return;
+                        card.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                    }
+                }"
+                x-init="init()">
+                <div class="cat-carousel__fade cat-carousel__fade--start" aria-hidden="true"></div>
+                <div class="cat-carousel__fade cat-carousel__fade--end" aria-hidden="true"></div>
+
+                <div class="cat-grid" data-anim-stagger x-ref="track">
                 @foreach($__displayCategories as $category)
                     @php
                         $catId = (int) ($category['id'] ?? 0);
@@ -647,6 +1073,28 @@
                         </div>
                     </a>
                 @endforeach
+                </div>
+
+                <div class="cat-carousel__nav" aria-hidden="false">
+                    <div class="cat-carousel__dots" role="tablist" aria-label="{{ __('Meal Plan') }}">
+                        @foreach($__displayCategories as $category)
+                            @php $dotTheme = $__categoryTheme($category); @endphp
+                            <button type="button"
+                                    class="cat-carousel__dot cat-carousel__dot--{{ $dotTheme }}"
+                                    :class="active === {{ $loop->index }} ? 'is-active' : ''"
+                                    @click="goTo({{ $loop->index }})"
+                                    :aria-selected="active === {{ $loop->index }} ? 'true' : 'false'"
+                                    role="tab"
+                                    aria-label="{{ $__localizedCategoryField($category['name'] ?? '') }}"></button>
+                        @endforeach
+                    </div>
+                    <p class="cat-carousel__swipe">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+                        </svg>
+                        {{ __('category.swipe_hint') }}
+                    </p>
+                </div>
             </div>
 
             <div class="text-center">
