@@ -488,6 +488,49 @@ class ExternalDataService
     }
 
     /**
+     * @param  array<string, mixed>  $plan
+     * @return array{carbs: array{min: float, max: float}, proteins: array{min: float, max: float}, fats: array{min: float, max: float}}
+     */
+    protected function normalizePlanMacros(array $plan): array
+    {
+        $read = static function (array $plan, string $key): array {
+            $node = $plan[$key] ?? [];
+            if (! is_array($node)) {
+                return ['min' => 0.0, 'max' => 0.0];
+            }
+
+            return [
+                'min' => (float) ($node['min'] ?? 0),
+                'max' => (float) ($node['max'] ?? 0),
+            ];
+        };
+
+        return [
+            'carbs' => $read($plan, 'carbs'),
+            'proteins' => $read($plan, 'proteins'),
+            'fats' => $read($plan, 'fats'),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $macros
+     */
+    protected function planMacrosHaveValues(array $macros): bool
+    {
+        foreach (['carbs', 'proteins', 'fats'] as $key) {
+            $node = $macros[$key] ?? null;
+            if (! is_array($node)) {
+                continue;
+            }
+            if (((float) ($node['min'] ?? 0)) > 0 || ((float) ($node['max'] ?? 0)) > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param  array<string, mixed>  $p
      * @return array<string, mixed>
      */
@@ -525,6 +568,8 @@ class ExternalDataService
             ];
         }
 
+        $planMacros = $this->normalizePlanMacros($p);
+
         $calories = [];
         foreach ($p['calories'] ?? [] as $c) {
             if (! is_array($c)) {
@@ -535,13 +580,14 @@ class ExternalDataService
                 continue;
             }
             $normalized = preg_replace('/\s+/', '', str_replace('–', '-', $amount));
+            $calorieMacros = is_array($c['macros'] ?? null) ? $c['macros'] : null;
             $calories[] = [
                 'id' => (int) ($c['id'] ?? 0),
                 'amount' => $amount,
                 'range' => $normalized,
                 'label' => $amount.' '.__('kcal'),
                 'is_default' => (bool) ($c['is_default'] ?? false),
-                'macros' => $c['macros'] ?? null,
+                'macros' => ($calorieMacros && $this->planMacrosHaveValues($calorieMacros)) ? $calorieMacros : $planMacros,
             ];
         }
 
@@ -557,6 +603,7 @@ class ExternalDataService
             'has_offer' => (bool) ($p['has_offer'] ?? false),
             'durations' => $durations,
             'calories' => $calories,
+            'macros' => $planMacros,
             'image_url' => $this->absoluteMediaUrl((string) ($p['image'] ?? $p['image_url'] ?? '')),
             'week_end_status' => (string) ($p['week_end_status'] ?? ''),
         ];

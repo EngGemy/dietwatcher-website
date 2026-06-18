@@ -77,6 +77,77 @@ $mealTypes = [
     ['id' => 'snack', 'name' => __('Snack')],
 ];
 
+// Nutritional info — build from default subscription plan macros, calorie macros, or API program data
+$buildNutritionFromMacros = static function (?array $macros): ?array {
+    if (! is_array($macros)) {
+        return null;
+    }
+
+    $read = static function (array $macros, string ...$keys): array {
+        foreach ($keys as $key) {
+            $node = $macros[$key] ?? null;
+            if (is_array($node)) {
+                return [
+                    'min' => (float) ($node['min'] ?? 0),
+                    'max' => (float) ($node['max'] ?? 0),
+                ];
+            }
+        }
+
+        return ['min' => 0.0, 'max' => 0.0];
+    };
+
+    $proteins = $read($macros, 'proteins', 'protein');
+    $carbs = $read($macros, 'carbs', 'carb', 'carbohydrates');
+    $fats = $read($macros, 'fats', 'fat');
+
+    $fmt = static function (float $min, float $max): string {
+        if ($min <= 0 && $max <= 0) {
+            return '—';
+        }
+        if ($min > 0 && $max > 0 && abs($min - $max) > 0.01) {
+            $sa = fmod($min, 1.0) === 0.0 ? (string) (int) $min : rtrim(rtrim(number_format($min, 1, '.', ''), '0'), '.');
+            $sb = fmod($max, 1.0) === 0.0 ? (string) (int) $max : rtrim(rtrim(number_format($max, 1, '.', ''), '0'), '.');
+
+            return $sa.'-'.$sb.'g';
+        }
+        $v = max($min, $max);
+        $sv = fmod($v, 1.0) === 0.0 ? (string) (int) $v : rtrim(rtrim(number_format($v, 1, '.', ''), '0'), '.');
+
+        return $sv.'g';
+    };
+
+    $proteinMid = ($proteins['min'] + $proteins['max']) / 2;
+    $carbsMid = ($carbs['min'] + $carbs['max']) / 2;
+    $fatMid = ($fats['min'] + $fats['max']) / 2;
+    $total = $proteinMid + $carbsMid + $fatMid;
+
+    if ($total <= 0) {
+        return null;
+    }
+
+    return [
+        'carbs' => [
+            'amount' => $fmt($carbs['min'], $carbs['max']),
+            'percent' => (int) round(($carbsMid / $total) * 100),
+            'color' => 'bg-green',
+        ],
+        'protein' => [
+            'amount' => $fmt($proteins['min'], $proteins['max']),
+            'percent' => (int) round(($proteinMid / $total) * 100),
+            'color' => 'bg-yellow',
+        ],
+        'fat' => [
+            'amount' => $fmt($fats['min'], $fats['max']),
+            'percent' => (int) round(($fatMid / $total) * 100),
+            'color' => 'bg-red',
+        ],
+    ];
+};
+
+$firstPlanMacros = $hasSubscriptionPlans ? ($subscriptionPlans[0]['macros'] ?? null) : null;
+$nutritionFromPlan = $buildNutritionFromMacros(is_array($firstPlanMacros) ? $firstPlanMacros : null);
+
 // Calorie options — prefer first subscription plan, then API list, then CMS
 if ($hasSubscriptionPlans && ! empty($subscriptionPlans[0]['calories'])) {
     $calorieOptions = array_map(static function (array $c): array {
@@ -113,7 +184,9 @@ if ($hasSubscriptionPlans && ! empty($subscriptionPlans[0]['calories'])) {
 // Nutritional info — build from default calorie option macros or API program data
 $defaultCalorieRow = collect($calorieOptions)->firstWhere('is_default', true) ?? ($calorieOptions[0] ?? null);
 $firstMacros = is_array($defaultCalorieRow) ? ($defaultCalorieRow['macros'] ?? null) : null;
-if ($firstMacros) {
+if ($nutritionFromPlan) {
+    $nutrition = $nutritionFromPlan;
+} elseif ($firstMacros) {
     $totalMacros = ($firstMacros['protein'] ?? 0) + ($firstMacros['carbs'] ?? 0) + ($firstMacros['fats'] ?? $firstMacros['fat'] ?? 0);
     $nutrition = [
         'carbs' => [
@@ -755,13 +828,12 @@ function planDetail() {
                 label: c.label || (c.amount ? c.amount + ' {{ __('kcal') }}' : ''),
                 id: c.id || 0,
                 is_default: !!c.is_default,
-                macros: c.macros || null,
+                macros: c.macros || plan.macros || null,
             }));
 
             const defaultCal = this.calories.find(c => c.is_default) || this.calories[0];
             if (defaultCal) {
                 this.selectedCalories = defaultCal.range;
-                this.updateNutrition(defaultCal);
             }
 
             const defaultDur = this.durations.find(d => d.is_default) || this.durations[0];
@@ -771,10 +843,83 @@ function planDetail() {
             } else {
                 this.selectedDurationId = '';
             }
+
+            this.applyNutritionForCurrentSelection();
+
             this.$nextTick(() => {
                 this.refreshDurationScrollState();
                 this.scrollDurationToSelected();
             });
+        },
+
+        planMacrosHaveValues(macros) {
+            if (!macros || typeof macros !== 'object') {
+                return false;
+            }
+            const hasNode = (...keys) => {
+                for (const key of keys) {
+                    const node = macros[key];
+                    if (!node || typeof node !== 'object') {
+                        continue;
+                    }
+                    const min = Number(node.min) || 0;
+                    const max = Number(node.max) || 0;
+                    if (min > 0 || max > 0) {
+                        return true;
+                    }
+                }
+
+                return false;
+            };
+
+            return hasNode('proteins', 'protein') || hasNode('carbs', 'carb', 'carbohydrates') || hasNode('fats', 'fat');
+        },
+
+        setNutritionFromPlanMacros(macros) {
+            const read = (...keys) => {
+                for (const key of keys) {
+                    const node = macros?.[key];
+                    if (node && typeof node === 'object') {
+                        return {
+                            min: Number(node.min) || 0,
+                            max: Number(node.max) || 0,
+                        };
+                    }
+                }
+
+                return { min: 0, max: 0 };
+            };
+
+            const proteins = read('proteins', 'protein');
+            const carbs = read('carbs', 'carb', 'carbohydrates');
+            const fats = read('fats', 'fat');
+            this.setNutritionRanges(proteins.min, proteins.max, carbs.min, carbs.max, fats.min, fats.max);
+        },
+
+        applyNutritionForCurrentSelection() {
+            const plan = this.hasSubscriptionPlans
+                ? this.subscriptionPlans.find((p) => Number(p.id) === Number(this.selectedSubscriptionPlanId))
+                : null;
+
+            if (plan?.macros && this.planMacrosHaveValues(plan.macros)) {
+                this.setNutritionFromPlanMacros(plan.macros);
+                return;
+            }
+
+            const cal = this.calories.find((c) => c.range === this.selectedCalories)
+                || this.calories.find((c) => c.is_default)
+                || this.calories[0];
+
+            if (cal?.macros && this.planMacrosHaveValues(cal.macros)) {
+                this.setNutritionFromPlanMacros(cal.macros);
+                return;
+            }
+
+            if (cal) {
+                this.updateNutrition(cal);
+            }
+
+            this.applyEstimatedNutritionFromRange(this.selectedCalories);
         },
 
         async init() {
@@ -823,20 +968,18 @@ function planDetail() {
                 }
             }
 
-            this.$watch('selectedCalories', (val) => {
-                const cal = this.calories.find(c => c.range === val);
-                if (cal) this.updateNutrition(cal);
-                if (!this.hasNumericNutrition()) {
-                    this.applyEstimatedNutritionFromRange(val);
-                }
+            this.$watch('selectedCalories', () => {
+                this.applyNutritionForCurrentSelection();
             });
 
-            await this.hydrateNutritionFromProgramMeals();
-            if (!this.hasNumericNutrition()) {
-                this.applyEstimatedNutritionFromRange(this.selectedCalories);
-            }
-            if (!this.hasRangeDisplay()) {
-                this.applyEstimatedNutritionFromRange(this.selectedCalories);
+            if (!this.hasSubscriptionPlans) {
+                await this.hydrateNutritionFromProgramMeals();
+                if (!this.hasNumericNutrition()) {
+                    this.applyEstimatedNutritionFromRange(this.selectedCalories);
+                }
+                if (!this.hasRangeDisplay()) {
+                    this.applyEstimatedNutritionFromRange(this.selectedCalories);
+                }
             }
 
             this.$watch('durations', () => {
