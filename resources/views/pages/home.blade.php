@@ -96,6 +96,8 @@
         </div>
     </section>
 
+    <x-trust-bar />
+
     {{-- Meal Plans Section --}}
     @push('styles')
         <style>
