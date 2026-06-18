@@ -1351,6 +1351,8 @@
     "account.tx_types.deduct": "خصم",
     "account.tx_types.cancel_reservation": "إلغاء حجز",
     "account.tx_types.cancel_subscription": "إلغاء اشتراك",
+    "account.tx_types.cancel_purchase": "إلغاء شراء",
+    "account.tx_types.purchase_cancel": "إلغاء شراء",
     "account.tx_types.exchange_points": "تحويل نقاط",
     "account.tx_types.credit": "إضافة رصيد",
     "account.tx_types.debit": "سحب رصيد",

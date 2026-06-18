@@ -39,8 +39,7 @@
                     @elseif($balance !== null)
                         <x-sar :amount="$balance" class="text-white text-4xl md:text-5xl font-extrabold" size="1.15rem" />
                     @else
-                        <span class="text-4xl md:text-5xl font-extrabold">0.00</span>
-                        <x-sar class="text-white/80 text-lg font-semibold" size="1rem" />
+                        <span class="text-4xl md:text-5xl font-extrabold text-white/90">—</span>
                     @endif
                 </div>
                 <p class="acc-wallet-hero__meta">{{ __('account.wallet_secure_note') }}</p>
@@ -76,7 +75,7 @@
         </div>
         <div class="acc-wallet-mini">
             <p class="acc-wallet-mini__label">{{ __('account.transactions') }}</p>
-            <p class="acc-wallet-mini__value text-slate-900">{{ $loading ? '—' : count($transactions) }}</p>
+            <p class="acc-wallet-mini__value text-slate-900">{{ $loading ? '—' : $transactionsTotal }}</p>
         </div>
     </section>
 

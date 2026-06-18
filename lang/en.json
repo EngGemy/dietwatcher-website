@@ -1144,6 +1144,8 @@
     "account.tx_types.deduct": "Deduct",
     "account.tx_types.cancel_reservation": "Reservation canceled",
     "account.tx_types.cancel_subscription": "Subscription canceled",
+    "account.tx_types.cancel_purchase": "Purchase canceled",
+    "account.tx_types.purchase_cancel": "Purchase canceled",
     "account.tx_types.exchange_points": "Converted points",
     "account.tx_types.credit": "Credit",
     "account.tx_types.debit": "Debit",

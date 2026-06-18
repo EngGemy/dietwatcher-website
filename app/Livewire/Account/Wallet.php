@@ -28,6 +28,8 @@ class Wallet extends Component
 
     public float $debitsTotal = 0.0;
 
+    public int $transactionsTotal = 0;
+
     public int $page = 1;
 
     public bool $loading = true;
@@ -57,11 +59,7 @@ class Wallet extends Component
             $this->type = 'all';
         }
 
-        $balanceResult = $api->getWallet('all', null, null, 1);
-        if ($balanceResult['ok'] ?? false) {
-            $this->balance = $this->extractWalletBalance($balanceResult['data'] ?? null)
-                ?? $this->extractWalletBalance(is_array($balanceResult['raw'] ?? null) ? $balanceResult['raw'] : null);
-        }
+        $this->balance = $this->resolveWalletBalance($api);
 
         $result = $api->getWallet($this->type, null, null, $this->page);
         if (! ($result['ok'] ?? false)) {
@@ -75,31 +73,27 @@ class Wallet extends Component
         $data = $result['data'] ?? [];
         if (is_array($data)) {
             if ($this->balance === null) {
-                $this->balance = $this->extractWalletBalance($data);
+                $this->balance = $this->extractWalletBalance($data)
+                    ?? $this->extractWalletBalance(is_array($result['raw'] ?? null) ? $result['raw'] : null);
             }
 
             $this->transactions = $this->extractRows($data, ['transactions', 'wallet_transactions', 'items', 'rows']);
         }
 
+        $summary = $this->summarizeWalletTransactions($api);
+        $this->transactionsTotal = $summary['count'];
         if ($this->balance === null) {
-            $profile = session('external_api_profile', []);
-            if (is_array($profile)) {
-                $this->balance = $this->extractWalletBalance($profile);
-            }
+            $this->balance = $summary['balance'];
         }
+        $this->creditsTotal = $summary['credits'];
+        $this->debitsTotal = $summary['debits'];
 
         foreach ($this->transactions as $index => $transaction) {
             if (! is_array($transaction)) {
                 continue;
             }
 
-            $amount = $this->numericMoneyValue(
-                $transaction['amount']
-                ?? $transaction['value']
-                ?? $transaction['total']
-                ?? null
-            ) ?? 0.0;
-
+            $amount = $this->extractTransactionAmount($transaction) ?? 0.0;
             $isCredit = $this->walletTransactionIsCredit($transaction, $amount);
             $signedAmount = $isCredit ? abs($amount) : -abs($amount);
 
@@ -109,15 +103,92 @@ class Wallet extends Component
             $this->transactions[$index]['_when'] = $this->formatWalletDate(
                 (string) ($transaction['created_at'] ?? $transaction['date'] ?? $transaction['createdAt'] ?? '')
             );
-
-            if ($isCredit) {
-                $this->creditsTotal += abs($amount);
-            } else {
-                $this->debitsTotal += abs($amount);
-            }
         }
 
         $this->loading = false;
+    }
+
+    protected function resolveWalletBalance(AccountApiService $api): ?float
+    {
+        $profile = session('external_api_profile', []);
+        if (is_array($profile) && $profile !== []) {
+            $fromSession = $this->extractWalletBalance($profile);
+            if ($fromSession !== null) {
+                return $fromSession;
+            }
+        }
+
+        $profileResult = $api->getProfile();
+        if ($profileResult['ok'] ?? false) {
+            $fromProfile = $this->extractWalletBalance($profileResult['data'] ?? null)
+                ?? $this->extractWalletBalance(is_array($profileResult['raw'] ?? null) ? $profileResult['raw'] : null);
+            if ($fromProfile !== null) {
+                return $fromProfile;
+            }
+        }
+
+        $balanceResult = $api->getWallet('all', null, null, 1);
+        if ($balanceResult['ok'] ?? false) {
+            return $this->extractWalletBalance($balanceResult['data'] ?? null)
+                ?? $this->extractWalletBalance(is_array($balanceResult['raw'] ?? null) ? $balanceResult['raw'] : null);
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{balance: ?float, credits: float, debits: float, count: int}
+     */
+    protected function summarizeWalletTransactions(AccountApiService $api): array
+    {
+        $result = $api->getWallet('all', null, null, 1);
+        if (! ($result['ok'] ?? false)) {
+            return [
+                'balance' => null,
+                'credits' => 0.0,
+                'debits' => 0.0,
+                'count' => count($this->transactions),
+            ];
+        }
+
+        $data = $result['data'] ?? [];
+        $rows = is_array($data)
+            ? $this->extractRows($data, ['transactions', 'wallet_transactions', 'items', 'rows'])
+            : [];
+
+        if ($rows === [] && is_array($data) && array_is_list($data)) {
+            $rows = array_values(array_filter($data, 'is_array'));
+        }
+
+        $balance = $this->extractWalletBalance($data)
+            ?? $this->extractWalletBalance(is_array($result['raw'] ?? null) ? $result['raw'] : null);
+
+        $credits = 0.0;
+        $debits = 0.0;
+
+        foreach ($rows as $transaction) {
+            if (! is_array($transaction)) {
+                continue;
+            }
+
+            $amount = $this->extractTransactionAmount($transaction);
+            if ($amount === null) {
+                continue;
+            }
+
+            if ($this->walletTransactionIsCredit($transaction, $amount)) {
+                $credits += abs($amount);
+            } else {
+                $debits += abs($amount);
+            }
+        }
+
+        return [
+            'balance' => $balance,
+            'credits' => round($credits, 2),
+            'debits' => round($debits, 2),
+            'count' => count($rows),
+        ];
     }
 
     protected function formatWalletDate(string $value): string

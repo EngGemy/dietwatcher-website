@@ -34,8 +34,6 @@ class Dashboard extends Component
     /** @var array<int, string> */
     public array $dailyTips = [];
 
-    public bool $tipsGeminiPowered = false;
-
     public bool $loading = true;
 
     public string $error = '';
@@ -80,12 +78,25 @@ class Dashboard extends Component
         }
         $this->recentOrders = array_slice($orderRows, 0, 5);
 
-        $wallet = $api->getWallet();
-        $walletData = (($wallet['ok'] ?? false) && is_array($wallet['data'] ?? null))
-            ? ($wallet['data'] ?? [])
-            : [];
-        if ($walletData !== []) {
-            $this->walletBalance = $this->extractAmount($walletData);
+        $wallet = $api->getWallet('all', null, null, 1);
+        if ($wallet['ok'] ?? false) {
+            $this->walletBalance = $this->extractWalletBalance($wallet['data'] ?? null)
+                ?? $this->extractWalletBalance(is_array($wallet['raw'] ?? null) ? $wallet['raw'] : null);
+        }
+
+        if ($this->walletBalance === null) {
+            $profile = session('external_api_profile', []);
+            if (is_array($profile) && $profile !== []) {
+                $this->walletBalance = $this->extractWalletBalance($profile);
+            }
+        }
+
+        if ($this->walletBalance === null) {
+            $profileResult = $api->getProfile();
+            if ($profileResult['ok'] ?? false) {
+                $this->walletBalance = $this->extractWalletBalance($profileResult['data'] ?? null)
+                    ?? $this->extractWalletBalance(is_array($profileResult['raw'] ?? null) ? $profileResult['raw'] : null);
+            }
         }
 
         $this->unreadNotifications = $api->unreadNotificationCount();
@@ -103,7 +114,6 @@ class Dashboard extends Component
         }
 
         $this->dailyTips = $tips->tips();
-        $this->tipsGeminiPowered = $tips->isGeminiPowered();
 
         if ($this->activeSubscription === [] && $this->recentOrders === [] && $this->walletBalance === null) {
             $this->error = ($subs['message'] ?? '') ?: ($orders['message'] ?? '') ?: ($wallet['message'] ?? '') ?: __('account.load_failed');

@@ -25,6 +25,8 @@
 @endphp
 
 <div class="space-y-6">
+    <x-account.daily-tips-ticker />
+
     @if(!empty($error))
         <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-center justify-between gap-3 flex-wrap">
             <span>{{ $error }}</span>
@@ -119,9 +121,6 @@
         <section class="acc-dash-panel">
             <div class="acc-dash-panel__head">
                 <span>{{ __('account.daily_tips_section') }}</span>
-                @if($tipsGeminiPowered)
-                    <span class="acc-chip acc-chip--muted">{{ __('ai.powered_by_gemini') }}</span>
-                @endif
             </div>
             <div class="acc-dash-panel__body">
                 <p class="text-sm text-gray-500 mb-3">{{ __('account.daily_tips_section_hint') }}</p>

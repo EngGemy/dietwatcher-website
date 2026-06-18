@@ -251,6 +251,9 @@ trait NormalizesAccountPayload
         $flatKeys = [
             'balance',
             'wallet_balance',
+            'wallet',
+            'wallet_amount',
+            'walletAmount',
             'available_balance',
             'availableBalance',
             'total_balance',
@@ -259,8 +262,8 @@ trait NormalizesAccountPayload
             'currentBalance',
             'remaining_balance',
             'remainingBalance',
-            'total',
-            'amount',
+            'credit_balance',
+            'creditBalance',
         ];
 
         $nestedKeys = [
@@ -270,8 +273,12 @@ trait NormalizesAccountPayload
             'wallet.total',
             'customer.wallet_balance',
             'customer.balance',
+            'customer.wallet',
+            'user.wallet_balance',
+            'user.wallet',
             'profile.wallet_balance',
             'profile.balance',
+            'profile.wallet',
             'meta.balance',
             'summary.balance',
         ];
@@ -292,6 +299,10 @@ trait NormalizesAccountPayload
             }
         }
 
+        if (array_is_list($payload)) {
+            return $this->computeWalletBalanceFromTransactions($payload);
+        }
+
         $transactions = $this->extractRows($payload, ['transactions', 'wallet_transactions', 'items', 'rows']);
         foreach ($transactions as $transaction) {
             if (! is_array($transaction)) {
@@ -306,6 +317,101 @@ trait NormalizesAccountPayload
             }
         }
 
+        if ($transactions !== []) {
+            $computed = $this->computeWalletBalanceFromTransactions($transactions);
+
+            return $computed;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $transactions
+     */
+    protected function computeWalletBalanceFromTransactions(array $transactions): ?float
+    {
+        if ($transactions === []) {
+            return null;
+        }
+
+        $sorted = $transactions;
+        usort($sorted, static function (array $a, array $b): int {
+            $aTime = strtotime((string) ($a['created_at'] ?? $a['date'] ?? $a['createdAt'] ?? '')) ?: 0;
+            $bTime = strtotime((string) ($b['created_at'] ?? $b['date'] ?? $b['createdAt'] ?? '')) ?: 0;
+
+            return $bTime <=> $aTime;
+        });
+
+        foreach ($sorted as $transaction) {
+            foreach (['balance_after', 'balanceAfter', 'remaining_balance', 'remainingBalance', 'wallet_balance', 'balance'] as $key) {
+                $amount = $this->numericMoneyValue($transaction[$key] ?? null);
+                if ($amount !== null) {
+                    return $amount;
+                }
+            }
+        }
+
+        $net = 0.0;
+        $hasAmount = false;
+        foreach ($transactions as $transaction) {
+            if (! is_array($transaction)) {
+                continue;
+            }
+
+            $amount = $this->extractTransactionAmount($transaction);
+            if ($amount === null) {
+                continue;
+            }
+
+            $hasAmount = true;
+            $isCredit = $this->walletTransactionIsCredit($transaction, $amount);
+            $net += $isCredit ? abs($amount) : -abs($amount);
+        }
+
+        return $hasAmount ? round($net, 2) : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $transaction
+     */
+    protected function extractTransactionAmount(array $transaction): ?float
+    {
+        foreach ([
+            'amount',
+            'value',
+            'total',
+            'money',
+            'price',
+            'sum',
+            'transaction_amount',
+            'wallet_amount',
+            'paid_amount',
+            'amount_in_sar',
+            'amountInSar',
+            'credit',
+            'debit',
+            'charge_amount',
+            'withdraw_amount',
+        ] as $key) {
+            $amount = $this->numericMoneyValue($transaction[$key] ?? null);
+            if ($amount !== null && abs($amount) > 0) {
+                return $amount;
+            }
+        }
+
+        foreach (['payment.amount', 'payment.total', 'transaction.amount', 'details.amount'] as $path) {
+            $amount = $this->numericMoneyValue(data_get($transaction, $path));
+            if ($amount !== null && abs($amount) > 0) {
+                return $amount;
+            }
+        }
+
+        $halala = (int) ($transaction['amount_halala'] ?? $transaction['amountHalala'] ?? 0);
+        if ($halala !== 0) {
+            return round($halala / 100, 2);
+        }
+
         return null;
     }
 
@@ -316,7 +422,16 @@ trait NormalizesAccountPayload
         }
 
         if (! is_numeric($value)) {
-            return null;
+            if (! is_string($value)) {
+                return null;
+            }
+
+            $normalized = preg_replace('/[^\d.\-+]/', '', str_replace(',', '', $value)) ?? '';
+            if ($normalized === '' || ! is_numeric($normalized)) {
+                return null;
+            }
+
+            $value = $normalized;
         }
 
         return round((float) $value, 2);
@@ -332,6 +447,9 @@ trait NormalizesAccountPayload
             ?? $transaction['kind']
             ?? $transaction['transaction_type']
             ?? $transaction['transactionType']
+            ?? $transaction['description']
+            ?? $transaction['note']
+            ?? $transaction['purpose']
             ?? ''
         )));
 
@@ -366,6 +484,11 @@ trait NormalizesAccountPayload
         $translatedDesc = $rawKey !== '' ? __('account.tx_desc.'.$rawKey) : '';
         if ($translatedDesc !== '' && $translatedDesc !== 'account.tx_desc.'.$rawKey) {
             return $translatedDesc;
+        }
+
+        $translatedRawType = $rawKey !== '' ? __('account.tx_types.'.$rawKey) : '';
+        if ($translatedRawType !== '' && $translatedRawType !== 'account.tx_types.'.$rawKey) {
+            return $translatedRawType;
         }
 
         if ($hasTypeTranslation && ($raw === '' || $rawKey === $type || $rawKey === ltrim($type, '_'))) {
@@ -403,7 +526,7 @@ trait NormalizesAccountPayload
             return true;
         }
 
-        if (in_array($type, ['sale', 'purchase', 'deduct', 'debit', 'out', 'withdraw', 'cancel_subscription'], true)) {
+        if (in_array($type, ['sale', 'purchase', 'deduct', 'debit', 'out', 'withdraw', 'cancel_subscription', 'cancel_purchase', 'purchase_cancel'], true)) {
             return false;
         }
 
