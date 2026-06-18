@@ -484,6 +484,7 @@
         </div>
     </nav>
 </header>
+@stack('header-ticker')
 </div>
 <div class="header-spacer" id="header-spacer"></div>
 

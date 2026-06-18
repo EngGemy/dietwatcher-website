@@ -1,5 +1,9 @@
 @extends('layouts.app')
 
+@push('header-ticker')
+    <x-daily-tips-ticker />
+@endpush
+
 @section('title', __('Diet Watchers'))
 
 @section('content')
