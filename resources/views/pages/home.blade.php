@@ -93,10 +93,10 @@
             <img src="{{ asset('assets/images/hero-bg.png') }}"
                 class="hero-bg absolute inset-y-0 start-0 hidden object-contain object-right select-none md:block rtl:-scale-x-100"
                 alt="" />
+
+            <x-trust-bar />
         </div>
     </section>
-
-    <x-trust-bar />
 
     {{-- Meal Plans Section --}}
     @push('styles')
@@ -1783,6 +1783,8 @@
 
 /* Hero supporting elements */
 .hero-shell {
+    display: flex;
+    flex-direction: column;
     min-height: clamp(560px, 74vh, 780px);
     padding-top: clamp(2.6rem, 5vw, 6.5rem);
 }

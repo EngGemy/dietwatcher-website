@@ -10,31 +10,32 @@
             .site-tips-ticker {
                 display: flex;
                 align-items: stretch;
-                background: linear-gradient(90deg, #0B1220 0%, #14532D 52%, #166534 100%);
-                color: #F8FAFC;
-                border-top: 1px solid rgba(255, 255, 255, .06);
+                background: var(--color-gray-200, #f5f5fa);
+                color: var(--color-black, #2e2e30);
+                border-bottom: 1px solid rgba(15, 23, 42, .07);
                 overflow: hidden;
-                min-height: 40px;
+                min-height: 38px;
             }
             .site-tips-ticker__badge {
                 display: flex;
                 align-items: center;
                 gap: .45rem;
                 flex-shrink: 0;
-                padding: .5rem .9rem;
-                background: rgba(255, 255, 255, .1);
-                font-size: .72rem;
+                padding: .45rem .85rem;
+                background: linear-gradient(135deg, rgba(39, 159, 249, .12), rgba(63, 181, 54, .1));
+                font-size: .7rem;
                 font-weight: 800;
-                letter-spacing: .05em;
+                letter-spacing: .04em;
                 text-transform: uppercase;
-                border-inline-end: 1px solid rgba(255, 255, 255, .12);
+                color: #0f172a;
+                border-inline-end: 1px solid rgba(15, 23, 42, .08);
             }
             .site-tips-ticker__live {
-                width: 7px;
-                height: 7px;
+                width: 6px;
+                height: 6px;
                 border-radius: 50%;
-                background: #F87171;
-                box-shadow: 0 0 0 0 rgba(248, 113, 113, .65);
+                background: var(--color-green, #3fb536);
+                box-shadow: 0 0 0 0 rgba(63, 181, 54, .45);
                 animation: site-tips-live 1.8s ease-out infinite;
             }
             .site-tips-ticker__viewport {
@@ -67,13 +68,13 @@
                 display: inline-flex;
                 align-items: center;
                 gap: .65rem;
-                font-size: .84rem;
+                font-size: .8rem;
                 font-weight: 600;
                 white-space: nowrap;
-                color: #E2E8F0;
+                color: rgba(15, 23, 42, .78);
             }
             .site-tips-ticker__sep {
-                color: rgba(255, 255, 255, .35);
+                color: rgba(39, 159, 249, .45);
                 font-weight: 700;
                 user-select: none;
             }
@@ -86,9 +87,9 @@
                 100% { transform: translateX(50%); }
             }
             @keyframes site-tips-live {
-                0% { box-shadow: 0 0 0 0 rgba(248, 113, 113, .65); }
-                70% { box-shadow: 0 0 0 8px rgba(248, 113, 113, 0); }
-                100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0); }
+                0% { box-shadow: 0 0 0 0 rgba(63, 181, 54, .45); }
+                70% { box-shadow: 0 0 0 7px rgba(63, 181, 54, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(63, 181, 54, 0); }
             }
             @media (prefers-reduced-motion: reduce) {
                 .site-tips-ticker__track { animation: none !important; flex-wrap: wrap; width: 100%; }
