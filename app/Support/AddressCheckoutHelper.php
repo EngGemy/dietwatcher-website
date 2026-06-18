@@ -28,10 +28,20 @@ final class AddressCheckoutHelper
             $prev = $byKey[$key] ?? null;
             if (! is_array($prev) || (int) ($row['id'] ?? 0) > (int) ($prev['id'] ?? 0)) {
                 $byKey[$key] = $row;
+            } elseif (is_array($prev)) {
+                $merged = $row;
+                if (self::parseApiBoolean($prev['cant_modify'] ?? $prev['cantModify'] ?? false)) {
+                    $merged['cant_modify'] = true;
+                    $merged['cantModify'] = true;
+                }
+                $byKey[$key] = $merged;
             }
         }
 
-        return array_values($byKey);
+        return array_values(array_map(
+            static fn (array $row): array => self::normalizeAddressRow($row),
+            array_values($byKey),
+        ));
     }
 
     /**
@@ -596,7 +606,46 @@ final class AddressCheckoutHelper
     }
 
     /**
-     * Address IDs referenced by pending / active / paused subscription delivery days.
+     * Normalize API boolean flags (cant_modify, is_active, etc.).
+     */
+    public static function parseApiBoolean(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (int) $value === 1;
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+
+            return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    public static function normalizeAddressRow(array $row): array
+    {
+        $cantModify = self::parseApiBoolean($row['cant_modify'] ?? $row['cantModify'] ?? false);
+        $row['cant_modify'] = $cantModify;
+        $row['cantModify'] = $cantModify;
+
+        if (array_key_exists('is_active', $row) || array_key_exists('isActive', $row)) {
+            $active = self::parseApiBoolean($row['is_active'] ?? $row['isActive'] ?? false);
+            $row['is_active'] = $active;
+            $row['isActive'] = $active;
+        }
+
+        return $row;
+    }
+
      *
      * @param  array<int, array<string, mixed>>  $subscriptions
      * @return array<int, int>
@@ -643,10 +692,7 @@ final class AddressCheckoutHelper
      */
     public static function isCantModify(array $address, array $lockedAddressIds = []): bool
     {
-        if (filter_var(
-            $address['cant_modify'] ?? $address['cantModify'] ?? false,
-            FILTER_VALIDATE_BOOLEAN
-        )) {
+        if (self::parseApiBoolean($address['cant_modify'] ?? $address['cantModify'] ?? false)) {
             return true;
         }
 
@@ -665,8 +711,10 @@ final class AddressCheckoutHelper
         $lockedAddressIds = self::collectLockedAddressIdsFromSubscriptions($subscriptions);
 
         return array_values(array_map(static function (array $row) use ($rows, $lockedAddressIds): array {
+            $row = self::normalizeAddressRow($row);
             $row['is_deliverable'] = self::isDeliverableForSubscription($row, $rows);
             $row['cant_modify'] = self::isCantModify($row, $lockedAddressIds);
+            $row['cantModify'] = $row['cant_modify'];
 
             return $row;
         }, array_filter($rows, 'is_array')));

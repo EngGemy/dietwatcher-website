@@ -227,17 +227,186 @@ trait NormalizesAccountPayload
      */
     protected function extractAmount(array $data): ?float
     {
-        $amount = $data['balance']
-            ?? $data['wallet_balance']
-            ?? ($data['wallet']['balance'] ?? null)
-            ?? $data['total']
-            ?? $data['amount']
-            ?? null;
+        return $this->extractWalletBalance($data);
+    }
 
-        if (is_array($amount)) {
-            $amount = $amount['amount'] ?? $amount['value'] ?? null;
+    /**
+     * Resolve wallet balance from every known API payload shape.
+     *
+     * @param  mixed  $payload
+     */
+    protected function extractWalletBalance(mixed $payload): ?float
+    {
+        if (! is_array($payload)) {
+            return null;
         }
 
-        return is_numeric($amount) ? (float) $amount : null;
+        $roots = [$payload];
+        foreach (['data', 'wallet', 'response', 'customer', 'profile'] as $key) {
+            if (is_array($payload[$key] ?? null)) {
+                $roots[] = $payload[$key];
+            }
+        }
+
+        $flatKeys = [
+            'balance',
+            'wallet_balance',
+            'available_balance',
+            'availableBalance',
+            'total_balance',
+            'totalBalance',
+            'current_balance',
+            'currentBalance',
+            'remaining_balance',
+            'remainingBalance',
+            'total',
+            'amount',
+        ];
+
+        $nestedKeys = [
+            'wallet.balance',
+            'wallet.available_balance',
+            'wallet.availableBalance',
+            'wallet.total',
+            'customer.wallet_balance',
+            'customer.balance',
+            'profile.wallet_balance',
+            'profile.balance',
+            'meta.balance',
+            'summary.balance',
+        ];
+
+        foreach ($roots as $root) {
+            foreach ($flatKeys as $key) {
+                $amount = $this->numericMoneyValue($root[$key] ?? null);
+                if ($amount !== null) {
+                    return $amount;
+                }
+            }
+
+            foreach ($nestedKeys as $path) {
+                $amount = $this->numericMoneyValue(data_get($root, $path));
+                if ($amount !== null) {
+                    return $amount;
+                }
+            }
+        }
+
+        $transactions = $this->extractRows($payload, ['transactions', 'wallet_transactions', 'items', 'rows']);
+        foreach ($transactions as $transaction) {
+            if (! is_array($transaction)) {
+                continue;
+            }
+
+            foreach (['balance_after', 'balanceAfter', 'remaining_balance', 'remainingBalance', 'wallet_balance', 'balance'] as $key) {
+                $amount = $this->numericMoneyValue($transaction[$key] ?? null);
+                if ($amount !== null) {
+                    return $amount;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    protected function numericMoneyValue(mixed $value): ?float
+    {
+        if (is_array($value)) {
+            $value = $value['amount'] ?? $value['value'] ?? $value['balance'] ?? null;
+        }
+
+        if (! is_numeric($value)) {
+            return null;
+        }
+
+        return round((float) $value, 2);
+    }
+
+    /**
+     * @param  array<string, mixed>  $transaction
+     */
+    protected function normalizeWalletTransactionType(array $transaction): string
+    {
+        $type = strtolower(trim((string) (
+            $transaction['type']
+            ?? $transaction['kind']
+            ?? $transaction['transaction_type']
+            ?? $transaction['transactionType']
+            ?? ''
+        )));
+
+        $type = preg_replace('/[\s\-]+/', '_', $type) ?? $type;
+        $type = ltrim($type, '+_');
+
+        return $type;
+    }
+
+    /**
+     * @param  array<string, mixed>  $transaction
+     */
+    protected function walletTransactionLabel(array $transaction): string
+    {
+        $type = $this->normalizeWalletTransactionType($transaction);
+        $translatedType = $type !== '' ? __('account.tx_types.'.$type) : '';
+        $hasTypeTranslation = $translatedType !== '' && $translatedType !== 'account.tx_types.'.$type;
+
+        $raw = $transaction['description']
+            ?? $transaction['note']
+            ?? $transaction['purpose']
+            ?? $transaction['title']
+            ?? $transaction['label']
+            ?? '';
+
+        if (is_array($raw)) {
+            $raw = $raw[app()->getLocale()] ?? $raw['ar'] ?? $raw['en'] ?? '';
+        }
+
+        $raw = trim(ltrim(trim((string) $raw), '+−-'));
+        $rawKey = strtolower(preg_replace('/[\s\-]+/', '_', $raw) ?? $raw);
+        $translatedDesc = $rawKey !== '' ? __('account.tx_desc.'.$rawKey) : '';
+        if ($translatedDesc !== '' && $translatedDesc !== 'account.tx_desc.'.$rawKey) {
+            return $translatedDesc;
+        }
+
+        if ($hasTypeTranslation && ($raw === '' || $rawKey === $type || $rawKey === ltrim($type, '_'))) {
+            return $translatedType;
+        }
+
+        if ($hasTypeTranslation && in_array($rawKey, ['charge', 'sale', 'purchase', 'deduct', 'credit', 'debit', 'in', 'out'], true)) {
+            return $translatedType;
+        }
+
+        if ($raw !== '') {
+            return $raw;
+        }
+
+        return $hasTypeTranslation ? $translatedType : __('account.transaction');
+    }
+
+    /**
+     * @param  array<string, mixed>  $transaction
+     */
+    protected function walletTransactionIsCredit(array $transaction, float $amount): bool
+    {
+        $type = $this->normalizeWalletTransactionType($transaction);
+        $direction = strtolower(trim((string) ($transaction['direction'] ?? $transaction['flow'] ?? '')));
+
+        if (in_array($direction, ['in', 'credit', 'charge', 'deposit', 'refund'], true)) {
+            return true;
+        }
+
+        if (in_array($direction, ['out', 'debit', 'sale', 'purchase', 'deduct', 'withdraw'], true)) {
+            return false;
+        }
+
+        if (in_array($type, ['charge', 'credit', 'in', 'deposit', 'refund', 'top_up', 'exchange_points'], true)) {
+            return true;
+        }
+
+        if (in_array($type, ['sale', 'purchase', 'deduct', 'debit', 'out', 'withdraw', 'cancel_subscription'], true)) {
+            return false;
+        }
+
+        return $amount >= 0;
     }
 }

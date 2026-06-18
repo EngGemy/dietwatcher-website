@@ -432,6 +432,285 @@
         .acc-app-card__title { font-size:.82rem; font-weight:800; color:#0F172A; line-height:1.35; }
         .acc-app-card__text { font-size:.72rem; color:#64748B; margin-top:.25rem; line-height:1.45; }
         .acc-app-card__stores { display:flex; gap:.45rem; margin-top:.65rem; flex-wrap:wrap; }
+
+        .acc-tips-ticker {
+            display:flex; align-items:stretch;
+            background:linear-gradient(90deg, #0F172A 0%, #1E3A5F 55%, #14532D 100%);
+            color:#F8FAFC;
+            border-bottom:1px solid rgba(255,255,255,.08);
+            overflow:hidden;
+            min-height:42px;
+        }
+        .acc-tips-ticker__badge {
+            display:flex; align-items:center; gap:.4rem; flex-shrink:0;
+            padding:.55rem .85rem;
+            background:rgba(255,255,255,.08);
+            font-size:.7rem; font-weight:800; letter-spacing:.04em;
+            text-transform:uppercase;
+            border-inline-end:1px solid rgba(255,255,255,.1);
+        }
+        .acc-tips-ticker__ai {
+            font-size:.62rem; font-weight:700;
+            padding:.12rem .4rem; border-radius:999px;
+            background:rgba(39,159,249,.25); color:#BAE6FD;
+            text-transform:none; letter-spacing:0;
+        }
+        .acc-tips-ticker__viewport { flex:1; overflow:hidden; position:relative; }
+        .acc-tips-ticker__viewport::before,
+        .acc-tips-ticker__viewport::after {
+            content:''; position:absolute; top:0; bottom:0; width:2rem; z-index:1; pointer-events:none;
+        }
+        .acc-tips-ticker__viewport::before {
+            inset-inline-start:0;
+            background:linear-gradient(to right, #0F172A, transparent);
+        }
+        [dir="rtl"] .acc-tips-ticker__viewport::before {
+            background:linear-gradient(to left, #0F172A, transparent);
+        }
+        .acc-tips-ticker__viewport::after {
+            inset-inline-end:0;
+            background:linear-gradient(to left, #14532D, transparent);
+        }
+        [dir="rtl"] .acc-tips-ticker__viewport::after {
+            background:linear-gradient(to right, #14532D, transparent);
+        }
+        .acc-tips-ticker__track {
+            display:flex; align-items:center; gap:2.5rem;
+            width:max-content;
+            padding:.65rem 1rem;
+            animation:acc-tips-marquee 55s linear infinite;
+        }
+        [dir="rtl"] .acc-tips-ticker__track { animation-name:acc-tips-marquee-rtl; }
+        .acc-tips-ticker:hover .acc-tips-ticker__track { animation-play-state:paused; }
+        .acc-tips-ticker__item {
+            display:inline-flex; align-items:center; gap:.55rem;
+            font-size:.8rem; font-weight:600; white-space:nowrap; color:#E2E8F0;
+        }
+        .acc-tips-ticker__dot {
+            width:6px; height:6px; border-radius:50%;
+            background:linear-gradient(135deg, #279ff9, #3fb536);
+            flex-shrink:0;
+        }
+        @keyframes acc-tips-marquee {
+            0% { transform:translateX(0); }
+            100% { transform:translateX(-50%); }
+        }
+        @keyframes acc-tips-marquee-rtl {
+            0% { transform:translateX(0); }
+            100% { transform:translateX(50%); }
+        }
+
+        .acc-dash-hero {
+            position:relative; overflow:hidden;
+            border-radius:20px;
+            padding:1.5rem 1.35rem;
+            background:linear-gradient(135deg, #0F172A 0%, #1E40AF 48%, #166534 100%);
+            color:#fff;
+            border:1px solid rgba(255,255,255,.12);
+            box-shadow:0 20px 40px -24px rgba(15,23,42,.55);
+        }
+        .acc-dash-hero::after {
+            content:''; position:absolute; inset:0;
+            background:radial-gradient(circle at 85% 15%, rgba(63,181,54,.35), transparent 45%),
+                        radial-gradient(circle at 10% 90%, rgba(39,159,249,.3), transparent 40%);
+            pointer-events:none;
+        }
+        .acc-dash-hero > * { position:relative; z-index:1; }
+        .acc-dash-hero__eyebrow { font-size:.75rem; font-weight:700; color:#BFDBFE; letter-spacing:.06em; text-transform:uppercase; }
+        .acc-dash-hero__title { font-size:1.65rem; font-weight:800; margin-top:.35rem; line-height:1.25; }
+        .acc-dash-hero__sub { font-size:.88rem; color:#CBD5E1; margin-top:.45rem; max-width:36rem; }
+        .acc-dash-stat-grid { display:grid; gap:.85rem; grid-template-columns:repeat(2, minmax(0,1fr)); }
+        @media (min-width: 1024px) { .acc-dash-stat-grid { grid-template-columns:repeat(4, minmax(0,1fr)); } }
+        .acc-dash-stat {
+            border-radius:16px; padding:1rem 1.05rem;
+            background:#fff; border:1px solid #E8EDF3;
+            box-shadow:0 1px 2px rgba(15,23,42,.04);
+            transition:transform .15s, box-shadow .15s, border-color .15s;
+        }
+        .acc-dash-stat:hover { transform:translateY(-2px); border-color:#BFDBFE; box-shadow:0 12px 24px -16px rgba(39,159,249,.35); }
+        .acc-dash-stat__icon {
+            width:36px; height:36px; border-radius:10px;
+            display:flex; align-items:center; justify-content:center;
+            margin-bottom:.55rem;
+        }
+        .acc-dash-stat__icon--blue { background:#EFF6FF; color:#2563EB; }
+        .acc-dash-stat__icon--green { background:#ECFDF5; color:#059669; }
+        .acc-dash-stat__icon--amber { background:#FFFBEB; color:#D97706; }
+        .acc-dash-stat__icon--violet { background:#F5F3FF; color:#7C3AED; }
+        .acc-dash-stat__label { font-size:.74rem; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:.05em; }
+        .acc-dash-stat__value { font-size:1.35rem; font-weight:800; color:#0F172A; margin-top:.25rem; line-height:1.2; }
+        .acc-dash-stat__meta { margin-top:.35rem; font-size:.74rem; }
+        .acc-dash-stat__meta a { color:#279ff9; font-weight:700; text-decoration:none; }
+        .acc-dash-alert {
+            display:flex; gap:.75rem; align-items:flex-start;
+            padding:.85rem 1rem; border-radius:14px;
+            background:#FFFBEB; border:1px solid #FDE68A;
+            color:#92400E; font-size:.84rem; line-height:1.5;
+        }
+        .acc-dash-quick {
+            display:grid; gap:.75rem;
+            grid-template-columns:repeat(2, minmax(0,1fr));
+        }
+        @media (min-width: 768px) { .acc-dash-quick { grid-template-columns:repeat(4, minmax(0,1fr)); } }
+        .acc-dash-quick__item {
+            display:flex; flex-direction:column; align-items:flex-start; gap:.45rem;
+            padding:1rem; border-radius:14px; background:#fff;
+            border:1px solid #E8EDF3; text-decoration:none; color:inherit;
+            transition:border-color .15s, box-shadow .15s, transform .15s;
+        }
+        .acc-dash-quick__item:hover { border-color:#93C5FD; box-shadow:0 8px 20px -12px rgba(39,159,249,.3); transform:translateY(-1px); }
+        .acc-dash-quick__icon {
+            width:38px; height:38px; border-radius:11px;
+            display:flex; align-items:center; justify-content:center;
+        }
+        .acc-dash-panel { border-radius:18px; border:1px solid #E8EDF3; background:#fff; overflow:hidden; }
+        .acc-dash-panel__head {
+            padding:1rem 1.15rem; border-bottom:1px solid #F1F5F9;
+            display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+            font-weight:800; color:#0F172A;
+        }
+        .acc-dash-panel__body { padding:1.1rem 1.15rem; }
+
+        .acc-wallet-hero {
+            position:relative; overflow:hidden;
+            border-radius:22px;
+            padding:1.35rem 1.4rem 1.2rem;
+            background:linear-gradient(135deg, #0B1F4A 0%, #1D4ED8 42%, #0EA5E9 78%, #14B8A6 100%);
+            color:#fff;
+            box-shadow:0 24px 48px -28px rgba(29,78,216,.65);
+            border:1px solid rgba(255,255,255,.14);
+            min-height:190px;
+        }
+        .acc-wallet-hero__glow {
+            position:absolute; inset:-20% -10% auto auto;
+            width:280px; height:280px; border-radius:50%;
+            background:radial-gradient(circle, rgba(255,255,255,.22), transparent 68%);
+            pointer-events:none;
+        }
+        .acc-wallet-hero__grid {
+            position:absolute; inset:0; opacity:.12;
+            background-image:linear-gradient(rgba(255,255,255,.7) 1px, transparent 1px),
+                             linear-gradient(90deg, rgba(255,255,255,.7) 1px, transparent 1px);
+            background-size:24px 24px;
+            pointer-events:none;
+        }
+        .acc-wallet-hero__inner {
+            position:relative; z-index:1;
+            display:flex; flex-direction:column; justify-content:space-between;
+            min-height:158px;
+        }
+        .acc-wallet-hero__chip {
+            display:flex; gap:.35rem; margin-bottom:1rem;
+        }
+        .acc-wallet-hero__chip span {
+            width:34px; height:26px; border-radius:8px;
+            background:linear-gradient(135deg, #FDE68A, #F59E0B);
+            box-shadow:inset 0 0 0 1px rgba(255,255,255,.35);
+        }
+        .acc-wallet-hero__label {
+            font-size:.78rem; font-weight:700; letter-spacing:.08em;
+            text-transform:uppercase; color:rgba(255,255,255,.78);
+        }
+        .acc-wallet-hero__amount {
+            display:flex; align-items:baseline; gap:.5rem;
+            margin-top:.35rem;
+        }
+        .acc-wallet-hero__amount .sar-symbol { color:rgba(255,255,255,.88) !important; }
+        .acc-wallet-hero__skeleton {
+            display:inline-block; width:9rem; height:2.6rem; border-radius:12px;
+            background:rgba(255,255,255,.18);
+            animation:acc-shimmer 1.2s ease-in-out infinite;
+        }
+        .acc-wallet-hero__meta {
+            margin-top:.55rem; font-size:.76rem; color:rgba(255,255,255,.72);
+        }
+        .acc-wallet-hero__brand {
+            position:absolute; top:0; inset-inline-end:0;
+            display:flex; flex-direction:column; align-items:flex-end; gap:.15rem;
+        }
+        .acc-wallet-hero__logo {
+            width:42px; height:42px; border-radius:12px;
+            display:flex; align-items:center; justify-content:center;
+            font-size:.82rem; font-weight:900; letter-spacing:.04em;
+            background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22);
+        }
+        .acc-wallet-hero__network {
+            font-size:.62rem; font-weight:800; letter-spacing:.22em;
+            color:rgba(255,255,255,.55);
+        }
+        .acc-wallet-mini {
+            border-radius:16px; padding:.95rem 1rem;
+            background:#fff; border:1px solid #E8EDF3;
+            box-shadow:0 1px 2px rgba(15,23,42,.04);
+        }
+        .acc-wallet-mini__label {
+            font-size:.72rem; font-weight:700; color:#64748B;
+            text-transform:uppercase; letter-spacing:.05em;
+        }
+        .acc-wallet-mini__value {
+            margin-top:.35rem; font-size:1.15rem; font-weight:800;
+        }
+        .acc-wallet-panel {
+            border-radius:18px; overflow:hidden;
+            background:#fff; border:1px solid #E8EDF3;
+            box-shadow:0 1px 3px rgba(15,23,42,.05);
+        }
+        .acc-wallet-panel__head {
+            padding:1rem 1.15rem; border-bottom:1px solid #F1F5F9;
+            display:flex; flex-direction:column; gap:.85rem;
+        }
+        @media (min-width: 768px) {
+            .acc-wallet-panel__head {
+                flex-direction:row; align-items:center; justify-content:space-between;
+            }
+        }
+        .acc-wallet-panel__title { font-size:1rem; font-weight:800; color:#0F172A; }
+        .acc-wallet-panel__hint { font-size:.78rem; color:#64748B; margin-top:.15rem; }
+        .acc-wallet-panel__body { padding:.35rem 0; }
+        .acc-wallet-panel__empty { padding:2rem 1.15rem; text-align:center; }
+        .acc-wallet-tx-list { list-style:none; margin:0; padding:0; }
+        .acc-wallet-tx {
+            display:flex; align-items:flex-start; gap:.85rem;
+            padding:1rem 1.15rem;
+            border-bottom:1px solid #F1F5F9;
+            transition:background .15s;
+        }
+        .acc-wallet-tx:last-child { border-bottom:0; }
+        .acc-wallet-tx:hover { background:#F8FAFC; }
+        .acc-wallet-tx__icon {
+            width:42px; height:42px; border-radius:14px;
+            display:flex; align-items:center; justify-content:center; flex-shrink:0;
+        }
+        .acc-wallet-tx__icon svg { width:18px; height:18px; }
+        .acc-wallet-tx.is-credit .acc-wallet-tx__icon {
+            background:linear-gradient(135deg, #ECFDF5, #D1FAE5);
+            color:#059669;
+        }
+        .acc-wallet-tx.is-debit .acc-wallet-tx__icon {
+            background:linear-gradient(135deg, #FFF1F2, #FFE4E6);
+            color:#E11D48;
+        }
+        .acc-wallet-tx__main { flex:1; min-width:0; }
+        .acc-wallet-tx__row {
+            display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem;
+        }
+        .acc-wallet-tx__row--meta { margin-top:.4rem; align-items:center; }
+        .acc-wallet-tx__title {
+            font-size:.92rem; font-weight:700; color:#0F172A; line-height:1.35;
+        }
+        .acc-wallet-tx__amount {
+            display:flex; align-items:baseline; gap:.2rem; flex-shrink:0;
+            font-size:.95rem; white-space:nowrap;
+        }
+        .acc-wallet-tx__badge {
+            display:inline-flex; align-items:center;
+            padding:.18rem .5rem; border-radius:999px;
+            font-size:.68rem; font-weight:800; letter-spacing:.03em;
+            background:#F1F5F9; color:#475569;
+        }
+        .acc-wallet-tx.is-credit .acc-wallet-tx__badge { background:#ECFDF5; color:#047857; }
+        .acc-wallet-tx.is-debit .acc-wallet-tx__badge { background:#FFF1F2; color:#BE123C; }
+        .acc-wallet-tx__date { font-size:.72rem; color:#94A3B8; }
     </style>
 
     @stack('styles')
@@ -550,6 +829,8 @@
                 <div class="acc-avatar" title="{{ $displayName }}">{{ $initial }}</div>
             </div>
         </header>
+
+        <x-account.daily-tips-ticker />
 
         <main class="acc-content">
             @if(session('status'))

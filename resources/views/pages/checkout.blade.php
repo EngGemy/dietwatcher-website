@@ -3509,12 +3509,16 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     return false;
                 }
 
-                return addr.cant_modify === true
-                    || addr.cant_modify === 1
-                    || addr.cant_modify === '1'
-                    || addr.cantModify === true
-                    || addr.cantModify === 1
-                    || addr.cantModify === '1';
+                const value = addr.cant_modify ?? addr.cantModify;
+                if (value === true || value === 1 || value === '1') {
+                    return true;
+                }
+                if (typeof value === 'string') {
+                    const normalized = value.trim().toLowerCase();
+                    return normalized === 'true' || normalized === 'yes' || normalized === 'on';
+                }
+
+                return false;
             },
 
             selectedDurationValue() {

@@ -6,6 +6,9 @@ namespace App\Livewire\Account;
 
 use App\Livewire\Account\Concerns\NormalizesAccountPayload;
 use App\Services\AccountApiService;
+use App\Services\ApiAuthService;
+use App\Services\DailyHealthTipsService;
+use App\Support\AddressCheckoutHelper;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -24,14 +27,29 @@ class Dashboard extends Component
 
     public int $unreadNotifications = 0;
 
+    public int $savedAddressesCount = 0;
+
+    public int $lockedAddressesCount = 0;
+
+    /** @var array<int, string> */
+    public array $dailyTips = [];
+
+    public bool $tipsGeminiPowered = false;
+
     public bool $loading = true;
 
     public string $error = '';
 
-    public function mount(AccountApiService $api): void
-    {
+    public function mount(
+        AccountApiService $api,
+        ApiAuthService $auth,
+        DailyHealthTipsService $tips,
+    ): void {
         $this->loading = true;
         $this->error = '';
+
+        $token = (string) session('external_api_token', '');
+        $subscriptions = [];
 
         $subs = $api->listSubscriptions();
         $subscriptions = $this->extractRowsFromApiResult(
@@ -45,7 +63,7 @@ class Dashboard extends Component
             return in_array($status, [
                 'active', 'running', 'started', 'ongoing', 'current',
                 'paused', 'pausing', 'hold', 'on_hold',
-                'نشط', 'فعال', 'paused',
+                'pending',
             ], true);
         }) ?? ($subscriptions[0] ?? []);
         $this->activeSubscription = is_array($active) ? $active : [];
@@ -71,6 +89,21 @@ class Dashboard extends Component
         }
 
         $this->unreadNotifications = $api->unreadNotificationCount();
+
+        if ($token !== '') {
+            $addresses = AddressCheckoutHelper::markDeliverability(
+                $auth->getAddresses($token, true, false),
+                $subscriptions,
+            );
+            $this->savedAddressesCount = count($addresses);
+            $this->lockedAddressesCount = count(array_filter(
+                $addresses,
+                static fn (array $row): bool => AddressCheckoutHelper::isCantModify($row),
+            ));
+        }
+
+        $this->dailyTips = $tips->tips();
+        $this->tipsGeminiPowered = $tips->isGeminiPowered();
 
         if ($this->activeSubscription === [] && $this->recentOrders === [] && $this->walletBalance === null) {
             $this->error = ($subs['message'] ?? '') ?: ($orders['message'] ?? '') ?: ($wallet['message'] ?? '') ?: __('account.load_failed');

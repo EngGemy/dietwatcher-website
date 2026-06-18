@@ -70,7 +70,7 @@
                         $district = $district[app()->getLocale()] ?? $district['en'] ?? '';
                     }
                     $isActive = \App\Services\ApiAuthService::isAddressRowActive($addr);
-                    $cantModify = \App\Support\AddressCheckoutHelper::isCantModify($addr, $lockedAddressIds ?? []);
+                    $cantModify = \App\Support\AddressCheckoutHelper::isCantModify($addr);
                     $days = is_array($addr['days'] ?? null) ? $addr['days'] : [];
                     $deliveryTimeLabel = trim((string) ($addr['delivery_time_label'] ?? ''));
                     $deliveryTimeSlots = is_array($addr['delivery_time_slots'] ?? null) ? $addr['delivery_time_slots'] : [];

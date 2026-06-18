@@ -216,7 +216,7 @@ class Addresses extends Component
      */
     protected function addressIsLocked(array $address): bool
     {
-        return AddressCheckoutHelper::isCantModify($address, $this->lockedAddressIds);
+        return AddressCheckoutHelper::isCantModify($address);
     }
 
     public function saveDeliveryDays(ApiAuthService $auth): void

@@ -223,7 +223,10 @@ class ApiAuthService
             $rows = array_values(array_filter($rows, 'is_array'));
             $rows = AddressCheckoutHelper::dedupeRows($rows);
 
-            return $rows;
+            return array_values(array_map(
+                static fn (array $row): array => AddressCheckoutHelper::normalizeAddressRow($row),
+                $rows,
+            ));
         } catch (\Exception $e) {
             Log::error('ApiAuthService::getAddresses failed', ['error' => $e->getMessage()]);
 
@@ -287,6 +290,16 @@ class ApiAuthService
     {
         if ($addressId <= 0 || $days === []) {
             return ['success' => false, 'message' => __('address.save_failed'), '_http_ok' => false];
+        }
+
+        $address = AddressCheckoutHelper::findById($this->getAddresses($token, true, false), $addressId);
+        if (is_array($address) && AddressCheckoutHelper::isCantModify($address)) {
+            return [
+                'success' => false,
+                'message' => __('address.cant_modify'),
+                '_http_ok' => false,
+                'status' => 422,
+            ];
         }
 
         $payload = [];
@@ -697,6 +710,20 @@ class ApiAuthService
      */
     public function deleteAddress(string $token, int $id): array
     {
+        if ($id <= 0) {
+            return ['success' => false, 'message' => __('address.delete_failed'), '_http_ok' => false];
+        }
+
+        $address = AddressCheckoutHelper::findById($this->getAddresses($token, true, false), $id);
+        if (is_array($address) && AddressCheckoutHelper::isCantModify($address)) {
+            return [
+                'success' => false,
+                'message' => __('address.cant_modify'),
+                '_http_ok' => false,
+                'status' => 422,
+            ];
+        }
+
         try {
             $response = $this->httpWithToken($token)->delete($this->url("addresses/{$id}"));
             $json = $this->normalizeAddressMutationResponse($response);
