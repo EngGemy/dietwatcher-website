@@ -99,6 +99,55 @@ class CheckoutController extends Controller
     }
 
     /**
+     * Fill zone + delivery time from the saved address when the client omits them.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function hydrateValidatedDeliveryFromAddress(array $validated, string $token): array
+    {
+        $addressId = (int) ($validated['selected_address_id'] ?? 0);
+        $deliveryType = (string) ($validated['delivery_type'] ?? 'home');
+        if ($deliveryType !== 'home' || $addressId <= 0) {
+            return $validated;
+        }
+
+        $auth = app(ApiAuthService::class);
+        $address = $auth->loadAddressForSubscription($token, $addressId);
+        if (! is_array($address)) {
+            return $validated;
+        }
+
+        $validated['zone_id'] = AddressCheckoutHelper::resolveZoneId(
+            $address,
+            (int) ($validated['zone_id'] ?? 0),
+        );
+
+        $regionDurationId = (int) ($validated['region_duration_id'] ?? 0);
+        if ($regionDurationId <= 0) {
+            $regionDurationId = $this->checkoutRegionDurationId($addressId);
+        }
+        if ($regionDurationId <= 0) {
+            $slots = AddressCheckoutHelper::resolveDeliveryTimeSlots($address);
+            if ($slots === []) {
+                $districtId = AddressCheckoutHelper::resolveDistrictId($address, $auth->getDistricts());
+                if ($districtId > 0) {
+                    $slots = $auth->findDistrictRegionDurations($token, $districtId, $addressId);
+                }
+            }
+            if ($slots !== []) {
+                $regionDurationId = (int) ($slots[0]['id'] ?? 0);
+            }
+        }
+        if ($regionDurationId > 0) {
+            $validated['region_duration_id'] = $regionDurationId;
+            $this->rememberCheckoutRegionDuration($addressId, $regionDurationId);
+        }
+
+        return $validated;
+    }
+
+    /**
      * Fallback delivery slots from plan duration metadata when address payloads omit district.durations.
      *
      * @return array<int, array{id: int, duration: string, durationText: string, time: string, label: string}>
@@ -1669,7 +1718,10 @@ class CheckoutController extends Controller
             'selected_address_id' => $selectedAddressId > 0 ? $selectedAddressId : null,
             'branch_id' => $branchId > 0 ? $branchId : null,
             'zone_id' => (int) $request->query('zone_id', 0),
+            'region_duration_id' => (int) $request->query('region_duration_id', 0),
         ];
+
+        $validated = $this->hydrateValidatedDeliveryFromAddress($validated, $token);
 
         $payload = SubscriptionCheckoutPayload::buildMinimalSchedulePayload(
             $cart,

@@ -101,6 +101,34 @@ final class AddressCheckoutHelper
     }
 
     /**
+     * Resolve delivery zone / city id from every known address payload shape.
+     */
+    public static function resolveZoneId(?array $address, int $fallback = 0): int
+    {
+        if (! is_array($address)) {
+            return $fallback > 0 ? $fallback : 0;
+        }
+
+        foreach ([
+            $address['zone_id'] ?? null,
+            $address['city_id'] ?? null,
+            data_get($address, 'zone.id'),
+            data_get($address, 'city.id'),
+            data_get($address, 'district.zone_id'),
+            data_get($address, 'district.city_id'),
+            data_get($address, 'district.zone.id'),
+            data_get($address, 'district.city.id'),
+            data_get($address, 'district.city.zone_id'),
+        ] as $value) {
+            if (is_numeric($value) && (int) $value > 0) {
+                return (int) $value;
+            }
+        }
+
+        return $fallback > 0 ? $fallback : 0;
+    }
+
+    /**
      * RegionDuration rows attached to the address district (subscription delivery slots).
      *
      * @return array<int, array<string, mixed>>

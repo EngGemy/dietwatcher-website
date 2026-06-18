@@ -2258,6 +2258,46 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 return match ? String(match.id) : '';
             },
 
+            resolveZoneFromSelectedAddress() {
+                const addr = (this.savedAddresses || []).find((row) => String(row?.id) === String(this.selectedAddressId));
+                if (! addr) {
+                    return String(this.selectedZoneId || '').trim();
+                }
+
+                let cityId = addr.city?.id
+                    ?? addr.city_id
+                    ?? addr.zone_id
+                    ?? addr.zone?.id
+                    ?? addr.district?.city_id
+                    ?? addr.district?.zone_id
+                    ?? addr.district?.city?.id
+                    ?? addr.district?.zone?.id
+                    ?? '';
+                const districtId = addr.district?.id ?? addr.district_id;
+                if (! cityId && districtId) {
+                    cityId = this.resolveZoneFromDistrictId(districtId);
+                }
+                if (! cityId && Array.isArray(this.zones) && this.zones.length > 0) {
+                    const text = String(addr.description || addr.line1 || addr.title || addr.address || '').toLowerCase();
+                    if (text) {
+                        const matchByName = this.zones.find((z) => {
+                            let zoneName = z?.name ?? '';
+                            if (zoneName && typeof zoneName === 'object') {
+                                zoneName = zoneName['{{ app()->getLocale() }}'] || zoneName.en || Object.values(zoneName)[0] || '';
+                            }
+                            zoneName = String(zoneName || '').toLowerCase();
+
+                            return zoneName && text.includes(zoneName);
+                        });
+                        if (matchByName) {
+                            cityId = matchByName.id;
+                        }
+                    }
+                }
+
+                return cityId ? String(cityId) : String(this.selectedZoneId || '').trim();
+            },
+
             buildSyncAddressFormData() {
                 const form = this.$refs.checkoutForm;
                 const payload = new FormData();
@@ -4151,8 +4191,15 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 params.set('delivery_type', deliveryType);
                 if (deliveryType === 'home' && this.selectedAddressId) {
                     params.set('selected_address_id', String(this.selectedAddressId));
-                    if (this.selectedZoneId) {
-                        params.set('zone_id', String(this.selectedZoneId));
+                    const zoneId = this.resolveZoneFromSelectedAddress();
+                    if (zoneId) {
+                        params.set('zone_id', zoneId);
+                        if (! this.selectedZoneId) {
+                            this.selectedZoneId = zoneId;
+                        }
+                    }
+                    if (this.selectedRegionDurationId) {
+                        params.set('region_duration_id', String(this.selectedRegionDurationId));
                     }
                 }
                 if (deliveryType === 'pickup' && this.selectedBranchId) {

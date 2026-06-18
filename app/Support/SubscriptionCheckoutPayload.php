@@ -6,6 +6,7 @@ namespace App\Support;
 
 use App\Models\Payment;
 use App\Services\ExternalDataService;
+use Illuminate\Support\Carbon;
 
 /**
  * Build external API subscription payloads from checkout cart / payment rows.
@@ -274,7 +275,7 @@ final class SubscriptionCheckoutPayload
         }
 
         try {
-            $parsed = \Illuminate\Support\Carbon::parse($normalized)->startOfDay();
+            $parsed = Carbon::parse($normalized)->startOfDay();
             if ($parsed->lt(now()->startOfDay())) {
                 return '';
             }
@@ -349,7 +350,7 @@ final class SubscriptionCheckoutPayload
         }
 
         try {
-            return \Illuminate\Support\Carbon::parse($value)->format('Y-m-d');
+            return Carbon::parse($value)->format('Y-m-d');
         } catch (\Throwable) {
             return '';
         }
@@ -374,7 +375,7 @@ final class SubscriptionCheckoutPayload
         }
 
         try {
-            if (\Illuminate\Support\Carbon::parse($normalized)->gt(now()->addYears(3))) {
+            if (Carbon::parse($normalized)->gt(now()->addYears(3))) {
                 return '';
             }
         } catch (\Throwable) {
@@ -512,7 +513,7 @@ final class SubscriptionCheckoutPayload
         if (preg_match('#(\d{2}-\d{2}-20\d{2})#', $message, $matches)) {
             try {
                 return self::normalizeStartDate(
-                    \Illuminate\Support\Carbon::createFromFormat('d-m-Y', $matches[1])->format('Y-m-d')
+                    Carbon::createFromFormat('d-m-Y', $matches[1])->format('Y-m-d')
                 );
             } catch (\Throwable) {
                 return '';
@@ -546,7 +547,7 @@ final class SubscriptionCheckoutPayload
             return '';
         }
 
-        return \Illuminate\Support\Carbon::parse($ymd)
+        return Carbon::parse($ymd)
             ->locale(app()->getLocale())
             ->translatedFormat('d M Y');
     }
@@ -675,7 +676,7 @@ final class SubscriptionCheckoutPayload
             }
         }
 
-        $helperId = \App\Support\AddressCheckoutHelper::firstRegionDurationId($address);
+        $helperId = AddressCheckoutHelper::firstRegionDurationId($address);
         if ($helperId > 0) {
             return $helperId;
         }
@@ -773,7 +774,13 @@ final class SubscriptionCheckoutPayload
             return $payload;
         }
 
-        $zoneId = (int) ($payload['zone_id'] ?? $address['city_id'] ?? $address['city']['id'] ?? $address['zone_id'] ?? 0);
+        $zoneId = AddressCheckoutHelper::resolveZoneId(
+            $address,
+            (int) ($payload['zone_id'] ?? 0),
+        );
+        if ($zoneId > 0) {
+            $payload['zone_id'] = (string) $zoneId;
+        }
         $planDurationId = (int) ($payload['plan_duration_id'] ?? 0);
         $withWeekend = filter_var($payload['with_weekend'] ?? '0', FILTER_VALIDATE_BOOLEAN);
         $overrideRegionDurationId = (int) ($payload['region_duration_id'] ?? 0);

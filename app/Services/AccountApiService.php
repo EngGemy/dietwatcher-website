@@ -853,6 +853,14 @@ class AccountApiService
             return __('checkout.confirm_saved_address_before_payment');
         }
 
+        $resolvedZoneId = AddressCheckoutHelper::resolveZoneId(
+            $address,
+            (int) ($payload['zone_id'] ?? 0),
+        );
+        if ($resolvedZoneId > 0) {
+            $payload['zone_id'] = (string) $resolvedZoneId;
+        }
+
         $withWeekend = filter_var($payload['with_weekend'] ?? '0', FILTER_VALIDATE_BOOLEAN);
         $defaultDays = SubscriptionCheckoutPayload::defaultDeliveryWeekdays($withWeekend);
         $storedDays = $auth->resolveAddressDeliveryDays($token, $addressId, $address, $withWeekend);
@@ -879,7 +887,7 @@ class AccountApiService
             if ($slots === []) {
                 $slots = app(ApiAuthService::class)->findDistrictRegionDurations(
                     $token,
-                    AddressCheckoutHelper::districtId($address),
+                    AddressCheckoutHelper::resolveDistrictId($address, app(ApiAuthService::class)->getDistricts()),
                     $addressId,
                 );
             }
