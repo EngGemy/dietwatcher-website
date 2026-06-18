@@ -626,13 +626,19 @@ class ExternalDataService
                     $name = is_array($decoded) ? $decoded : $name;
                 }
 
+                $description = $cat['description'] ?? '';
+                if (is_string($description)) {
+                    $decodedDescription = json_decode($description, true);
+                    $description = is_array($decodedDescription) ? $decodedDescription : $description;
+                }
+
                 return [
                     'id' => $cat['id'] ?? 0,
                     'name' => $name,
-                    'description' => $cat['description'] ?? '',
+                    'description' => $description,
                     'image_url' => $this->absoluteMediaUrl((string) ($cat['cover'] ?? $cat['image'] ?? $cat['image_url'] ?? '')),
                     'badge' => $cat['badge'] ?? null,
-                    'programs_count' => $cat['programsCount'] ?? 0,
+                    'programs_count' => (int) ($cat['programsCount'] ?? $cat['programs_count'] ?? 0),
                 ];
             }, $data);
         }, []);
@@ -654,7 +660,9 @@ class ExternalDataService
         return array_map(fn (array $p) => [
             'id' => $p['id'],
             'name' => $p['name'],
+            'description' => $p['description'] ?? '',
             'image_url' => $p['image_url'],
+            'programs_count' => 0,
         ], $this->getPrograms());
     }
 

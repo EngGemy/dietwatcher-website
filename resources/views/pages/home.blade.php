@@ -93,6 +93,68 @@
     </section>
 
     {{-- Meal Plans Section --}}
+    @push('styles')
+        <style>
+            .mpc-track {
+                scrollbar-width: thin;
+                scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+            }
+
+            .mpc-track::-webkit-scrollbar {
+                height: 6px;
+            }
+
+            .mpc-track::-webkit-scrollbar-thumb {
+                background: rgba(0, 0, 0, 0.12);
+                border-radius: 999px;
+            }
+
+            .mpc-card {
+                border: 1px solid rgba(0, 0, 0, 0.08);
+                background: #fff;
+                box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
+            }
+
+            .mpc-card.is-active,
+            .mpc-card:hover,
+            .mpc-card:focus-visible {
+                border-color: transparent;
+                background-color: var(--color-blue);
+                box-shadow: 0 10px 28px color-mix(in srgb, var(--color-blue) 28%, transparent);
+            }
+
+            .mpc-card.is-active .mpc-title,
+            .mpc-card:hover .mpc-title,
+            .mpc-card:focus-visible .mpc-title,
+            .mpc-card.is-active .mpc-subtitle,
+            .mpc-card:hover .mpc-subtitle,
+            .mpc-card:focus-visible .mpc-subtitle,
+            .mpc-card.is-active .mpc-count,
+            .mpc-card:hover .mpc-count,
+            .mpc-card:focus-visible .mpc-count {
+                color: #fff;
+            }
+
+            .mpc-card.is-active .mpc-subtitle,
+            .mpc-card:hover .mpc-subtitle,
+            .mpc-card:focus-visible .mpc-subtitle {
+                opacity: 0.88;
+            }
+
+            .mpc-card.is-active .mpc-count,
+            .mpc-card:hover .mpc-count,
+            .mpc-card:focus-visible .mpc-count {
+                opacity: 0.78;
+            }
+
+            .mpc-card.is-active .mpc-cover,
+            .mpc-card:hover .mpc-cover,
+            .mpc-card:focus-visible .mpc-cover {
+                box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+            }
+        </style>
+    @endpush
+
     <section class="py-20">
         <div class="container">
             <header class="section-header section-header--center app-section-head" data-anim="fade-up">
@@ -104,9 +166,6 @@
             </header>
 
             @php
-                // Full-card artwork (text baked into PNG). English: meal-plan-{1..3}.png.
-                // Arabic: meal-plan-{1..3}-ar.png (same layout as English cards).
-                // 1 = Lifestyle, 2 = Medical condition, 3 = Weight management.
                 $__homepageMealPlanCardImage = static function (int $imgIdx): string {
                     $locale = strtok((string) app()->getLocale(), '_') ?: app()->getLocale();
                     $localizedRel = 'assets/images/meal-plan-' . $imgIdx . '-' . $locale . '.png';
@@ -127,7 +186,12 @@
                     return (string) ($value ?? '');
                 };
 
-                $__mealPlanCardImageForCategory = static function (array $category) use ($__homepageMealPlanCardImage, $__localizedCategoryField): string {
+                $__mealPlanCoverForCategory = static function (array $category) use ($__homepageMealPlanCardImage, $__localizedCategoryField): string {
+                    $cover = trim((string) ($category['image_url'] ?? ''));
+                    if ($cover !== '') {
+                        return $cover;
+                    }
+
                     $haystack = mb_strtolower(implode(' ', array_filter([
                         $__localizedCategoryField($category['name'] ?? ''),
                         $__localizedCategoryField($category['description'] ?? ''),
@@ -141,54 +205,105 @@
                         return $__homepageMealPlanCardImage(2);
                     }
 
-                    if (preg_match('/نمط|حياة|lifestyle|everyday\s*wellness/u', $haystack)) {
-                        return $__homepageMealPlanCardImage(1);
-                    }
-
                     return $__homepageMealPlanCardImage(1);
                 };
+
+                $__categoryTagline = static function (array $category) use ($__localizedCategoryField): string {
+                    $name = trim($__localizedCategoryField($category['name'] ?? ''));
+                    $description = trim($__localizedCategoryField($category['description'] ?? ''));
+
+                    if ($description !== '' && mb_strtolower($description) !== mb_strtolower($name)) {
+                        return $description;
+                    }
+
+                    $haystack = mb_strtolower(implode(' ', array_filter([$name, $description])));
+
+                    if (preg_match('/وزن|weight\s*manag|weight\s*loss|healthy\s*weight/u', $haystack)) {
+                        return __('category.tagline_weight');
+                    }
+
+                    if (preg_match('/طب|medical|health\s*condition/u', $haystack)) {
+                        return __('category.tagline_medical');
+                    }
+
+                    if (preg_match('/نمط|حياة|lifestyle|everyday\s*wellness/u', $haystack)) {
+                        return __('category.tagline_lifestyle');
+                    }
+
+                    return __('category.tagline_default');
+                };
+
+                $__fallbackCategories = [
+                    [
+                        'id' => null,
+                        'name' => __('category.fallback_lifestyle_title'),
+                        'description' => __('category.tagline_lifestyle'),
+                        'image_url' => $__homepageMealPlanCardImage(1),
+                        'programs_count' => 0,
+                    ],
+                    [
+                        'id' => null,
+                        'name' => __('category.fallback_weight_title'),
+                        'description' => __('category.tagline_weight'),
+                        'image_url' => $__homepageMealPlanCardImage(3),
+                        'programs_count' => 0,
+                    ],
+                    [
+                        'id' => null,
+                        'name' => __('category.fallback_medical_title'),
+                        'description' => __('category.tagline_medical'),
+                        'image_url' => $__homepageMealPlanCardImage(2),
+                        'programs_count' => 0,
+                    ],
+                ];
+
+                $__displayCategories = $mealPlanCategories->isNotEmpty()
+                    ? $mealPlanCategories
+                    : collect($__fallbackCategories);
             @endphp
 
-            <div class="mb-10 grid grid-cols-1 gap-6 md:mb-14 md:grid-cols-2 lg:grid-cols-3" data-anim-stagger>
-                @forelse($mealPlanCategories as $category)
+            <div
+                class="mpc-track mb-10 flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory md:mb-14 md:grid md:grid-cols-3 md:overflow-visible md:pb-0"
+                data-anim-stagger
+                x-data="{ active: 0 }">
+                @foreach($__displayCategories as $category)
                     @php
+                        $catId = (int) ($category['id'] ?? 0);
                         $catName = $__localizedCategoryField($category['name'] ?? '');
-                        $catDesc = $__localizedCategoryField($category['description'] ?? '');
-                        $catLabel = $catName !== '' ? $catName : $catDesc;
-                        $cardImg = $__mealPlanCardImageForCategory($category);
+                        $catTagline = $__categoryTagline($category);
+                        $coverUrl = $__mealPlanCoverForCategory($category);
+                        $programsCount = (int) ($category['programs_count'] ?? 0);
+                        $categoryHref = $catId > 0
+                            ? route('meal-plans.index', ['category' => $catId])
+                            : route('meal-plans.index');
                     @endphp
-                    <a href="{{ route('meal-plans.index', ['category' => $category['id']]) }}"
-                       class="block rounded-xl border border-gray-300 p-3 transition hover:border-blue/40 hover:shadow-md"
-                       data-anim="fade-up">
-                        <img src="{{ $cardImg }}" class="mb-4 w-full rounded-lg" alt="{{ $catLabel }}" />
-                        <p class="px-2 text-center text-lg text-black/70 md:text-xl">
-                            {{ $catLabel }}
-                        </p>
+                    <a href="{{ $categoryHref }}"
+                       class="mpc-card group flex min-w-[min(100%,19rem)] shrink-0 snap-start items-center gap-4 rounded-2xl p-3 transition-all duration-200 md:min-w-0 md:shrink {{ $loop->first ? 'is-active' : '' }}"
+                       data-anim="fade-up"
+                       @mouseenter="active = {{ $loop->index }}"
+                       @focus="active = {{ $loop->index }}"
+                       :class="active === {{ $loop->index }} ? 'is-active' : ''"
+                       aria-label="{{ $catName }}">
+                        <div class="mpc-cover size-16 shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                            <img src="{{ $coverUrl }}"
+                                 class="size-full object-cover"
+                                 alt=""
+                                 loading="lazy"
+                                 decoding="async" />
+                        </div>
+                        <div class="min-w-0 flex-1 pe-1">
+                            <h3 class="mpc-title truncate text-base font-bold text-black/80 md:text-lg">
+                                {{ $catName }}
+                            </h3>
+                            <p class="mpc-subtitle mt-0.5 line-clamp-2 text-sm text-black/55">
+                                {{ $catTagline }}
+                            </p>
+                            <p class="mpc-count mt-1.5 text-xs font-medium text-black/45">
+                                {{ trans_choice('category.programs_count', $programsCount, ['count' => $programsCount]) }}
+                            </p>
+                        </div>
                     </a>
-                @empty
-                    {{-- Fallback static content when no categories from external DB --}}
-                    <a href="{{ route('meal-plans.index') }}"
-                       class="block rounded-xl border border-gray-300 p-3 transition hover:border-blue/40 hover:shadow-md">
-                        <img src="{{ $__homepageMealPlanCardImage(3) }}" class="mb-4 w-full rounded-lg" alt="" />
-                        <p class="px-2 text-center text-lg text-black/70 md:text-xl">
-                            {{ __('Provides balanced, portion-controlled meals to support healthy weight goals.') }}
-                        </p>
-                    </a>
-                    <a href="{{ route('meal-plans.index') }}"
-                       class="block rounded-xl border border-gray-300 p-3 transition hover:border-blue/40 hover:shadow-md">
-                        <img src="{{ $__homepageMealPlanCardImage(2) }}" class="mb-4 w-full rounded-lg" alt="" />
-                        <p class="px-2 text-center text-lg text-black/70 md:text-xl">
-                            {{ __('Supports everyday health and manage medical conditions through nutrition.') }}
-                        </p>
-                    </a>
-                    <a href="{{ route('meal-plans.index') }}"
-                       class="block rounded-xl border border-gray-300 p-3 transition hover:border-blue/40 hover:shadow-md">
-                        <img src="{{ $__homepageMealPlanCardImage(1) }}" class="mb-4 w-full rounded-lg" alt="" />
-                        <p class="px-2 text-center text-lg text-black/70 md:text-xl">
-                            {{ __('Focuses on balanced, nutritious eating for everyday wellness.') }}
-                        </p>
-                    </a>
-                @endforelse
+                @endforeach
             </div>
 
             <div class="text-center">
