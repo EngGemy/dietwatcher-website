@@ -97,12 +97,12 @@
         <style>
             @keyframes cat-icon-float {
                 0%, 100% { transform: translateY(0) rotate(0deg); }
-                50% { transform: translateY(-8px) rotate(-2deg); }
+                50% { transform: translateY(-7px) rotate(-2deg); }
             }
 
             @keyframes cat-icon-pop {
                 0%, 100% { transform: scale(1); }
-                50% { transform: scale(1.08); }
+                50% { transform: scale(1.07); }
             }
 
             @keyframes cat-draw-line {
@@ -110,10 +110,41 @@
                 to { stroke-dashoffset: 0; }
             }
 
+            @keyframes cat-card-in {
+                from {
+                    opacity: 0;
+                    transform: translateY(18px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .cat-section {
+                position: relative;
+                overflow: hidden;
+                background:
+                    radial-gradient(ellipse 80% 55% at 50% -10%, rgba(39, 159, 249, 0.09), transparent 70%),
+                    linear-gradient(180deg, #f8fbff 0%, #fff 42%, #fff 100%);
+            }
+
+            .cat-section::before {
+                content: "";
+                position: absolute;
+                inset-inline: 0;
+                top: 0;
+                height: 1px;
+                background: linear-gradient(90deg, transparent, rgba(39, 159, 249, 0.2), transparent);
+                pointer-events: none;
+            }
+
             .cat-grid {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr);
                 gap: 1rem;
+                max-width: 72rem;
+                margin-inline: auto;
             }
 
             @media (min-width: 640px) {
@@ -126,37 +157,60 @@
             @media (min-width: 1024px) {
                 .cat-grid {
                     grid-template-columns: repeat(3, minmax(0, 1fr));
-                    gap: 1.5rem;
+                    gap: 1.35rem;
                 }
             }
 
             .cat-card {
+                --cat-accent: var(--color-blue);
+                --cat-accent-soft: rgba(39, 159, 249, 0.12);
                 position: relative;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 text-align: center;
-                padding: 1.75rem 1.25rem 1.5rem;
-                border-radius: 1.35rem;
-                border: 1.5px solid rgba(15, 23, 42, 0.08);
+                min-height: 17.5rem;
+                padding: 1.65rem 1.15rem 1.35rem;
+                border-radius: 1.4rem;
+                border: 1.5px solid rgba(15, 23, 42, 0.07);
                 background: #fff;
-                box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+                box-shadow:
+                    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+                    0 10px 30px rgba(15, 23, 42, 0.06);
                 transition:
-                    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
-                    border-color 0.2s ease,
-                    background 0.25s ease,
-                    box-shadow 0.25s ease,
+                    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                    border-color 0.22s ease,
+                    background 0.28s ease,
+                    box-shadow 0.28s ease,
                     color 0.2s ease;
+                animation: cat-card-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+                animation-delay: calc(var(--cat-i, 0) * 90ms);
             }
 
-            .cat-card:hover,
-            .cat-card:focus-visible,
-            .cat-card.is-active {
-                transform: translateY(-5px);
-                border-color: transparent;
-                background: var(--color-blue);
-                box-shadow: 0 16px 40px rgba(39, 159, 249, 0.28);
-                color: #fff;
+            .cat-card--lifestyle {
+                --cat-accent: #3fb536;
+                --cat-accent-soft: rgba(63, 181, 54, 0.14);
+            }
+
+            .cat-card--medical {
+                --cat-accent: #7c5cff;
+                --cat-accent-soft: rgba(124, 92, 255, 0.13);
+            }
+
+            @media (hover: hover) and (pointer: fine) {
+                .cat-card:hover,
+                .cat-card:focus-visible {
+                    transform: translateY(-6px);
+                    border-color: transparent;
+                    background: var(--cat-accent);
+                    box-shadow: 0 18px 44px color-mix(in srgb, var(--cat-accent) 34%, transparent);
+                    color: #fff;
+                }
+            }
+
+            .cat-card:focus-visible {
+                outline: 3px solid color-mix(in srgb, var(--cat-accent) 45%, transparent);
+                outline-offset: 3px;
             }
 
             .cat-card__icon-wrap {
@@ -164,40 +218,50 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                width: 5.5rem;
-                height: 5.5rem;
-                margin-bottom: 1.1rem;
-                border-radius: 1.25rem;
-                background: linear-gradient(145deg, #f3f9ff 0%, #e6f3fe 100%);
-                box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-                animation: cat-icon-float 3.2s ease-in-out infinite;
+                width: 5.75rem;
+                height: 5.75rem;
+                margin-bottom: 1rem;
+                border-radius: 1.35rem;
+                background: linear-gradient(145deg, #fff 0%, var(--cat-accent-soft) 100%);
+                box-shadow:
+                    0 0 0 1px rgba(255, 255, 255, 0.85) inset,
+                    0 8px 20px rgba(15, 23, 42, 0.07);
             }
 
-            .cat-card:nth-child(2) .cat-card__icon-wrap {
-                animation-delay: 0.35s;
+            @media (prefers-reduced-motion: no-preference) {
+                .cat-card__icon-wrap {
+                    animation: cat-icon-float 3.4s ease-in-out infinite;
+                    animation-delay: calc(var(--cat-i, 0) * 120ms);
+                }
+
+                @media (hover: hover) and (pointer: fine) {
+                    .cat-card:hover .cat-card__icon-wrap,
+                    .cat-card:focus-visible .cat-card__icon-wrap {
+                        animation: cat-icon-pop 0.6s ease-in-out infinite;
+                    }
+                }
             }
 
-            .cat-card:nth-child(3) .cat-card__icon-wrap {
-                animation-delay: 0.7s;
-            }
-
-            .cat-card:hover .cat-card__icon-wrap,
-            .cat-card.is-active .cat-card__icon-wrap {
-                animation: cat-icon-pop 0.55s ease-in-out infinite;
-                background: rgba(255, 255, 255, 0.2);
+            @media (hover: hover) and (pointer: fine) {
+                .cat-card:hover .cat-card__icon-wrap,
+                .cat-card:focus-visible .cat-card__icon-wrap {
+                    background: rgba(255, 255, 255, 0.22);
+                    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
+                }
             }
 
             .cat-card__icon {
-                width: 3.25rem;
-                height: 3.25rem;
+                width: 3.35rem;
+                height: 3.35rem;
                 object-fit: contain;
-                filter: drop-shadow(0 4px 8px rgba(15, 23, 42, 0.12));
+                filter: drop-shadow(0 4px 10px rgba(15, 23, 42, 0.14));
             }
 
             .cat-card__title {
                 position: relative;
-                margin: 0 0 0.35rem;
-                font-size: 1.05rem;
+                margin: 0;
+                padding-bottom: 0.15rem;
+                font-size: 1.06rem;
                 font-weight: 800;
                 line-height: 1.4;
                 color: var(--color-black);
@@ -205,14 +269,15 @@
 
             @media (min-width: 768px) {
                 .cat-card__title {
-                    font-size: 1.15rem;
+                    font-size: 1.16rem;
                 }
             }
 
-            .cat-card:hover .cat-card__title,
-            .cat-card.is-active .cat-card__title,
-            .cat-card:focus-visible .cat-card__title {
-                color: #fff;
+            @media (hover: hover) and (pointer: fine) {
+                .cat-card:hover .cat-card__title,
+                .cat-card:focus-visible .cat-card__title {
+                    color: #fff;
+                }
             }
 
             .cat-card__title-text {
@@ -223,9 +288,9 @@
             .cat-card__scribble {
                 position: absolute;
                 left: 50%;
-                bottom: -0.35rem;
-                width: calc(100% + 1rem);
-                height: 0.65rem;
+                bottom: -0.2rem;
+                width: calc(100% + 0.75rem);
+                height: 0.6rem;
                 transform: translateX(-50%);
                 overflow: visible;
                 pointer-events: none;
@@ -233,76 +298,152 @@
 
             .cat-card__scribble path {
                 fill: none;
-                stroke: var(--color-blue);
-                stroke-width: 3;
+                stroke: var(--cat-accent);
+                stroke-width: 2.75;
                 stroke-linecap: round;
                 stroke-dasharray: 120;
                 stroke-dashoffset: 120;
-                opacity: 0.85;
+                opacity: 0.9;
             }
 
-            .cat-card:hover .cat-card__scribble path,
-            .cat-card.is-active .cat-card__scribble path {
-                stroke: #fff;
-                animation: cat-draw-line 0.7s ease forwards;
+            @media (hover: hover) and (pointer: fine) {
+                .cat-card:hover .cat-card__scribble path,
+                .cat-card:focus-visible .cat-card__scribble path {
+                    stroke: #fff;
+                    animation: cat-draw-line 0.65s ease forwards;
+                }
             }
 
             .cat-card__tagline {
-                margin: 0.55rem 0 0;
+                margin: 0.65rem 0 0;
+                min-height: 2.6em;
                 font-size: 0.84rem;
-                line-height: 1.5;
+                line-height: 1.55;
                 color: rgba(46, 46, 48, 0.58);
             }
 
-            .cat-card:hover .cat-card__tagline,
-            .cat-card.is-active .cat-card__tagline,
-            .cat-card:focus-visible .cat-card__tagline {
-                color: rgba(255, 255, 255, 0.88);
+            @media (hover: hover) and (pointer: fine) {
+                .cat-card:hover .cat-card__tagline,
+                .cat-card:focus-visible .cat-card__tagline {
+                    color: rgba(255, 255, 255, 0.9);
+                }
+            }
+
+            .cat-card__foot {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 0.65rem;
+                margin-top: auto;
+                padding-top: 1rem;
+                width: 100%;
             }
 
             .cat-card__stat {
-                display: flex;
+                display: inline-flex;
                 align-items: baseline;
                 justify-content: center;
-                gap: 0.3rem;
-                margin-top: 1.1rem;
-                padding-top: 1rem;
-                width: 100%;
-                border-top: 1px dashed rgba(15, 23, 42, 0.1);
+                gap: 0.28rem;
+                padding: 0.45rem 1rem;
+                border-radius: 999px;
+                background: var(--cat-accent-soft);
             }
 
-            .cat-card:hover .cat-card__stat,
-            .cat-card.is-active .cat-card__stat {
-                border-top-color: rgba(255, 255, 255, 0.25);
+            @media (hover: hover) and (pointer: fine) {
+                .cat-card:hover .cat-card__stat,
+                .cat-card:focus-visible .cat-card__stat {
+                    background: rgba(255, 255, 255, 0.2);
+                }
             }
 
             .cat-card__stat-value {
-                font-size: 2rem;
+                font-size: 1.65rem;
                 font-weight: 800;
                 line-height: 1;
                 letter-spacing: -0.04em;
-                color: var(--color-blue);
+                color: var(--cat-accent);
             }
 
-            .cat-card:hover .cat-card__stat-value,
-            .cat-card.is-active .cat-card__stat-value {
-                color: #fff;
+            @media (hover: hover) and (pointer: fine) {
+                .cat-card:hover .cat-card__stat-value,
+                .cat-card:focus-visible .cat-card__stat-value {
+                    color: #fff;
+                }
             }
 
             .cat-card__stat-unit {
-                font-size: 0.9rem;
+                font-size: 0.82rem;
                 font-weight: 700;
                 color: rgba(46, 46, 48, 0.55);
             }
 
-            .cat-card:hover .cat-card__stat-unit,
-            .cat-card.is-active .cat-card__stat-unit {
-                color: rgba(255, 255, 255, 0.82);
+            @media (hover: hover) and (pointer: fine) {
+                .cat-card:hover .cat-card__stat-unit,
+                .cat-card:focus-visible .cat-card__stat-unit {
+                    color: rgba(255, 255, 255, 0.86);
+                }
+            }
+
+            .cat-card__stat-soon {
+                font-size: 0.82rem;
+                font-weight: 700;
+                letter-spacing: 0.02em;
+                color: rgba(46, 46, 48, 0.48);
+            }
+
+            @media (hover: hover) and (pointer: fine) {
+                .cat-card:hover .cat-card__stat-soon,
+                .cat-card:focus-visible .cat-card__stat-soon {
+                    color: rgba(255, 255, 255, 0.9);
+                }
+            }
+
+            .cat-card__hint {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.3rem;
+                font-size: 0.78rem;
+                font-weight: 700;
+                color: rgba(46, 46, 48, 0.42);
+                opacity: 0;
+                transform: translateY(4px);
+                transition:
+                    opacity 0.22s ease,
+                    transform 0.22s ease,
+                    color 0.2s ease;
+            }
+
+            @media (hover: hover) and (pointer: fine) {
+                .cat-card:hover .cat-card__hint,
+                .cat-card:focus-visible .cat-card__hint {
+                    opacity: 1;
+                    transform: translateY(0);
+                    color: rgba(255, 255, 255, 0.88);
+                }
+            }
+
+            .cat-card__hint svg {
+                width: 0.9rem;
+                height: 0.9rem;
+            }
+
+            [dir="rtl"] .cat-card__hint svg {
+                transform: scaleX(-1);
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                .cat-card,
+                .cat-card__icon-wrap,
+                .cat-card__scribble path,
+                .cat-card__hint {
+                    animation: none !important;
+                    transition: none !important;
+                }
             }
         </style>
     @endpush
 
-    <section class="py-20">
+    <section class="cat-section py-20 md:py-24">
         <div class="container">
             <header class="section-header section-header--center app-section-head" data-anim="fade-up">
                 <h4 class="section-header__subtitle">{{ __('Meal Plan') }}</h4>
@@ -373,17 +514,54 @@
                         return __('category.tagline_medical');
                     }
 
-                    if (preg_match('/نمط|حياة|lifestyle|everyday\s*wellness/u', $haystack)) {
+                    if (preg_match('/نمط|حياة|lifestyle|everyday\s*wellness|صحي/u', $haystack)) {
                         return __('category.tagline_lifestyle');
                     }
 
                     return __('category.tagline_default');
                 };
 
-                $__mealPlanIconForCategory = static function (array $category) use ($__mealPlanCoverForCategory): string {
+                $__categoryTheme = static function (array $category) use ($__localizedCategoryField): string {
+                    $haystack = mb_strtolower(implode(' ', array_filter([
+                        $__localizedCategoryField($category['name'] ?? ''),
+                        $__localizedCategoryField($category['description'] ?? ''),
+                    ])));
+
+                    if (preg_match('/وزن|weight\s*manag|weight\s*loss|healthy\s*weight/u', $haystack)) {
+                        return 'weight';
+                    }
+
+                    if (preg_match('/طب|medical|health\s*condition|حالة\s*صح/u', $haystack)) {
+                        return 'medical';
+                    }
+
+                    if (preg_match('/نمط|حياة|lifestyle|everyday\s*wellness|صحي/u', $haystack)) {
+                        return 'lifestyle';
+                    }
+
+                    return 'weight';
+                };
+
+                $__isPlaceholderIcon = static function (string $url): bool {
+                    $url = mb_strtolower($url);
+
+                    return $url === ''
+                        || str_contains($url, 'uploadable')
+                        || str_contains($url, 'placeholder')
+                        || str_contains($url, 'default.');
+                };
+
+                $__mealPlanIconForCategory = static function (array $category) use ($__mealPlanCoverForCategory, $__isPlaceholderIcon): string {
+                    $cover = trim((string) ($category['image_url'] ?? ''));
                     $badge = $category['badge'] ?? null;
-                    if (is_array($badge) && ! empty($badge['image'])) {
-                        return $__mealPlanCoverForCategory(['image_url' => (string) $badge['image']]);
+                    $badgeUrl = is_array($badge) ? trim((string) ($badge['image'] ?? '')) : '';
+
+                    if ($cover !== '' && ! $__isPlaceholderIcon($cover)) {
+                        return $__mealPlanCoverForCategory($category);
+                    }
+
+                    if ($badgeUrl !== '' && ! $__isPlaceholderIcon($badgeUrl)) {
+                        return $__mealPlanCoverForCategory(['image_url' => $badgeUrl]);
                     }
 
                     return $__mealPlanCoverForCategory($category);
@@ -418,15 +596,13 @@
                     : collect($__fallbackCategories);
             @endphp
 
-            <div
-                class="cat-grid mb-10 md:mb-14"
-                data-anim-stagger
-                x-data="{ active: 0 }">
+            <div class="cat-grid mb-10 md:mb-14" data-anim-stagger>
                 @foreach($__displayCategories as $category)
                     @php
                         $catId = (int) ($category['id'] ?? 0);
                         $catName = $__localizedCategoryField($category['name'] ?? '');
                         $catTagline = $__categoryTagline($category);
+                        $catTheme = $__categoryTheme($category);
                         $iconUrl = $__mealPlanIconForCategory($category);
                         $programsCount = max(0, (int) ($category['programs_count'] ?? 0));
                         $categoryHref = $catId > 0
@@ -434,18 +610,17 @@
                             : route('meal-plans.index');
                     @endphp
                     <a href="{{ $categoryHref }}"
-                       class="cat-card {{ $loop->first ? 'is-active' : '' }}"
+                       class="cat-card cat-card--{{ $catTheme }}"
+                       style="--cat-i: {{ $loop->index }}"
                        data-anim="fade-up"
-                       @mouseenter="active = {{ $loop->index }}"
-                       @focus="active = {{ $loop->index }}"
-                       :class="active === {{ $loop->index }} ? 'is-active' : ''"
-                       aria-label="{{ $catName }}">
+                       aria-label="{{ $catName }} — {{ $catTagline }}">
                         <div class="cat-card__icon-wrap">
                             <img src="{{ $iconUrl }}"
                                  class="cat-card__icon"
                                  alt=""
                                  loading="lazy"
-                                 decoding="async" />
+                                 decoding="async"
+                                 onerror="this.onerror=null;this.src='{{ $__homepageMealPlanCardImage(match($catTheme) { 'lifestyle' => 1, 'medical' => 2, default => 3 }) }}';" />
                         </div>
                         <h3 class="cat-card__title">
                             <span class="cat-card__title-text">{{ $catName }}</span>
@@ -454,9 +629,21 @@
                             </svg>
                         </h3>
                         <p class="cat-card__tagline">{{ $catTagline }}</p>
-                        <div class="cat-card__stat" aria-label="{{ trans_choice('category.programs_count', $programsCount, ['count' => $programsCount]) }}">
-                            <span class="cat-card__stat-value">{{ $programsCount }}</span>
-                            <span class="cat-card__stat-unit">{{ trans_choice('category.programs_unit', $programsCount) }}</span>
+                        <div class="cat-card__foot">
+                            <div class="cat-card__stat" aria-label="{{ $programsCount > 0 ? trans_choice('category.programs_count', $programsCount, ['count' => $programsCount]) : __('category.coming_soon') }}">
+                                @if($programsCount > 0)
+                                    <span class="cat-card__stat-value">{{ $programsCount }}</span>
+                                    <span class="cat-card__stat-unit">{{ trans_choice('category.programs_unit', $programsCount) }}</span>
+                                @else
+                                    <span class="cat-card__stat-soon">{{ __('category.coming_soon') }}</span>
+                                @endif
+                            </div>
+                            <span class="cat-card__hint">
+                                {{ __('Explore') }}
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                                </svg>
+                            </span>
                         </div>
                     </a>
                 @endforeach
