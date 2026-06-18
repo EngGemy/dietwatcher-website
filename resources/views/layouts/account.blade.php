@@ -212,6 +212,138 @@
 
         .acc-address-card { padding:1.1rem 1.25rem; }
         .acc-address-card + .acc-address-card { border-top:1px solid #F1F5F9; }
+
+        .acc-address-grid {
+            display:grid;
+            gap:1rem;
+        }
+        @media (min-width: 768px) {
+            .acc-address-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+        }
+        .acc-address-tile {
+            position:relative;
+            background:#fff;
+            border:1px solid #E8EDF3;
+            border-radius:18px;
+            padding:1.15rem 1.2rem 1rem;
+            overflow:hidden;
+            box-shadow:0 1px 2px rgba(15,23,42,.04);
+            transition:border-color .2s, box-shadow .2s, transform .15s;
+        }
+        .acc-address-tile:hover {
+            border-color:#BFDBFE;
+            box-shadow:0 10px 28px -12px rgba(39,159,249,.22);
+        }
+        .acc-address-tile.is-active .acc-address-tile__accent {
+            background:linear-gradient(180deg, #3fb536 0%, #279ff9 100%);
+        }
+        .acc-address-tile.is-locked {
+            border-color:#FDE68A;
+            background:linear-gradient(180deg, #fff 0%, #FFFBEB 120%);
+        }
+        .acc-address-tile.is-locked .acc-address-tile__accent {
+            background:linear-gradient(180deg, #F59E0B 0%, #F97316 100%);
+        }
+        .acc-address-tile--skeleton { min-height:220px; }
+        .acc-address-tile__accent {
+            position:absolute; top:0; inset-inline-start:0;
+            width:4px; height:100%;
+            background:#CBD5E1;
+            border-radius:18px 0 0 18px;
+        }
+        [dir="rtl"] .acc-address-tile__accent { border-radius:0 18px 18px 0; }
+        .acc-address-tile__head {
+            display:flex; align-items:flex-start; gap:.75rem;
+            margin-bottom:.65rem;
+        }
+        .acc-address-tile__icon {
+            width:40px; height:40px; border-radius:12px;
+            display:flex; align-items:center; justify-content:center;
+            background:linear-gradient(135deg, rgba(39,159,249,.12), rgba(63,181,54,.1));
+            color:#279ff9; flex-shrink:0;
+        }
+        .acc-address-tile__icon svg { width:20px; height:20px; }
+        .acc-address-tile__title {
+            font-size:1rem; font-weight:800; color:#0F172A; line-height:1.3;
+        }
+        .acc-address-tile__district {
+            font-size:.78rem; color:#64748B; margin-top:.15rem;
+        }
+        .acc-address-tile__desc {
+            font-size:.86rem; color:#475569; line-height:1.55;
+            margin-bottom:.85rem;
+            padding-inline-start:.15rem;
+        }
+        .acc-address-section {
+            margin-top:.75rem;
+            padding:.75rem .85rem;
+            border-radius:14px;
+            background:#F8FAFC;
+            border:1px solid #EEF2F7;
+        }
+        .acc-address-section__label {
+            display:flex; align-items:center; gap:.45rem;
+            font-size:.72rem; font-weight:800;
+            text-transform:uppercase; letter-spacing:.06em;
+            color:#64748B; margin-bottom:.55rem;
+        }
+        .acc-address-section__icon { width:15px; height:15px; color:#279ff9; }
+        .acc-address-section__value {
+            font-size:.88rem; font-weight:700; color:#1E293B;
+        }
+        .acc-address-section__empty {
+            font-size:.8rem; color:#94A3B8;
+        }
+        .acc-time-slots { display:flex; flex-wrap:wrap; gap:.4rem; }
+        .acc-time-slot {
+            display:inline-flex; align-items:center;
+            padding:.35rem .65rem; border-radius:999px;
+            font-size:.76rem; font-weight:700;
+            border:1px solid #E2E8F0; background:#fff; color:#64748B;
+        }
+        .acc-time-slot.is-selected {
+            background:linear-gradient(135deg, rgba(39,159,249,.14), rgba(63,181,54,.12));
+            border-color:#7DD3FC; color:#0369A1;
+            box-shadow:0 0 0 1px rgba(39,159,249,.12);
+        }
+        .acc-time-picker { display:flex; flex-direction:column; gap:.45rem; }
+        .acc-time-picker__btn {
+            display:flex; align-items:center; gap:.65rem;
+            width:100%; text-align:start;
+            padding:.7rem .85rem; border-radius:12px;
+            border:1px solid #E2E8F0; background:#fff;
+            font-size:.84rem; font-weight:600; color:#334155;
+            cursor:pointer; transition:all .15s;
+        }
+        .acc-time-picker__btn:hover { border-color:#93C5FD; background:#F8FAFC; }
+        .acc-time-picker__btn.is-selected {
+            border-color:#279ff9;
+            background:linear-gradient(135deg, rgba(39,159,249,.1), rgba(63,181,54,.08));
+            color:#0369A1;
+            box-shadow:0 0 0 1px rgba(39,159,249,.15);
+        }
+        .acc-time-picker__radio {
+            width:16px; height:16px; border-radius:50%;
+            border:2px solid #CBD5E1; flex-shrink:0;
+            position:relative;
+        }
+        .acc-time-picker__btn.is-selected .acc-time-picker__radio {
+            border-color:#279ff9;
+            background:#279ff9;
+            box-shadow:inset 0 0 0 3px #fff;
+        }
+        .acc-address-lock {
+            display:flex; align-items:flex-start; gap:.5rem;
+            margin-top:.85rem; padding:.65rem .75rem;
+            border-radius:12px; background:#FFFBEB;
+            border:1px solid #FDE68A;
+            font-size:.78rem; font-weight:600; color:#92400E; line-height:1.45;
+        }
+        .acc-address-tile__actions {
+            display:flex; flex-wrap:wrap; gap:.5rem;
+            margin-top:.9rem; padding-top:.85rem;
+            border-top:1px dashed #E2E8F0;
+        }
         .acc-day-row { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.55rem; }
         .acc-day-pill {
             display:inline-flex; align-items:center; justify-content:center;

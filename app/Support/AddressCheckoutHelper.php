@@ -596,25 +596,77 @@ final class AddressCheckoutHelper
     }
 
     /**
-     * @param  array<string, mixed>  $address
+     * Address IDs referenced by pending / active / paused subscription delivery days.
+     *
+     * @param  array<int, array<string, mixed>>  $subscriptions
+     * @return array<int, int>
      */
-    public static function isCantModify(array $address): bool
+    public static function collectLockedAddressIdsFromSubscriptions(array $subscriptions): array
     {
-        return filter_var(
+        $locked = [];
+        $activeStatuses = ['pending', 'active', 'paused'];
+
+        foreach ($subscriptions as $subscription) {
+            if (! is_array($subscription)) {
+                continue;
+            }
+
+            $status = strtolower(trim((string) ($subscription['status'] ?? '')));
+            if ($status !== '' && ! in_array($status, $activeStatuses, true)) {
+                continue;
+            }
+
+            foreach (['days', 'subscription_days', 'subscriptionDays', 'delivery_days', 'deliveryDays'] as $key) {
+                $days = $subscription[$key] ?? null;
+                if (! is_array($days)) {
+                    continue;
+                }
+
+                foreach ($days as $day) {
+                    if (! is_array($day)) {
+                        continue;
+                    }
+                    $addressId = (int) ($day['address_id'] ?? $day['addressId'] ?? 0);
+                    if ($addressId > 0) {
+                        $locked[$addressId] = $addressId;
+                    }
+                }
+            }
+        }
+
+        return array_values($locked);
+    }
+
+    /**
+     * @param  array<string, mixed>  $address
+     * @param  array<int, int>  $lockedAddressIds
+     */
+    public static function isCantModify(array $address, array $lockedAddressIds = []): bool
+    {
+        if (filter_var(
             $address['cant_modify'] ?? $address['cantModify'] ?? false,
             FILTER_VALIDATE_BOOLEAN
-        );
+        )) {
+            return true;
+        }
+
+        $addressId = (int) ($address['id'] ?? 0);
+
+        return $addressId > 0 && in_array($addressId, $lockedAddressIds, true);
     }
 
     /**
      * @param  array<int, array<string, mixed>>  $rows
+     * @param  array<int, array<string, mixed>>  $subscriptions
      * @return array<int, array<string, mixed>>
      */
-    public static function markDeliverability(array $rows): array
+    public static function markDeliverability(array $rows, array $subscriptions = []): array
     {
-        return array_values(array_map(static function (array $row) use ($rows): array {
+        $lockedAddressIds = self::collectLockedAddressIdsFromSubscriptions($subscriptions);
+
+        return array_values(array_map(static function (array $row) use ($rows, $lockedAddressIds): array {
             $row['is_deliverable'] = self::isDeliverableForSubscription($row, $rows);
-            $row['cant_modify'] = self::isCantModify($row);
+            $row['cant_modify'] = self::isCantModify($row, $lockedAddressIds);
 
             return $row;
         }, array_filter($rows, 'is_array')));

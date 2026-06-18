@@ -52,7 +52,16 @@ class CheckoutController extends Controller
             $addresses = [];
         }
 
-        return AddressCheckoutHelper::markDeliverability($addresses);
+        $subscriptions = [];
+        $account = app(AccountApiService::class);
+        if ($account->hasToken()) {
+            $subsResult = $account->listSubscriptions();
+            if (($subsResult['ok'] ?? false) && is_array($subsResult['data']['subscriptions'] ?? null)) {
+                $subscriptions = $subsResult['data']['subscriptions'];
+            }
+        }
+
+        return AddressCheckoutHelper::markDeliverability($addresses, $subscriptions);
     }
 
     /**
@@ -62,12 +71,10 @@ class CheckoutController extends Controller
      */
     private function checkoutActiveAddresses(string $token): array
     {
-        $addresses = array_values(array_filter(
+        return array_values(array_filter(
             $this->checkoutManageableAddresses($token),
             static fn (array $row): bool => ApiAuthService::isAddressRowActive($row)
         ));
-
-        return AddressCheckoutHelper::markDeliverability($addresses);
     }
 
     private function rememberCheckoutRegionDuration(int $addressId, int $regionDurationId): void

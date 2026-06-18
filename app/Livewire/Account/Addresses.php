@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Account;
 
+use App\Services\AccountApiService;
 use App\Services\ApiAuthService;
 use App\Support\AddressCheckoutHelper;
 use Livewire\Attributes\Layout;
@@ -32,14 +33,19 @@ class Addresses extends Component
 
     public string $deliveryTimeLabel = '';
 
+    public ?int $selectedRegionDurationId = null;
+
     public bool $savingAddress = false;
 
-    public function mount(ApiAuthService $auth): void
+    /** @var array<int, int> */
+    public array $lockedAddressIds = [];
+
+    public function mount(ApiAuthService $auth, AccountApiService $account): void
     {
-        $this->reload($auth);
+        $this->reload($auth, $account);
     }
 
-    public function reload(ApiAuthService $auth): void
+    public function reload(ApiAuthService $auth, AccountApiService $account): void
     {
         $this->loading = true;
         $this->error = '';
@@ -52,19 +58,34 @@ class Addresses extends Component
             return;
         }
 
-        $this->addresses = $auth->getAddresses($token, false, false);
+        $subscriptions = [];
+        $subsResult = $account->listSubscriptions();
+        if (($subsResult['ok'] ?? false) && is_array($subsResult['data']['subscriptions'] ?? null)) {
+            $subscriptions = $subsResult['data']['subscriptions'];
+        }
+        $this->lockedAddressIds = AddressCheckoutHelper::collectLockedAddressIdsFromSubscriptions($subscriptions);
+
+        $rows = $auth->getAddresses($token, false, false);
+        $this->addresses = AddressCheckoutHelper::markDeliverability($rows, $subscriptions);
+
         foreach ($this->addresses as $index => $row) {
             if (! is_array($row)) {
                 continue;
             }
-            $this->addresses[$index]['cant_modify'] = AddressCheckoutHelper::isCantModify($row);
             $addressId = (int) ($row['id'] ?? 0);
             if ($addressId <= 0) {
                 continue;
             }
             $this->addresses[$index]['days'] = $auth->resolveAddressDeliveryDaysForDisplay($token, $addressId, $row);
             $enriched = AddressCheckoutHelper::enrichAddressDistrictDurations($row, $this->addresses);
-            $this->addresses[$index]['delivery_time_label'] = $this->resolveDeliveryTimeLabel($enriched);
+            $districtId = AddressCheckoutHelper::districtId($enriched);
+            $slots = $auth->findDistrictRegionDurations($token, $districtId, $addressId);
+            if ($slots === []) {
+                $slots = AddressCheckoutHelper::resolveDeliveryTimeSlots($enriched);
+            }
+            $this->addresses[$index]['delivery_time_slots'] = $slots;
+            $this->addresses[$index]['delivery_time_label'] = $this->resolveDeliveryTimeLabel($enriched, $slots);
+            $this->addresses[$index]['region_duration_id'] = AddressCheckoutHelper::firstRegionDurationId($enriched);
         }
         $this->loading = false;
     }
@@ -84,7 +105,7 @@ class Addresses extends Component
             $addr = $auth->findAddressById($token, $addressId, false);
         }
 
-        if (is_array($addr) && AddressCheckoutHelper::isCantModify($addr)) {
+        if (is_array($addr) && $this->addressIsLocked($addr)) {
             $this->error = __('address.cant_modify');
 
             return;
@@ -94,6 +115,7 @@ class Addresses extends Component
         $this->selectedDays = [];
         $this->deliveryTimeSlots = [];
         $this->deliveryTimeLabel = '';
+        $this->selectedRegionDurationId = null;
 
         $this->selectedDays = $auth->resolveAddressDeliveryDaysForDisplay(
             $token,
@@ -104,7 +126,32 @@ class Addresses extends Component
         if (is_array($addr)) {
             $districtId = AddressCheckoutHelper::districtId($addr);
             $this->deliveryTimeSlots = $auth->findDistrictRegionDurations($token, $districtId, $addressId);
+            if ($this->deliveryTimeSlots === []) {
+                $this->deliveryTimeSlots = AddressCheckoutHelper::resolveDeliveryTimeSlots($addr);
+            }
             $this->deliveryTimeLabel = $this->resolveDeliveryTimeLabel($addr, $this->deliveryTimeSlots);
+            $regionId = AddressCheckoutHelper::firstRegionDurationId($addr);
+            if ($regionId > 0) {
+                $this->selectedRegionDurationId = $regionId;
+            } elseif (count($this->deliveryTimeSlots) === 1) {
+                $this->selectedRegionDurationId = (int) ($this->deliveryTimeSlots[0]['id'] ?? 0);
+            }
+        }
+    }
+
+    public function selectDeliveryTime(int $slotId): void
+    {
+        if ($slotId <= 0) {
+            return;
+        }
+
+        $this->selectedRegionDurationId = $slotId;
+        foreach ($this->deliveryTimeSlots as $slot) {
+            if ((int) ($slot['id'] ?? 0) === $slotId) {
+                $this->deliveryTimeLabel = (string) ($slot['label'] ?? '');
+
+                return;
+            }
         }
     }
 
@@ -161,6 +208,15 @@ class Addresses extends Component
         $this->selectedDays = [];
         $this->deliveryTimeSlots = [];
         $this->deliveryTimeLabel = '';
+        $this->selectedRegionDurationId = null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $address
+     */
+    protected function addressIsLocked(array $address): bool
+    {
+        return AddressCheckoutHelper::isCantModify($address, $this->lockedAddressIds);
     }
 
     public function saveDeliveryDays(ApiAuthService $auth): void
@@ -188,7 +244,7 @@ class Addresses extends Component
         if (! is_array($addr)) {
             $addr = $auth->findAddressById($token, $addressId, false);
         }
-        if (is_array($addr) && AddressCheckoutHelper::isCantModify($addr)) {
+        if (is_array($addr) && $this->addressIsLocked($addr)) {
             $this->error = __('address.cant_modify');
 
             return;
@@ -203,10 +259,10 @@ class Addresses extends Component
 
         $this->notice = __('account.delivery_days_saved');
         $this->closeDeliveryDays();
-        $this->reload($auth);
+        $this->reload($auth, app(AccountApiService::class));
     }
 
-    public function deleteAddress(ApiAuthService $auth, int $addressId): void
+    public function deleteAddress(ApiAuthService $auth, AccountApiService $account, int $addressId): void
     {
         $this->error = $this->notice = '';
         $token = (string) session('external_api_token', '');
@@ -219,7 +275,7 @@ class Addresses extends Component
         if (! is_array($addr)) {
             $addr = $auth->findAddressById($token, $addressId, false);
         }
-        if (is_array($addr) && AddressCheckoutHelper::isCantModify($addr)) {
+        if (is_array($addr) && $this->addressIsLocked($addr)) {
             $this->error = __('address.cant_modify');
 
             return;
@@ -233,7 +289,7 @@ class Addresses extends Component
         }
 
         $this->notice = __('account.address_deleted');
-        $this->reload($auth);
+        $this->reload($auth, $account);
     }
 
     /**
@@ -314,7 +370,7 @@ class Addresses extends Component
         ]));
         if ($duplicate !== null) {
             $this->notice = __('account.address_already_saved');
-            $this->reload($auth);
+            $this->reload($auth, app(AccountApiService::class));
             $this->openDeliveryDays($auth, (int) ($duplicate['id'] ?? 0));
             $this->savingAddress = false;
 
@@ -336,7 +392,7 @@ class Addresses extends Component
         $stored = AddressCheckoutHelper::unwrapStoredAddress($result['data'] ?? null);
         $storedId = (int) ($stored['id'] ?? 0);
         $this->notice = __('account.address_saved');
-        $this->reload($auth);
+        $this->reload($auth, app(AccountApiService::class));
 
         if ($storedId > 0) {
             $this->openDeliveryDays($auth, $storedId);
