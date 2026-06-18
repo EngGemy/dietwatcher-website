@@ -8,6 +8,7 @@ use App\Enums\PaymentKind;
 use App\Enums\PaymentStatus;
 use App\Models\Payment;
 use App\Services\Payment\MoyasarPaymentService;
+use App\Support\ExternalApiConfig;
 use App\Support\AddressCheckoutHelper;
 use App\Support\SubscriptionCheckoutPayload;
 use Carbon\Carbon;
@@ -30,10 +31,7 @@ class AccountApiService
 
     public function __construct()
     {
-        $this->baseUrl = rtrim(
-            config('services.external_api.url', ''),
-            '/'
-        );
+        $this->baseUrl = ExternalApiConfig::baseUrl();
     }
 
     // ─── HTTP primitives ──────────────────────────────────────────────
@@ -68,6 +66,10 @@ class AccountApiService
 
     protected function hasToken(): bool
     {
+        if (! ExternalApiConfig::sessionMatchesConfig()) {
+            return false;
+        }
+
         return (string) session('external_api_token', '') !== '';
     }
 
@@ -2164,7 +2166,9 @@ class AccountApiService
                 'per_page' => 50,
             ], fn ($v) => $v !== null && $v !== '');
 
-            $cacheKey = 'account_orders_'.md5((string) session('external_api_token', '').'|'.$status.'|'.app()->getLocale());
+            $cacheKey = 'account_orders_'.md5(
+                ExternalApiConfig::fingerprint().'|'.(string) session('external_api_token', '').'|'.$status.'|'.app()->getLocale()
+            );
             $decoded = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($baseParams) {
                 $allRows = [];
                 $lastDecoded = $this->empty();
@@ -2267,7 +2271,9 @@ class AccountApiService
             return;
         }
         foreach (['active', 'completed', 'cancelled', ''] as $status) {
-            $cacheKey = 'account_orders_'.md5($token.'|'.$status.'|'.app()->getLocale());
+            $cacheKey = 'account_orders_'.md5(
+                ExternalApiConfig::fingerprint().'|'.$token.'|'.$status.'|'.app()->getLocale()
+            );
             Cache::forget($cacheKey);
         }
     }

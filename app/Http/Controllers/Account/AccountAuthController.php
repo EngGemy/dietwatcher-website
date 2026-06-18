@@ -35,6 +35,7 @@ class AccountAuthController extends Controller
         $request->session()->forget([
             'external_api_token',
             'external_api_profile',
+            'external_api_bound_url',
             'external_login_is_continue',
             'phone_verified',
             'account.intended_url',

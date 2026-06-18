@@ -926,6 +926,7 @@
     "account.start_plan": "Start a plan",
     "account.phone_invalid": "Please enter a valid phone number.",
     "account.login_required": "Please log in first.",
+    "account.api_env_changed": "API environment was updated. Please sign in again.",
     "account.go_to_login": "Go to login",
     "account.dashboard_title": "My Account",
     "account.dashboard": "Dashboard",

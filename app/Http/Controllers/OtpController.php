@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Services\ApiAuthService;
 use App\Services\SmsService;
 use App\Support\AddressCheckoutHelper;
+use App\Support\ExternalApiConfig;
 use App\Support\SaudiPhone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -350,6 +351,7 @@ class OtpController extends Controller
                 'external_api_profile' => $parsed['profile'],
                 'external_login_is_continue' => $parsed['is_continue'],
             ]);
+            ExternalApiConfig::bindSession();
             session()->forget([
                 'otp_code',
                 'otp_phone',
@@ -411,6 +413,7 @@ class OtpController extends Controller
                 'external_api_profile' => $externalData['profile'],
                 'external_login_is_continue' => false,
             ]);
+            ExternalApiConfig::bindSession();
             session()->forget([
                 'pending_register_mobile',
                 'pending_register_expires_at',

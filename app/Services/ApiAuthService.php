@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Support\AddressCheckoutHelper;
+use App\Support\ExternalApiConfig;
 use App\Support\SaudiPhone;
 use App\Support\SubscriptionCheckoutPayload;
 use Illuminate\Http\Client\PendingRequest;
@@ -22,10 +23,7 @@ class ApiAuthService
 
     public function __construct()
     {
-        $this->baseUrl = rtrim(
-            config('services.external_api.url', 'https://diet-watchers-stage-fbofszkn.on-forge.com/api'),
-            '/'
-        );
+        $this->baseUrl = ExternalApiConfig::baseUrl();
     }
 
     // ─── HTTP helpers ─────────────────────────────────────────────────

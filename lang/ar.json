@@ -1133,6 +1133,7 @@
     "account.start_plan": "ابدأ خطة",
     "account.phone_invalid": "الرجاء إدخال رقم جوال صحيح.",
     "account.login_required": "يُرجى تسجيل الدخول أولاً.",
+    "account.api_env_changed": "تم تحديث بيئة الـ API. يُرجى تسجيل الدخول مرة أخرى.",
     "account.go_to_login": "الذهاب لتسجيل الدخول",
     "account.dashboard_title": "حسابي",
     "account.dashboard": "الرئيسية",

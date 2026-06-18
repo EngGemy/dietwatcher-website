@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\ExternalApiConfig;
 use App\Support\SubscriptionCheckoutPayload;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
@@ -19,7 +20,7 @@ class ExternalDataService
 
     public function __construct()
     {
-        $this->baseUrl = rtrim(config('services.external_api.url', 'https://diet-watchers-stage-fbofszkn.on-forge.com/api'), '/');
+        $this->baseUrl = ExternalApiConfig::baseUrl();
         $this->token = config('services.external_api.token');
     }
 
@@ -201,7 +202,7 @@ class ExternalDataService
      */
     protected function cacheKey(string $key): string
     {
-        return app()->getLocale().'_'.$key;
+        return app()->getLocale().'_'.ExternalApiConfig::fingerprint().'_'.$key;
     }
 
     // ─── Programs / Plans ────────────────────────────────────────

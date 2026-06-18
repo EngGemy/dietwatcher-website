@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Account;
 
 use App\Services\ApiAuthService;
+use App\Support\ExternalApiConfig;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
@@ -116,6 +117,7 @@ class Login extends Component
             'external_login_is_continue' => $isContinue,
             'phone_verified' => $this->phone,
         ]);
+        ExternalApiConfig::bindSession();
 
         session()->forget('account_login_phone');
 

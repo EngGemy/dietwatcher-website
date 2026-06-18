@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Support\ExternalApiConfig;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -16,6 +17,19 @@ class EnsureCustomerAuthenticated
 {
     public function handle(Request $request, Closure $next): Response
     {
+        if (ExternalApiConfig::clearMismatchedSession()) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('account.api_env_changed'),
+                ], 401);
+            }
+
+            return redirect()
+                ->route('account.login')
+                ->with('status', __('account.api_env_changed'));
+        }
+
         $token = (string) $request->session()->get('external_api_token', '');
         $phone = (string) $request->session()->get('phone_verified', '');
 

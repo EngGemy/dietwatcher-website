@@ -14,7 +14,11 @@ final class CustomerSession
 {
     public static function isLoggedIn(): bool
     {
-        return (bool) (session('external_api_token') && session('phone_verified'));
+        return (bool) (
+            session('external_api_token')
+            && session('phone_verified')
+            && ExternalApiConfig::sessionMatchesConfig()
+        );
     }
 
     /**
