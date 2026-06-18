@@ -802,9 +802,72 @@ function googleMapPicker(opts) {
                 .toLowerCase()
                 .replace(/[أإآ]/g, 'ا')
                 .replace(/[ًٌٍَُِّْـ]/g, '')
-                .replace(/\b(district|riyadh|saudi|arabia)\b/g, '')
+                .replace(/\b(district|riyadh|saudi|arabia)\b/gi, '')
                 .replace(/حي|الرياض|السعودية/g, '')
                 .replace(/[^a-z\u0600-\u06ff0-9]+/g, '');
+        },
+
+        geocodeDistrictSearchTexts(result) {
+            const texts = [];
+            if (! result) {
+                return texts;
+            }
+            if (result.formatted_address) {
+                texts.push(String(result.formatted_address));
+                String(result.formatted_address).split(/[,،]/).forEach((part) => {
+                    const trimmed = part.trim();
+                    if (trimmed) {
+                        texts.push(trimmed);
+                    }
+                });
+            }
+            const wantedTypes = ['sublocality_level_1', 'sublocality_level_2', 'sublocality', 'neighborhood', 'administrative_area_level_2', 'locality'];
+            (result.address_components || []).forEach((component) => {
+                const types = Array.isArray(component.types) ? component.types : [];
+                if (! types.some((type) => wantedTypes.includes(type))) {
+                    return;
+                }
+                if (component.long_name) {
+                    texts.push(String(component.long_name));
+                }
+                if (component.short_name) {
+                    texts.push(String(component.short_name));
+                }
+            });
+
+            return [...new Set(texts)];
+        },
+
+        matchDistrictIdFromNeedles(needles) {
+            const normalizedNeedles = [...new Set(
+                (needles || [])
+                    .map((text) => this.normalizeDistrictText(text))
+                    .filter((text) => text !== ''),
+            )];
+            if (! normalizedNeedles.length || ! Array.isArray(this.districts) || this.districts.length === 0) {
+                return '';
+            }
+
+            for (const row of this.districts) {
+                const id = row && row.id != null ? String(row.id) : '';
+                if (! id) {
+                    continue;
+                }
+                const candidates = [...new Set(
+                    this.districtNameCandidates(row)
+                        .map((name) => this.normalizeDistrictText(name))
+                        .filter((name) => name !== ''),
+                )];
+                for (const needle of normalizedNeedles) {
+                    for (const candidate of candidates) {
+                        if (needle === candidate || needle.includes(candidate) || candidate.includes(needle)) {
+                            return id;
+                        }
+                    }
+                }
+            }
+
+            return '';
         },
 
         districtNameCandidates(row) {
@@ -829,55 +892,11 @@ function googleMapPicker(opts) {
         },
 
         inferDistrictIdFromGeocode(result) {
-            if (!result || !Array.isArray(this.districts) || this.districts.length === 0) {
-                return '';
-            }
-            const components = Array.isArray(result.address_components) ? result.address_components : [];
-            const wantedTypes = ['sublocality_level_1', 'sublocality_level_2', 'sublocality', 'neighborhood', 'administrative_area_level_2', 'locality'];
-            const geoNames = [];
-            components.forEach((c) => {
-                const types = Array.isArray(c.types) ? c.types : [];
-                if (types.some((t) => wantedTypes.includes(t))) {
-                    if (c.long_name) geoNames.push(String(c.long_name));
-                    if (c.short_name) geoNames.push(String(c.short_name));
-                }
-            });
-            if (result.formatted_address) {
-                geoNames.push(...String(result.formatted_address).split(',').map((s) => s.trim()));
-            }
-            const normalizedGeo = geoNames
-                .map((n) => this.normalizeDistrictText(n))
-                .filter((n) => n !== '');
-            if (normalizedGeo.length === 0) {
+            if (! result || ! Array.isArray(this.districts) || this.districts.length === 0) {
                 return '';
             }
 
-            // Pass 1: strict equality
-            for (const d of this.districts) {
-                const did = d && d.id != null ? String(d.id) : '';
-                if (!did) continue;
-                const cand = this.districtNameCandidates(d)
-                    .map((n) => this.normalizeDistrictText(n))
-                    .filter((n) => n !== '');
-                if (cand.some((cn) => normalizedGeo.includes(cn))) {
-                    return did;
-                }
-            }
-
-            // Pass 2: fuzzy contains
-            for (const d of this.districts) {
-                const did = d && d.id != null ? String(d.id) : '';
-                if (!did) continue;
-                const cand = this.districtNameCandidates(d)
-                    .map((n) => this.normalizeDistrictText(n))
-                    .filter((n) => n !== '');
-                const matched = cand.some((cn) => normalizedGeo.some((gn) => gn.includes(cn) || cn.includes(gn)));
-                if (matched) {
-                    return did;
-                }
-            }
-
-            return '';
+            return this.matchDistrictIdFromNeedles(this.geocodeDistrictSearchTexts(result));
         },
 
         ensureMapReady() {

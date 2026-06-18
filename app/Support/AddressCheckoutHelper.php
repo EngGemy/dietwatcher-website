@@ -382,6 +382,107 @@ final class AddressCheckoutHelper
     }
 
     /**
+     * @param  array<string, mixed>  $address
+     * @return array<int, string>
+     */
+    public static function addressDistrictSearchTexts(?array $address): array
+    {
+        if (! is_array($address)) {
+            return [];
+        }
+
+        $texts = [];
+        $seen = [];
+        $push = static function (mixed $value) use (&$texts, &$seen): void {
+            if ($value === null) {
+                return;
+            }
+            if (is_array($value)) {
+                foreach ($value as $part) {
+                    if (is_string($part) && trim($part) !== '') {
+                        $push($part);
+                    }
+                }
+
+                return;
+            }
+            $text = trim((string) $value);
+            if ($text === '' || isset($seen[$text])) {
+                return;
+            }
+            $seen[$text] = true;
+            $texts[] = $text;
+        };
+
+        $push(self::districtDisplayName($address));
+        $push($address['district_name'] ?? null);
+        $push(data_get($address, 'district.district_identifier'));
+        $push($address['description'] ?? null);
+        $push($address['title'] ?? null);
+        $push($address['address'] ?? null);
+        $push($address['full_address'] ?? null);
+
+        foreach (preg_split('/[,،]/u', (string) ($address['description'] ?? '')) ?: [] as $part) {
+            $push(trim($part));
+        }
+
+        return $texts;
+    }
+
+    /**
+     * Match Google / saved-address text fragments to GET /districts rows.
+     *
+     * @param  array<int, string>  $texts
+     * @param  array<int, array<string, mixed>>  $districtRows
+     */
+    public static function matchDistrictIdFromTexts(array $texts, array $districtRows): int
+    {
+        $normalizedNeedles = array_values(array_unique(array_filter(array_map(
+            static fn (string $text): string => self::normalizeDistrictMatchText($text),
+            $texts,
+        ))));
+
+        if ($normalizedNeedles === []) {
+            return 0;
+        }
+
+        foreach ($districtRows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $candidateId = (int) ($row['id'] ?? 0);
+            if ($candidateId <= 0) {
+                continue;
+            }
+
+            $candidates = array_map(
+                static fn (string $name): string => self::normalizeDistrictMatchText($name),
+                self::districtNameCandidates($row),
+            );
+            $candidates = array_values(array_filter(array_unique($candidates)));
+            if ($candidates === []) {
+                continue;
+            }
+
+            foreach ($normalizedNeedles as $needle) {
+                if ($needle === '') {
+                    continue;
+                }
+                foreach ($candidates as $candidate) {
+                    if ($candidate === '') {
+                        continue;
+                    }
+                    if ($needle === $candidate || str_contains($needle, $candidate) || str_contains($candidate, $needle)) {
+                        return $candidateId;
+                    }
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    /**
      * @param  array<int, array<string, mixed>>  $districtRows
      */
     public static function resolveDistrictId(?array $address, array $districtRows = []): int
@@ -395,28 +496,7 @@ final class AddressCheckoutHelper
             return 0;
         }
 
-        $needle = self::normalizeDistrictMatchText(self::districtDisplayName($address));
-        if ($needle === '') {
-            return 0;
-        }
-
-        foreach ($districtRows as $row) {
-            if (! is_array($row)) {
-                continue;
-            }
-            $candidateId = (int) ($row['id'] ?? 0);
-            if ($candidateId <= 0) {
-                continue;
-            }
-            foreach (self::districtNameCandidates($row) as $candidate) {
-                $normalized = self::normalizeDistrictMatchText($candidate);
-                if ($normalized !== '' && ($normalized === $needle || str_contains($needle, $normalized) || str_contains($normalized, $needle))) {
-                    return $candidateId;
-                }
-            }
-        }
-
-        return 0;
+        return self::matchDistrictIdFromTexts(self::addressDistrictSearchTexts($address), $districtRows);
     }
 
     /**
@@ -468,10 +548,51 @@ final class AddressCheckoutHelper
         $value = mb_strtolower(trim($value));
         $value = str_replace(['أ', 'إ', 'آ'], 'ا', $value);
         $value = preg_replace('/[\x{064B}-\x{065F}\x{0670}\x{0640}]/u', '', $value) ?? $value;
-        $value = str_replace(['حي', 'الرياض', 'السعودية', 'district', 'riyadh', 'saudi', 'arabia'], '', $value);
+        $value = preg_replace('/\b(district|riyadh|saudi|arabia)\b/i', '', $value) ?? $value;
+        $value = str_replace(['حي', 'الرياض', 'السعودية'], '', $value);
         $value = preg_replace('/[^a-z\x{0600}-\x{06ff}0-9]+/u', '', $value) ?? $value;
 
         return trim($value);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function geocodeDistrictSearchTexts(?array $result): array
+    {
+        if (! is_array($result)) {
+            return [];
+        }
+
+        $texts = [];
+        if (! empty($result['formatted_address'])) {
+            $texts[] = (string) $result['formatted_address'];
+            foreach (preg_split('/[,،]/u', (string) $result['formatted_address']) ?: [] as $part) {
+                $part = trim($part);
+                if ($part !== '') {
+                    $texts[] = $part;
+                }
+            }
+        }
+
+        foreach ($result['address_components'] ?? [] as $component) {
+            if (! is_array($component)) {
+                continue;
+            }
+            $types = is_array($component['types'] ?? null) ? $component['types'] : [];
+            $wanted = ['sublocality_level_1', 'sublocality_level_2', 'sublocality', 'neighborhood', 'administrative_area_level_2', 'locality'];
+            if (! array_intersect($wanted, $types)) {
+                continue;
+            }
+            foreach (['long_name', 'short_name'] as $key) {
+                $name = trim((string) ($component[$key] ?? ''));
+                if ($name !== '') {
+                    $texts[] = $name;
+                }
+            }
+        }
+
+        return array_values(array_unique($texts));
     }
 
     /**

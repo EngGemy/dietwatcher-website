@@ -2548,9 +2548,108 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     .toLowerCase()
                     .replace(/[أإآ]/g, 'ا')
                     .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
-                    .replace(/حي|الرياض|السعودية|district|riyadh|saudi|arabia/g, '')
+                    .replace(/\b(district|riyadh|saudi|arabia)\b/gi, '')
+                    .replace(/حي|الرياض|السعودية/g, '')
                     .replace(/[^a-z\u0600-\u06ff0-9]+/g, '')
                     .trim();
+            },
+
+            addressDistrictSearchTexts(addr) {
+                if (! addr) {
+                    return [];
+                }
+                const texts = [];
+                const seen = new Set();
+                const push = (value) => {
+                    if (value == null) {
+                        return;
+                    }
+                    if (typeof value === 'object') {
+                        Object.values(value).forEach(push);
+
+                        return;
+                    }
+                    const text = String(value).trim();
+                    if (text === '' || seen.has(text)) {
+                        return;
+                    }
+                    seen.add(text);
+                    texts.push(text);
+                };
+
+                push(this.savedAddressDistrict(addr));
+                push(addr.district_name);
+                push(addr.district?.district_identifier);
+                push(addr.description);
+                push(addr.title);
+                push(addr.address);
+                push(addr.full_address);
+                String(addr.description || '').split(/[,،]/).forEach((part) => push(part.trim()));
+
+                return texts;
+            },
+
+            geocodeDistrictSearchTexts(result) {
+                const texts = [];
+                if (! result) {
+                    return texts;
+                }
+                if (result.formatted_address) {
+                    texts.push(String(result.formatted_address));
+                    String(result.formatted_address).split(/[,،]/).forEach((part) => {
+                        const trimmed = part.trim();
+                        if (trimmed) {
+                            texts.push(trimmed);
+                        }
+                    });
+                }
+                const wanted = ['sublocality_level_1', 'sublocality_level_2', 'sublocality', 'neighborhood', 'administrative_area_level_2', 'locality'];
+                (result.address_components || []).forEach((component) => {
+                    const types = Array.isArray(component.types) ? component.types : [];
+                    if (! types.some((type) => wanted.includes(type))) {
+                        return;
+                    }
+                    if (component.long_name) {
+                        texts.push(String(component.long_name));
+                    }
+                    if (component.short_name) {
+                        texts.push(String(component.short_name));
+                    }
+                });
+
+                return [...new Set(texts)];
+            },
+
+            matchDistrictIdFromNeedles(needles, districts) {
+                const normalizedNeedles = [...new Set(
+                    (needles || [])
+                        .map((text) => this.normalizeDistrictMatchText(text))
+                        .filter((text) => text !== ''),
+                )];
+                if (! normalizedNeedles.length || ! Array.isArray(districts)) {
+                    return '';
+                }
+
+                for (const row of districts) {
+                    const id = row?.id != null ? String(row.id) : '';
+                    if (! id) {
+                        continue;
+                    }
+                    const candidates = [...new Set(
+                        this.districtNameCandidates(row)
+                            .map((name) => this.normalizeDistrictMatchText(name))
+                            .filter((name) => name !== ''),
+                    )];
+                    for (const needle of normalizedNeedles) {
+                        for (const candidate of candidates) {
+                            if (needle === candidate || needle.includes(candidate) || candidate.includes(needle)) {
+                                return id;
+                            }
+                        }
+                    }
+                }
+
+                return '';
             },
 
             districtNameCandidates(row) {
@@ -2590,43 +2689,35 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             async resolveDistrictIdForAddress(addrOrDistrictId) {
-                if (typeof addrOrDistrictId === 'object' && addrOrDistrictId !== null) {
-                    const addr = addrOrDistrictId;
-                    const direct = addr.district?.id ?? addr.district_id;
-                    if (direct) {
-                        return String(direct);
-                    }
-                    const needle = this.normalizeDistrictMatchText(this.savedAddressDistrict(addr));
-                    if (! needle) {
-                        return '';
-                    }
-                    const districts = await this.ensureDistrictsCache();
-                    for (const row of districts) {
-                        const id = row?.id != null ? String(row.id) : '';
-                        if (! id) {
-                            continue;
-                        }
-                        for (const candidate of this.districtNameCandidates(row)) {
-                            const normalized = this.normalizeDistrictMatchText(candidate);
-                            if (! normalized) {
-                                continue;
-                            }
-                            if (normalized === needle || needle.includes(normalized) || normalized.includes(needle)) {
-                                return id;
-                            }
-                        }
-                    }
-
-                    return '';
+                if (typeof addrOrDistrictId !== 'object' || addrOrDistrictId === null) {
+                    return String(addrOrDistrictId || '').trim();
                 }
 
-                return String(addrOrDistrictId || '').trim();
+                const addr = addrOrDistrictId;
+                const direct = addr.district?.id ?? addr.district_id;
+                if (direct) {
+                    return String(direct);
+                }
+
+                const districts = await this.ensureDistrictsCache();
+                const matched = this.matchDistrictIdFromNeedles(this.addressDistrictSearchTexts(addr), districts);
+
+                return matched || '';
             },
 
             async fetchAddressDeliveryTimes(districtId, addressId = null, { updateSelection = false } = {}) {
-                const normalizedDistrictId = await this.resolveDistrictIdForAddress(
-                    typeof districtId === 'object' ? districtId : { district_id: districtId },
-                );
+                let normalizedDistrictId = '';
+                if (addressId) {
+                    const addr = (this.savedAddresses || []).find((row) => String(row?.id) === String(addressId));
+                    if (addr) {
+                        normalizedDistrictId = await this.resolveDistrictIdForAddress(addr);
+                    }
+                }
+                if (! normalizedDistrictId) {
+                    normalizedDistrictId = await this.resolveDistrictIdForAddress(
+                        typeof districtId === 'object' ? districtId : { district_id: districtId },
+                    );
+                }
                 if (! normalizedDistrictId) {
                     if (addressId) {
                         this.addressDeliveryTimesById[String(addressId)] = [];
@@ -2959,12 +3050,14 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     this.districtDeliveryTimes = inlineTimes;
                     this.addressDeliveryTimesById[String(addr.id)] = inlineTimes;
                     this.syncSelectedRegionDurationFromAddress(addr);
-                } else if (addr.id || districtId) {
-                    if (districtId) {
-                        this.inlineMapDistrictId = String(districtId);
-                    }
-                    this.fetchAddressDeliveryTimes(addr, addr.id, {
-                        updateSelection: true,
+                } else if (addr.id || districtId || addr.description) {
+                    this.resolveDistrictIdForAddress(addr).then((resolvedDistrictId) => {
+                        if (resolvedDistrictId) {
+                            this.inlineMapDistrictId = String(resolvedDistrictId);
+                        } else if (districtId) {
+                            this.inlineMapDistrictId = String(districtId);
+                        }
+                        return this.fetchAddressDeliveryTimes(addr, addr.id, { updateSelection: true });
                     }).then(() => {
                         this.syncSelectedRegionDurationFromAddress(addr);
                     });
@@ -4440,6 +4533,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
             // Watch for duration changes to re-validate coupon
             async init() {
+                this.ensureDistrictsCache();
                 window.addEventListener('checkout-auth-success', async (event) => {
                     const detail = event.detail || {};
                     this.phoneVerified = true;
