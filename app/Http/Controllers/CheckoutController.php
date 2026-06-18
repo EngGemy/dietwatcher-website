@@ -99,6 +99,62 @@ class CheckoutController extends Controller
     }
 
     /**
+     * Fallback delivery slots from plan duration metadata when address payloads omit district.durations.
+     *
+     * @return array<int, array{id: int, duration: string, durationText: string, time: string, label: string}>
+     */
+    private function planRegionDurationsForCheckout(int $districtId): array
+    {
+        if ($districtId <= 0) {
+            return [];
+        }
+
+        $cart = session()->get(CartManager::SESSION_SUBSCRIPTION)
+            ?? session()->get(CartManager::SESSION_MARKET, []);
+        if (! is_array($cart) || $cart === []) {
+            return [];
+        }
+
+        $programId = 0;
+        foreach ($cart as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $candidate = (int) ($item['options']['plan_id'] ?? $item['options']['program_id'] ?? 0);
+            if ($candidate > 0) {
+                $programId = $candidate;
+                break;
+            }
+        }
+        if ($programId <= 0) {
+            return [];
+        }
+
+        $durationRows = $this->externalDataService->getCheckoutPlanDurations($programId);
+        $slots = [];
+        foreach ($durationRows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $regions = $row['region_durations'] ?? $row['regionDurations'] ?? [];
+            if (! is_array($regions)) {
+                continue;
+            }
+            foreach ($regions as $regionRow) {
+                if (! is_array($regionRow)) {
+                    continue;
+                }
+                $normalized = AddressCheckoutHelper::normalizeRegionDurations([$regionRow]);
+                foreach ($normalized as $slot) {
+                    $slots[(int) ($slot['id'] ?? 0)] = $slot;
+                }
+            }
+        }
+
+        return array_values(array_filter($slots, static fn (array $slot): bool => (int) ($slot['id'] ?? 0) > 0));
+    }
+
+    /**
      * GET /checkout/district-durations — delivery time slots for a district (same data as mobile app).
      */
     public function districtDeliveryTimes(Request $request): JsonResponse
@@ -114,6 +170,15 @@ class CheckoutController extends Controller
 
         $districtId = (int) $request->query('district_id', 0);
         $addressId = (int) $request->query('address_id', 0);
+        $auth = app(ApiAuthService::class);
+
+        if ($districtId <= 0 && $addressId > 0) {
+            $address = $auth->findAddressById($token, $addressId, false);
+            if (is_array($address)) {
+                $districtId = AddressCheckoutHelper::resolveDistrictId($address, $auth->getDistricts());
+            }
+        }
+
         if ($districtId <= 0) {
             return response()->json([
                 'success' => false,
@@ -122,8 +187,10 @@ class CheckoutController extends Controller
             ], 422);
         }
 
-        $auth = app(ApiAuthService::class);
         $durations = $auth->findDistrictRegionDurations($token, $districtId, $addressId > 0 ? $addressId : null);
+        if ($durations === []) {
+            $durations = $this->planRegionDurationsForCheckout($districtId);
+        }
 
         return response()->json([
             'success' => true,
@@ -1421,11 +1488,11 @@ class CheckoutController extends Controller
         }
 
         if ($regionDurationId > 0) {
-            $slots = AddressCheckoutHelper::normalizeRegionDurations(AddressCheckoutHelper::districtDurations($address));
+            $slots = AddressCheckoutHelper::resolveDeliveryTimeSlots($address);
             if ($slots === []) {
                 $slots = $auth->findDistrictRegionDurations(
                     $token,
-                    AddressCheckoutHelper::districtId($address),
+                    AddressCheckoutHelper::resolveDistrictId($address, $auth->getDistricts()),
                     $addressId,
                 );
             }

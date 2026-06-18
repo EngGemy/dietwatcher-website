@@ -849,6 +849,7 @@
     "checkout.select_delivery_time": "Select delivery time",
     "checkout.edit_delivery_time": "Edit time",
     "checkout.no_delivery_time_slots": "No delivery times are available for this area yet.",
+    "checkout.loading_delivery_times": "Loading delivery times...",
     "checkout.duration_swipe_hint": "Swipe to explore durations",
     "checkout.saved_addresses_title": "Your saved addresses",
     "checkout.saved_addresses_hint": "Tap one to fill delivery details for this order, or set a new location on the map below.",

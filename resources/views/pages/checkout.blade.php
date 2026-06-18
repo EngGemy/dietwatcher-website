@@ -391,8 +391,11 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                                         </select>
                                                     </div>
                                                 </div>
-                                                <p x-show="addressDeliveryTimes(addr).length === 0 && String(addr.id) === String(selectedAddressId)" x-cloak class="checkout-addr-card__warn">
+                                                <p x-show="addressDeliveryTimes(addr).length === 0 && String(addr.id) === String(selectedAddressId) && !isLoadingAddressTimes(addr)" x-cloak class="checkout-addr-card__warn">
                                                     {{ __('checkout.no_delivery_time_slots') }}
+                                                </p>
+                                                <p x-show="isLoadingAddressTimes(addr) && String(addr.id) === String(selectedAddressId)" x-cloak class="checkout-addr-card__warn text-gray-500">
+                                                    {{ __('checkout.loading_delivery_times') }}
                                                 </p>
                                                 <p x-show="addressCantModify(addr)" x-cloak class="checkout-addr-card__locked text-xs text-amber-700 mt-1">
                                                     {{ __('address.cant_modify_hint') }}
@@ -1777,6 +1780,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             newAddressError: '',
             deletingAddressId: null,
             districtDeliveryTimes: [],
+            addressDeliveryTimesById: {},
+            addressTimesLoading: {},
+            districtsCache: null,
             loadingDistrictTimes: false,
             selectedRegionDurationId: '',
             editingDeliveryTimeAddressId: null,
@@ -2425,7 +2431,41 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             parseAddressDurations(addr) {
-                const raw = addr?.district?.durations;
+                if (! addr) {
+                    return [];
+                }
+
+                const fromDistrict = this.normalizeDurationRows(addr?.district?.durations);
+                if (fromDistrict.length > 0) {
+                    return fromDistrict;
+                }
+
+                for (const key of ['region_durations', 'regionDurations']) {
+                    const rows = this.normalizeDurationRows(addr?.[key]);
+                    if (rows.length > 0) {
+                        return rows;
+                    }
+                }
+
+                for (const key of ['region_duration', 'regionDuration']) {
+                    const nested = addr?.[key];
+                    if (nested && typeof nested === 'object') {
+                        const rows = this.normalizeDurationRows([nested]);
+                        if (rows.length > 0) {
+                            return rows;
+                        }
+                    }
+                }
+
+                const regionId = Number(addr?.region_duration_id ?? addr?.regionDurationId ?? 0);
+                if (regionId > 0) {
+                    return [{ id: regionId, label: String(regionId), time: '', durationText: '' }];
+                }
+
+                return [];
+            },
+
+            normalizeDurationRows(raw) {
                 if (! Array.isArray(raw) || raw.length === 0) {
                     return [];
                 }
@@ -2443,11 +2483,195 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (fromAddress.length > 0) {
                     return fromAddress;
                 }
+                const cached = this.addressDeliveryTimesById[String(addr?.id)] || [];
+                if (cached.length > 0) {
+                    return cached;
+                }
                 if (addr && String(addr.id) === String(this.selectedAddressId) && this.districtDeliveryTimes.length > 0) {
                     return this.districtDeliveryTimes;
                 }
 
                 return [];
+            },
+
+            isLoadingAddressTimes(addr) {
+                if (! addr?.id) {
+                    return false;
+                }
+
+                return !!this.addressTimesLoading[String(addr.id)]
+                    || (String(addr.id) === String(this.selectedAddressId) && this.loadingDistrictTimes);
+            },
+
+            normalizeDistrictMatchText(value) {
+                return String(value || '')
+                    .toLowerCase()
+                    .replace(/[أإآ]/g, 'ا')
+                    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+                    .replace(/حي|الرياض|السعودية|district|riyadh|saudi|arabia/g, '')
+                    .replace(/[^a-z\u0600-\u06ff0-9]+/g, '')
+                    .trim();
+            },
+
+            districtNameCandidates(row) {
+                const out = [];
+                const push = (value) => {
+                    if (value == null) {
+                        return;
+                    }
+                    if (typeof value === 'object') {
+                        Object.values(value).forEach(push);
+
+                        return;
+                    }
+                    const text = String(value).trim();
+                    if (text !== '') {
+                        out.push(text);
+                    }
+                };
+                ['name', 'district_identifier', 'identifier', 'slug', 'name_ar', 'name_en', 'title'].forEach((key) => push(row?.[key]));
+
+                return [...new Set(out)];
+            },
+
+            async ensureDistrictsCache() {
+                if (Array.isArray(this.districtsCache)) {
+                    return this.districtsCache;
+                }
+                try {
+                    const res = await fetch('{{ route('api.districts') }}');
+                    const data = await res.json().catch(() => ({}));
+                    this.districtsCache = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+                } catch (e) {
+                    this.districtsCache = [];
+                }
+
+                return this.districtsCache;
+            },
+
+            async resolveDistrictIdForAddress(addrOrDistrictId) {
+                if (typeof addrOrDistrictId === 'object' && addrOrDistrictId !== null) {
+                    const addr = addrOrDistrictId;
+                    const direct = addr.district?.id ?? addr.district_id;
+                    if (direct) {
+                        return String(direct);
+                    }
+                    const needle = this.normalizeDistrictMatchText(this.savedAddressDistrict(addr));
+                    if (! needle) {
+                        return '';
+                    }
+                    const districts = await this.ensureDistrictsCache();
+                    for (const row of districts) {
+                        const id = row?.id != null ? String(row.id) : '';
+                        if (! id) {
+                            continue;
+                        }
+                        for (const candidate of this.districtNameCandidates(row)) {
+                            const normalized = this.normalizeDistrictMatchText(candidate);
+                            if (! normalized) {
+                                continue;
+                            }
+                            if (normalized === needle || needle.includes(normalized) || normalized.includes(needle)) {
+                                return id;
+                            }
+                        }
+                    }
+
+                    return '';
+                }
+
+                return String(addrOrDistrictId || '').trim();
+            },
+
+            async fetchAddressDeliveryTimes(districtId, addressId = null, { updateSelection = false } = {}) {
+                const normalizedDistrictId = await this.resolveDistrictIdForAddress(
+                    typeof districtId === 'object' ? districtId : { district_id: districtId },
+                );
+                if (! normalizedDistrictId) {
+                    if (addressId) {
+                        this.addressDeliveryTimesById[String(addressId)] = [];
+                    }
+                    if (updateSelection) {
+                        this.districtDeliveryTimes = [];
+                        this.selectedRegionDurationId = '';
+                    }
+
+                    return [];
+                }
+
+                if (addressId) {
+                    this.addressTimesLoading[String(addressId)] = true;
+                }
+                const requestId = ++this._districtTimesRequestId;
+                if (updateSelection) {
+                    this.loadingDistrictTimes = true;
+                }
+
+                try {
+                    let url = '{{ route('checkout.district-durations') }}?district_id=' + encodeURIComponent(normalizedDistrictId);
+                    if (addressId) {
+                        url += '&address_id=' + encodeURIComponent(String(addressId));
+                    }
+                    const res = await fetch(url, {
+                        headers: { 'Accept': 'application/json' },
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    const durations = Array.isArray(data.durations) ? data.durations : [];
+                    if (addressId) {
+                        this.addressDeliveryTimesById[String(addressId)] = durations;
+                    }
+                    if (updateSelection && requestId === this._districtTimesRequestId) {
+                        this.districtDeliveryTimes = durations;
+                        if (this.districtDeliveryTimes.length === 1) {
+                            this.selectedRegionDurationId = String(this.districtDeliveryTimes[0].id);
+                        } else if (! this.districtDeliveryTimes.some((slot) => String(slot.id) === String(this.selectedRegionDurationId))) {
+                            this.selectedRegionDurationId = this.districtDeliveryTimes.length > 0
+                                ? String(this.districtDeliveryTimes[0].id)
+                                : '';
+                        }
+                    }
+
+                    return durations;
+                } catch (e) {
+                    if (addressId) {
+                        this.addressDeliveryTimesById[String(addressId)] = [];
+                    }
+                    if (updateSelection && requestId === this._districtTimesRequestId) {
+                        this.districtDeliveryTimes = [];
+                    }
+
+                    return [];
+                } finally {
+                    if (addressId) {
+                        delete this.addressTimesLoading[String(addressId)];
+                    }
+                    if (updateSelection && requestId === this._districtTimesRequestId) {
+                        this.loadingDistrictTimes = false;
+                    }
+                }
+            },
+
+            async loadDistrictDeliveryTimes(districtId, addressId = null) {
+                return this.fetchAddressDeliveryTimes(districtId, addressId, {
+                    updateSelection: ! addressId || String(addressId) === String(this.selectedAddressId),
+                });
+            },
+
+            async preloadSavedAddressDeliveryTimes() {
+                for (const addr of this.savedAddresses) {
+                    if (! addr?.id) {
+                        continue;
+                    }
+                    const inline = this.parseAddressDurations(addr);
+                    if (inline.length > 0) {
+                        this.addressDeliveryTimesById[String(addr.id)] = inline;
+                        continue;
+                    }
+                    if ((this.addressDeliveryTimesById[String(addr.id)] || []).length > 0) {
+                        continue;
+                    }
+                    await this.fetchAddressDeliveryTimes(addr, addr.id, { updateSelection: false });
+                }
             },
 
             deliveryTimeLabelForAddress(addr) {
@@ -2468,47 +2692,6 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     return;
                 }
                 this.selectedRegionDurationId = slots.length > 0 ? String(slots[0].id) : '';
-            },
-
-            async loadDistrictDeliveryTimes(districtId, addressId = null) {
-                const normalizedDistrictId = String(districtId || '').trim();
-                if (! normalizedDistrictId) {
-                    this.districtDeliveryTimes = [];
-                    this.selectedRegionDurationId = '';
-
-                    return;
-                }
-                const requestId = ++this._districtTimesRequestId;
-                this.loadingDistrictTimes = true;
-                try {
-                    let url = '{{ route('checkout.district-durations') }}?district_id=' + encodeURIComponent(normalizedDistrictId);
-                    if (addressId) {
-                        url += '&address_id=' + encodeURIComponent(String(addressId));
-                    }
-                    const res = await fetch(url, {
-                        headers: { 'Accept': 'application/json' },
-                    });
-                    const data = await res.json().catch(() => ({}));
-                    if (requestId !== this._districtTimesRequestId) {
-                        return;
-                    }
-                    this.districtDeliveryTimes = Array.isArray(data.durations) ? data.durations : [];
-                    if (this.districtDeliveryTimes.length === 1) {
-                        this.selectedRegionDurationId = String(this.districtDeliveryTimes[0].id);
-                    } else if (! this.districtDeliveryTimes.some((slot) => String(slot.id) === String(this.selectedRegionDurationId))) {
-                        this.selectedRegionDurationId = this.districtDeliveryTimes.length > 0
-                            ? String(this.districtDeliveryTimes[0].id)
-                            : '';
-                    }
-                } catch (e) {
-                    if (requestId === this._districtTimesRequestId) {
-                        this.districtDeliveryTimes = [];
-                    }
-                } finally {
-                    if (requestId === this._districtTimesRequestId) {
-                        this.loadingDistrictTimes = false;
-                    }
-                }
             },
 
             startEditingDeliveryTime(addr) {
@@ -2583,6 +2766,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
             applyCheckoutAddresses(addresses) {
                 this.savedAddresses = Array.isArray(addresses) ? addresses : [];
+                if (this.phoneVerified && this.deliveryType === 'home') {
+                    this.preloadSavedAddressDeliveryTimes();
+                }
             },
 
             startAddingAddress() {
@@ -2731,10 +2917,15 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 const inlineTimes = this.parseAddressDurations(addr);
                 if (inlineTimes.length > 0) {
                     this.districtDeliveryTimes = inlineTimes;
+                    this.addressDeliveryTimesById[String(addr.id)] = inlineTimes;
                     this.syncSelectedRegionDurationFromAddress(addr);
-                } else if (districtId) {
-                    this.inlineMapDistrictId = String(districtId);
-                    this.loadDistrictDeliveryTimes(districtId, addr.id).then(() => {
+                } else if (addr.id || districtId) {
+                    if (districtId) {
+                        this.inlineMapDistrictId = String(districtId);
+                    }
+                    this.fetchAddressDeliveryTimes(addr, addr.id, {
+                        updateSelection: true,
+                    }).then(() => {
                         this.syncSelectedRegionDurationFromAddress(addr);
                     });
                 } else {
@@ -2994,7 +3185,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 this.resetPaymentSession();
                 this.applySavedAddress(addr);
                 const districtId = addr.district?.id ?? addr.district_id;
-                await this.loadDistrictDeliveryTimes(districtId, addr.id);
+                await this.fetchAddressDeliveryTimes(addr.id ? addr : districtId, addr.id, { updateSelection: true });
                 this.syncSelectedRegionDurationFromAddress(addr);
                 this.editingDeliveryTimeAddressId = null;
                 const activated = await this.activateCheckoutAddress(addr.id, addr);

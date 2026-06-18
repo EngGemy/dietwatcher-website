@@ -256,7 +256,194 @@ final class AddressCheckoutHelper
     {
         $enriched = $allAddresses !== [] ? self::enrichAddressDistrictDurations($address, $allAddresses) : $address;
 
-        return self::firstRegionDurationId($enriched) > 0;
+        return self::resolveDeliveryTimeSlots($enriched) !== [];
+    }
+
+    /**
+     * Collect delivery time slots from every known address/days payload shape.
+     *
+     * @return array<int, array{id: int, duration: string, durationText: string, time: string, label: string}>
+     */
+    public static function resolveDeliveryTimeSlots(?array $address, ?array $daysData = null): array
+    {
+        if (is_array($address)) {
+            $fromDistrict = self::normalizeRegionDurations(self::districtDurations($address));
+            if ($fromDistrict !== []) {
+                return $fromDistrict;
+            }
+
+            foreach (['region_durations', 'regionDurations'] as $key) {
+                $raw = $address[$key] ?? null;
+                if (! is_array($raw) || $raw === []) {
+                    continue;
+                }
+                $list = array_is_list($raw) ? $raw : array_values(array_filter($raw, 'is_array'));
+                $normalized = self::normalizeRegionDurations($list);
+                if ($normalized !== []) {
+                    return $normalized;
+                }
+            }
+
+            foreach (['region_duration', 'regionDuration'] as $key) {
+                $nested = $address[$key] ?? null;
+                if (! is_array($nested)) {
+                    continue;
+                }
+                $normalized = self::normalizeRegionDurations([$nested]);
+                if ($normalized !== []) {
+                    return $normalized;
+                }
+            }
+
+            $regionId = (int) ($address['region_duration_id'] ?? $address['regionDurationId'] ?? 0);
+            if ($regionId > 0) {
+                return self::normalizeRegionDurations([['id' => $regionId]]);
+            }
+        }
+
+        return self::deliveryTimeSlotsFromDaysData($daysData);
+    }
+
+    /**
+     * @return array<int, array{id: int, duration: string, durationText: string, time: string, label: string}>
+     */
+    public static function deliveryTimeSlotsFromDaysData(?array $daysData): array
+    {
+        if (! is_array($daysData)) {
+            return [];
+        }
+
+        $districtRaw = data_get($daysData, 'district.durations');
+        if (is_array($districtRaw) && $districtRaw !== []) {
+            $list = array_is_list($districtRaw) ? $districtRaw : array_values(array_filter($districtRaw, 'is_array'));
+            $normalized = self::normalizeRegionDurations($list);
+            if ($normalized !== []) {
+                return $normalized;
+            }
+        }
+
+        foreach (['region_durations', 'regionDurations'] as $key) {
+            $raw = data_get($daysData, $key);
+            if (! is_array($raw) || $raw === []) {
+                continue;
+            }
+            $list = array_is_list($raw) ? $raw : array_values(array_filter($raw, 'is_array'));
+            $normalized = self::normalizeRegionDurations($list);
+            if ($normalized !== []) {
+                return $normalized;
+            }
+        }
+
+        foreach (['region_duration', 'regionDuration'] as $key) {
+            $nested = data_get($daysData, $key);
+            if (! is_array($nested)) {
+                continue;
+            }
+            $normalized = self::normalizeRegionDurations([$nested]);
+            if ($normalized !== []) {
+                return $normalized;
+            }
+        }
+
+        $regionId = (int) data_get($daysData, 'region_duration_id', data_get($daysData, 'regionDurationId', 0));
+        if ($regionId > 0) {
+            return self::normalizeRegionDurations([['id' => $regionId]]);
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $districtRows
+     */
+    public static function resolveDistrictId(?array $address, array $districtRows = []): int
+    {
+        $id = self::districtId($address);
+        if ($id > 0) {
+            return $id;
+        }
+
+        if (! is_array($address) || $districtRows === []) {
+            return 0;
+        }
+
+        $needle = self::normalizeDistrictMatchText(self::districtDisplayName($address));
+        if ($needle === '') {
+            return 0;
+        }
+
+        foreach ($districtRows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $candidateId = (int) ($row['id'] ?? 0);
+            if ($candidateId <= 0) {
+                continue;
+            }
+            foreach (self::districtNameCandidates($row) as $candidate) {
+                $normalized = self::normalizeDistrictMatchText($candidate);
+                if ($normalized !== '' && ($normalized === $needle || str_contains($needle, $normalized) || str_contains($normalized, $needle))) {
+                    return $candidateId;
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $address
+     */
+    public static function districtDisplayName(array $address): string
+    {
+        $district = $address['district'] ?? null;
+        if (is_array($district)) {
+            $name = $district['name'] ?? '';
+            if (is_array($name)) {
+                return (string) ($name[app()->getLocale()] ?? $name['ar'] ?? $name['en'] ?? '');
+            }
+
+            return (string) $name;
+        }
+
+        return (string) ($address['district_name'] ?? '');
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<int, string>
+     */
+    public static function districtNameCandidates(array $row): array
+    {
+        $out = [];
+        foreach (['name', 'district_identifier', 'identifier', 'slug', 'name_ar', 'name_en', 'title'] as $key) {
+            $value = $row[$key] ?? null;
+            if (is_array($value)) {
+                foreach ($value as $part) {
+                    if (is_string($part) && trim($part) !== '') {
+                        $out[] = trim($part);
+                    }
+                }
+
+                continue;
+            }
+            if (is_string($value) && trim($value) !== '') {
+                $out[] = trim($value);
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    public static function normalizeDistrictMatchText(string $value): string
+    {
+        $value = mb_strtolower(trim($value));
+        $value = str_replace(['أ', 'إ', 'آ'], 'ا', $value);
+        $value = preg_replace('/[\x{064B}-\x{065F}\x{0670}\x{0640}]/u', '', $value) ?? $value;
+        $value = str_replace(['حي', 'الرياض', 'السعودية', 'district', 'riyadh', 'saudi', 'arabia'], '', $value);
+        $value = preg_replace('/[^a-z\x{0600}-\x{06ff}0-9]+/u', '', $value) ?? $value;
+
+        return trim($value);
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Support\AddressCheckoutHelper;
 use App\Support\SaudiPhone;
 use App\Support\SubscriptionCheckoutPayload;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -515,27 +516,83 @@ class ApiAuthService
             $rows = [];
         }
 
+        $districtRows = $this->getDistricts();
+        if (! is_array($districtRows)) {
+            $districtRows = [];
+        }
+
         foreach ($rows as $row) {
             if (! is_array($row)) {
                 continue;
             }
-            if (AddressCheckoutHelper::districtId($row) !== $districtId) {
+            $rowDistrictId = AddressCheckoutHelper::resolveDistrictId($row, $districtRows);
+            if ($rowDistrictId !== $districtId) {
                 continue;
             }
             $enriched = AddressCheckoutHelper::enrichAddressDistrictDurations($row, $rows);
-            $durations = AddressCheckoutHelper::districtDurations($enriched);
-            if ($durations !== []) {
-                return AddressCheckoutHelper::normalizeRegionDurations($durations);
+            $slots = AddressCheckoutHelper::resolveDeliveryTimeSlots($enriched);
+            if ($slots !== []) {
+                return $slots;
             }
         }
 
-        if ($probeAddressId !== null && $probeAddressId > 0) {
-            $address = $this->loadAddressForSubscription($token, $probeAddressId);
-            if (is_array($address) && AddressCheckoutHelper::districtId($address) === $districtId) {
-                $durations = AddressCheckoutHelper::districtDurations($address);
-                if ($durations !== []) {
-                    return AddressCheckoutHelper::normalizeRegionDurations($durations);
+        if ($probeAddressId === null || $probeAddressId <= 0) {
+            return [];
+        }
+
+        $address = AddressCheckoutHelper::findById($rows, $probeAddressId);
+        if (! is_array($address)) {
+            $address = $this->findAddressById($token, $probeAddressId, false);
+        }
+        if (! is_array($address)) {
+            return [];
+        }
+
+        $address = AddressCheckoutHelper::enrichAddressDistrictDurations($address, $rows);
+        $resolvedDistrictId = AddressCheckoutHelper::resolveDistrictId($address, $districtRows);
+        if ($resolvedDistrictId > 0) {
+            $districtId = $resolvedDistrictId;
+        }
+
+        $slots = AddressCheckoutHelper::resolveDeliveryTimeSlots($address);
+        if ($slots !== []) {
+            return $slots;
+        }
+
+        $daysResult = $this->getAddressDeliveryDays($token, $probeAddressId);
+        $daysData = is_array($daysResult['data'] ?? null) ? $daysResult['data'] : null;
+        $slots = AddressCheckoutHelper::resolveDeliveryTimeSlots($address, $daysData);
+        if ($slots !== []) {
+            return $slots;
+        }
+
+        if (! AddressCheckoutHelper::isCantModify($address)) {
+            $refreshed = $this->refreshAddressCard($token, $probeAddressId, $address);
+            if (is_array($refreshed)) {
+                $refreshed = AddressCheckoutHelper::enrichAddressDistrictDurations($refreshed, $rows);
+                $slots = AddressCheckoutHelper::resolveDeliveryTimeSlots($refreshed);
+                if ($slots !== []) {
+                    return $slots;
                 }
+            }
+        }
+
+        foreach ($rows as $peer) {
+            if (! is_array($peer)) {
+                continue;
+            }
+            if (AddressCheckoutHelper::resolveDistrictId($peer, $districtRows) !== $districtId) {
+                continue;
+            }
+            $peerId = (int) ($peer['id'] ?? 0);
+            if ($peerId <= 0 || $peerId === $probeAddressId) {
+                continue;
+            }
+            $peerDays = $this->getAddressDeliveryDays($token, $peerId);
+            $peerData = is_array($peerDays['data'] ?? null) ? $peerDays['data'] : null;
+            $slots = AddressCheckoutHelper::resolveDeliveryTimeSlots($peer, $peerData);
+            if ($slots !== []) {
+                return $slots;
             }
         }
 
@@ -560,15 +617,25 @@ class ApiAuthService
         }
 
         $address = AddressCheckoutHelper::enrichAddressDistrictDurations($address, $rows);
-        if (AddressCheckoutHelper::firstRegionDurationId($address) > 0) {
+        $slots = AddressCheckoutHelper::resolveDeliveryTimeSlots($address);
+        if ($slots !== []) {
             return $address;
         }
 
-        $refreshed = $this->refreshAddressCard($token, $addressId, $address);
-        if (is_array($refreshed)) {
-            $address = AddressCheckoutHelper::enrichAddressDistrictDurations($refreshed, $rows);
-            if (AddressCheckoutHelper::firstRegionDurationId($address) > 0) {
-                return $address;
+        $daysResult = $this->getAddressDeliveryDays($token, $addressId);
+        $daysData = is_array($daysResult['data'] ?? null) ? $daysResult['data'] : null;
+        $slots = AddressCheckoutHelper::resolveDeliveryTimeSlots($address, $daysData);
+        if ($slots !== []) {
+            return $address;
+        }
+
+        if (! AddressCheckoutHelper::isCantModify($address)) {
+            $refreshed = $this->refreshAddressCard($token, $addressId, $address);
+            if (is_array($refreshed)) {
+                $address = AddressCheckoutHelper::enrichAddressDistrictDurations($refreshed, $rows);
+                if (AddressCheckoutHelper::resolveDeliveryTimeSlots($address) !== []) {
+                    return $address;
+                }
             }
         }
 
@@ -672,7 +739,7 @@ class ApiAuthService
     /**
      * @return array<string, mixed>
      */
-    private function normalizeAddressMutationResponse(\Illuminate\Http\Client\Response $response): array
+    private function normalizeAddressMutationResponse(Response $response): array
     {
         $json = $response->json() ?? [];
         if (! is_array($json)) {

@@ -875,7 +875,7 @@ class AccountApiService
         $requestOverride = (int) ($payload['region_duration_id'] ?? 0);
         $regionOverride = $requestOverride > 0 ? $requestOverride : $sessionOverride;
         if ($regionOverride > 0) {
-            $slots = AddressCheckoutHelper::normalizeRegionDurations(AddressCheckoutHelper::districtDurations($address));
+            $slots = AddressCheckoutHelper::resolveDeliveryTimeSlots($address);
             if ($slots === []) {
                 $slots = app(ApiAuthService::class)->findDistrictRegionDurations(
                     $token,

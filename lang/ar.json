@@ -774,6 +774,7 @@
     "checkout.select_delivery_time": "اختر وقت التوصيل",
     "checkout.edit_delivery_time": "تعديل الوقت",
     "checkout.no_delivery_time_slots": "لا توجد أوقات توصيل متاحة لهذه المنطقة حالياً.",
+    "checkout.loading_delivery_times": "جاري تحميل أوقات التوصيل...",
     "checkout.duration_swipe_hint": "اسحب لاستعراض المدد",
     "checkout.saved_addresses_title": "عناوينك المحفوظة",
     "checkout.saved_addresses_hint": "اضغط على عنوان لملء التوصيل لهذا الطلب، أو حدد موقعاً جديداً على الخريطة أدناه.",
