@@ -372,13 +372,13 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                                         <span class="checkout-addr-card__time-value" x-text="deliveryTimeLabelForAddress(addr)"></span>
                                                         <button type="button"
                                                                 class="checkout-addr-card__time-edit"
-                                                                x-show="String(addr.id) !== String(editingDeliveryTimeAddressId)"
+                                                                x-show="String(addr.id) !== String(editingDeliveryTimeAddressId) && !addressCantModify(addr)"
                                                                 @click.stop="startEditingDeliveryTime(addr)">
                                                             {{ __('checkout.edit_delivery_time') }}
                                                         </button>
                                                     </div>
                                                     <div class="checkout-addr-card__time-picker"
-                                                         x-show="String(addr.id) === String(editingDeliveryTimeAddressId) || String(addr.id) === String(selectedAddressId)"
+                                                         x-show="!addressCantModify(addr) && (String(addr.id) === String(editingDeliveryTimeAddressId) || String(addr.id) === String(selectedAddressId))"
                                                          x-cloak
                                                          @click.stop>
                                                         <select class="form-control form-control--sm w-full text-xs"
@@ -394,9 +394,13 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                                 <p x-show="addressDeliveryTimes(addr).length === 0 && String(addr.id) === String(selectedAddressId)" x-cloak class="checkout-addr-card__warn">
                                                     {{ __('checkout.no_delivery_time_slots') }}
                                                 </p>
+                                                <p x-show="addressCantModify(addr)" x-cloak class="checkout-addr-card__locked text-xs text-amber-700 mt-1">
+                                                    {{ __('address.cant_modify_hint') }}
+                                                </p>
                                             </div>
                                             <button type="button"
                                                     class="checkout-addr-card__delete"
+                                                    x-show="!addressCantModify(addr)"
                                                     :disabled="deletingAddressId === String(addr.id)"
                                                     :aria-label="@json(__('Delete'))"
                                                     @click.stop="deleteSavedAddress(addr)">
@@ -418,12 +422,6 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                             <input type="hidden" name="branch_id" :value="selectedBranchId" :disabled="deliveryType === 'home'" />
 
                             <p x-show="branchesLoading" class="text-sm text-gray-500">{{ __('Loading branches...') }}</p>
-
-                            <div x-show="!branchesLoading && pickupPhase === 'cta'" x-transition>
-                                <button type="button" class="btn btn--primary btn--md w-full py-4 text-base font-semibold" @click="openBranchPicker()">
-                                    {{ __('Choose Branch') }}
-                                </button>
-                            </div>
 
                             <div x-show="!branchesLoading && pickupPhase === 'list'" x-cloak x-transition class="space-y-3">
                                 <input type="search" class="form-control w-full" x-model="branchSearch"
@@ -1831,7 +1829,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             selectedBranchId: @json(old('branch_id', '')),
             branches: [],
             branchesLoading: true,
-            pickupPhase: @json(old('branch_id') && old('delivery_type') === 'pickup' ? 'done' : 'cta'),
+            pickupPhase: @json(old('branch_id') && old('delivery_type') === 'pickup' ? 'done' : 'list'),
             branchSearch: '',
 
             // Duration multiplier map from backend
@@ -2514,7 +2512,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             },
 
             startEditingDeliveryTime(addr) {
-                if (! addr || ! addr.id) {
+                if (! addr || ! addr.id || this.addressCantModify(addr)) {
                     return;
                 }
                 this.editingDeliveryTimeAddressId = String(addr.id);
@@ -3013,6 +3011,16 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     return;
                 }
 
+                if (this.addressCantModify(addr)) {
+                    const lockedMsg = @json(__('address.cant_modify'));
+                    this.syncAddressError = lockedMsg;
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({ icon: 'info', title: lockedMsg, confirmButtonText: 'OK' });
+                    }
+
+                    return;
+                }
+
                 const confirmResult = typeof Swal !== 'undefined'
                     ? await Swal.fire({
                         title: @json(__('checkout.delete_saved_address_confirm')),
@@ -3168,8 +3176,21 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 if (this.selectedBranchId) {
                     this.pickupPhase = 'done';
                 } else {
-                    this.pickupPhase = 'cta';
+                    this.pickupPhase = 'list';
                 }
+            },
+
+            addressCantModify(addr) {
+                if (! addr) {
+                    return false;
+                }
+
+                return addr.cant_modify === true
+                    || addr.cant_modify === 1
+                    || addr.cant_modify === '1'
+                    || addr.cantModify === true
+                    || addr.cantModify === 1
+                    || addr.cantModify === '1';
             },
 
             selectedDurationValue() {

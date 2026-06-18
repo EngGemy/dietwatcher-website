@@ -7,12 +7,7 @@
 
 <article class="bpost-card">
     <a href="{{ $href }}" class="bpost-card__img-wrap" aria-label="{{ $post->title }}">
-        <img
-            src="{{ $post->cover_image_url }}"
-            alt="{{ $post->title }}"
-            class="bpost-card__img"
-            loading="lazy"
-        />
+        <img src="{{ $post->cover_image_url }}" alt="{{ $post->title }}" class="bpost-card__img" loading="lazy" />
         @if($post->category)
             <span class="bpost-card__badge">{{ $post->category->name }}</span>
         @endif
@@ -20,6 +15,14 @@
 
     <div class="bpost-card__body">
         <div class="bpost-card__meta">
+            @if($post->published_at)
+                <span class="bpost-card__meta-item">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25"/>
+                    </svg>
+                    <time datetime="{{ $post->published_at?->toIso8601String() }}">{{ $post->formatted_date }}</time>
+                </span>
+            @endif
             @if($post->reading_time_minutes)
                 <span class="bpost-card__meta-item">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
@@ -28,32 +31,22 @@
                     {{ $post->reading_time_minutes }} {{ __('min read') }}
                 </span>
             @endif
-            @if($post->published_at)
-                <span class="bpost-card__meta-item">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5a2.25 2.25 0 0 0 2.25-2.25m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5a2.25 2.25 0 0 1 2.25 2.25v7.5"/>
-                    </svg>
-                    <time datetime="{{ $post->published_at?->toIso8601String() }}">{{ $post->formatted_date }}</time>
-                </span>
-            @endif
         </div>
 
-        <h2 class="bpost-card__title">
-            <a href="{{ $href }}">{{ $post->title }}</a>
-        </h2>
+        <h2 class="bpost-card__title"><a href="{{ $href }}">{{ $post->title }}</a></h2>
 
-        @if($post->excerpt)
-            <p class="bpost-card__excerpt">{{ Str::limit(strip_tags($post->excerpt), 160) }}</p>
-        @endif
+        <p class="bpost-card__excerpt">
+            {{ Str::limit(strip_tags($post->excerpt ?: $post->content), 150) }}
+        </p>
 
         <div class="bpost-card__footer">
             <a href="{{ $href }}" class="bpost-card__read-more">
+                {{ __('Read More') }}
                 <svg class="bpost-card__read-more-icon rtl:rotate-180" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"/>
                 </svg>
-                {{ __('Read More') }}
             </a>
-            <span class="bpost-card__author">{{ __('By') }} {{ $authorName }}</span>
+            <span class="bpost-card__author">{{ __('By') }} {{ Str::limit($authorName, 24) }}</span>
         </div>
     </div>
 </article>

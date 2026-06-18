@@ -57,6 +57,7 @@ class Addresses extends Component
             if (! is_array($row)) {
                 continue;
             }
+            $this->addresses[$index]['cant_modify'] = AddressCheckoutHelper::isCantModify($row);
             $addressId = (int) ($row['id'] ?? 0);
             if ($addressId <= 0) {
                 continue;
@@ -76,17 +77,23 @@ class Addresses extends Component
             return;
         }
 
-        $this->editingAddressId = $addressId;
-        $this->selectedDays = [];
-        $this->deliveryTimeSlots = [];
-        $this->deliveryTimeLabel = '';
-
         $addr = collect($this->addresses)->firstWhere('id', $addressId)
             ?? collect($this->addresses)->firstWhere(fn ($a) => (int) ($a['id'] ?? 0) === $addressId);
 
         if (! is_array($addr)) {
             $addr = $auth->findAddressById($token, $addressId, false);
         }
+
+        if (is_array($addr) && AddressCheckoutHelper::isCantModify($addr)) {
+            $this->error = __('address.cant_modify');
+
+            return;
+        }
+
+        $this->editingAddressId = $addressId;
+        $this->selectedDays = [];
+        $this->deliveryTimeSlots = [];
+        $this->deliveryTimeLabel = '';
 
         $this->selectedDays = $auth->resolveAddressDeliveryDaysForDisplay(
             $token,
@@ -176,6 +183,17 @@ class Addresses extends Component
             return;
         }
 
+        $addr = collect($this->addresses)->firstWhere('id', $addressId)
+            ?? collect($this->addresses)->firstWhere(fn ($a) => (int) ($a['id'] ?? 0) === $addressId);
+        if (! is_array($addr)) {
+            $addr = $auth->findAddressById($token, $addressId, false);
+        }
+        if (is_array($addr) && AddressCheckoutHelper::isCantModify($addr)) {
+            $this->error = __('address.cant_modify');
+
+            return;
+        }
+
         $result = $auth->updateAddressDeliveryDays($token, $addressId, $days);
         if (! ($result['_http_ok'] ?? false) && ! ($result['success'] ?? false)) {
             $this->error = (string) ($result['message'] ?? __('account.save_failed'));
@@ -193,6 +211,17 @@ class Addresses extends Component
         $this->error = $this->notice = '';
         $token = (string) session('external_api_token', '');
         if ($token === '' || $addressId <= 0) {
+            return;
+        }
+
+        $addr = collect($this->addresses)->firstWhere('id', $addressId)
+            ?? collect($this->addresses)->firstWhere(fn ($a) => (int) ($a['id'] ?? 0) === $addressId);
+        if (! is_array($addr)) {
+            $addr = $auth->findAddressById($token, $addressId, false);
+        }
+        if (is_array($addr) && AddressCheckoutHelper::isCantModify($addr)) {
+            $this->error = __('address.cant_modify');
+
             return;
         }
 

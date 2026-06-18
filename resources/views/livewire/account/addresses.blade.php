@@ -63,6 +63,7 @@
                         $district = $district[app()->getLocale()] ?? $district['en'] ?? '';
                     }
                     $isActive = \App\Services\ApiAuthService::isAddressRowActive($addr);
+                    $cantModify = \App\Support\AddressCheckoutHelper::isCantModify($addr);
                     $days = is_array($addr['days'] ?? null) ? $addr['days'] : [];
                     $deliveryTimeLabel = trim((string) ($addr['delivery_time_label'] ?? ''));
                 @endphp
@@ -77,6 +78,9 @@
                                 <span class="acc-chip {{ $isActive ? 'acc-chip--success' : 'acc-chip--warn' }}">
                                     {{ $isActive ? __('account.active') : __('account.inactive') }}
                                 </span>
+                                @if($cantModify)
+                                    <span class="acc-chip acc-chip--warn" title="{{ __('address.cant_modify_hint') }}">{{ __('address.in_use') }}</span>
+                                @endif
                             </div>
                             @if($desc)
                                 <p class="text-sm text-gray-600 mt-1.5 leading-relaxed">{{ $desc }}</p>
@@ -109,15 +113,19 @@
                         </div>
 
                         <div class="flex items-center gap-2 shrink-0 lg:flex-col lg:items-stretch">
-                            <button type="button" class="acc-btn acc-btn--ghost acc-btn--sm" wire:click="openDeliveryDays({{ $addrId }})">
-                                {{ __('account.edit_delivery_days') }}
-                            </button>
-                            <button type="button"
-                                    class="acc-btn acc-btn--danger acc-btn--sm"
-                                    wire:click="deleteAddress({{ $addrId }})"
-                                    wire:confirm="{{ __('account.confirm_delete_address') }}">
-                                {{ __('account.delete') }}
-                            </button>
+                            @if($cantModify)
+                                <p class="text-xs text-amber-700 max-w-[12rem]">{{ __('address.cant_modify_hint') }}</p>
+                            @else
+                                <button type="button" class="acc-btn acc-btn--ghost acc-btn--sm" wire:click="openDeliveryDays({{ $addrId }})">
+                                    {{ __('account.edit_delivery_days') }}
+                                </button>
+                                <button type="button"
+                                        class="acc-btn acc-btn--danger acc-btn--sm"
+                                        wire:click="deleteAddress({{ $addrId }})"
+                                        wire:confirm="{{ __('account.confirm_delete_address') }}">
+                                    {{ __('account.delete') }}
+                                </button>
+                            @endif
                         </div>
                     </div>
                 </div>

@@ -260,6 +260,17 @@ final class AddressCheckoutHelper
     }
 
     /**
+     * @param  array<string, mixed>  $address
+     */
+    public static function isCantModify(array $address): bool
+    {
+        return filter_var(
+            $address['cant_modify'] ?? $address['cantModify'] ?? false,
+            FILTER_VALIDATE_BOOLEAN
+        );
+    }
+
+    /**
      * @param  array<int, array<string, mixed>>  $rows
      * @return array<int, array<string, mixed>>
      */
@@ -267,6 +278,7 @@ final class AddressCheckoutHelper
     {
         return array_values(array_map(static function (array $row) use ($rows): array {
             $row['is_deliverable'] = self::isDeliverableForSubscription($row, $rows);
+            $row['cant_modify'] = self::isCantModify($row);
 
             return $row;
         }, array_filter($rows, 'is_array')));

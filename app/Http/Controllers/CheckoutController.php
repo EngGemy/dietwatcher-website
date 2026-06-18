@@ -1499,6 +1499,13 @@ class CheckoutController extends Controller
             ], 422);
         }
 
+        if (AddressCheckoutHelper::isCantModify($address)) {
+            return response()->json([
+                'success' => false,
+                'message' => __('address.cant_modify'),
+            ], 422);
+        }
+
         $result = $auth->deleteAddress($token, $addressId);
         if (! filter_var($result['success'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             return response()->json([
