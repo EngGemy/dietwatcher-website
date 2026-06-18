@@ -186,31 +186,50 @@ $defaultCalorieRow = collect($calorieOptions)->firstWhere('is_default', true) ??
 $firstMacros = is_array($defaultCalorieRow) ? ($defaultCalorieRow['macros'] ?? null) : null;
 if ($nutritionFromPlan) {
     $nutrition = $nutritionFromPlan;
-} elseif ($firstMacros) {
-    $totalMacros = ($firstMacros['protein'] ?? 0) + ($firstMacros['carbs'] ?? 0) + ($firstMacros['fats'] ?? $firstMacros['fat'] ?? 0);
-    $nutrition = [
-        'carbs' => [
-            'amount' => ($firstMacros['carbs'] ?? 0) . 'g',
-            'percent' => $totalMacros > 0 ? round(($firstMacros['carbs'] ?? 0) / $totalMacros * 100) : 33,
-            'color' => 'bg-green',
-        ],
-        'protein' => [
-            'amount' => ($firstMacros['protein'] ?? 0) . 'g',
-            'percent' => $totalMacros > 0 ? round(($firstMacros['protein'] ?? 0) / $totalMacros * 100) : 33,
-            'color' => 'bg-yellow',
-        ],
-        'fat' => [
-            'amount' => ($firstMacros['fats'] ?? $firstMacros['fat'] ?? 0) . 'g',
-            'percent' => $totalMacros > 0 ? round(($firstMacros['fats'] ?? $firstMacros['fat'] ?? 0) / $totalMacros * 100) : 33,
-            'color' => 'bg-red',
-        ],
-    ];
-} else {
-    $nutrition = $plan->nutrition ?? [
-        'carbs' => ['amount' => '—', 'percent' => 33, 'color' => 'bg-green'],
-        'protein' => ['amount' => '—', 'percent' => 33, 'color' => 'bg-yellow'],
-        'fat' => ['amount' => '—', 'percent' => 33, 'color' => 'bg-red'],
-    ];
+} elseif (is_array($firstMacros)) {
+    $nutrition = $buildNutritionFromMacros($firstMacros);
+}
+
+if (! isset($nutrition) || ! is_array($nutrition)) {
+    $legacyProtein = 0.0;
+    $legacyCarbs = 0.0;
+    $legacyFat = 0.0;
+
+    if (is_array($firstMacros)) {
+        $legacyProtein = is_numeric($firstMacros['protein'] ?? null) ? (float) $firstMacros['protein'] : 0.0;
+        $legacyCarbs = is_numeric($firstMacros['carbs'] ?? null) ? (float) $firstMacros['carbs'] : 0.0;
+        $legacyFat = is_numeric($firstMacros['fats'] ?? $firstMacros['fat'] ?? null)
+            ? (float) ($firstMacros['fats'] ?? $firstMacros['fat'])
+            : 0.0;
+    }
+
+    $totalMacros = $legacyProtein + $legacyCarbs + $legacyFat;
+
+    if ($totalMacros > 0) {
+        $nutrition = [
+            'carbs' => [
+                'amount' => $legacyCarbs.'g',
+                'percent' => (int) round(($legacyCarbs / $totalMacros) * 100),
+                'color' => 'bg-green',
+            ],
+            'protein' => [
+                'amount' => $legacyProtein.'g',
+                'percent' => (int) round(($legacyProtein / $totalMacros) * 100),
+                'color' => 'bg-yellow',
+            ],
+            'fat' => [
+                'amount' => $legacyFat.'g',
+                'percent' => (int) round(($legacyFat / $totalMacros) * 100),
+                'color' => 'bg-red',
+            ],
+        ];
+    } else {
+        $nutrition = $plan->nutrition ?? [
+            'carbs' => ['amount' => '—', 'percent' => 33, 'color' => 'bg-green'],
+            'protein' => ['amount' => '—', 'percent' => 33, 'color' => 'bg-yellow'],
+            'fat' => ['amount' => '—', 'percent' => 33, 'color' => 'bg-red'],
+        ];
+    }
 }
 
 // If calorie-row macros are missing, fallback to profile-level macros.
