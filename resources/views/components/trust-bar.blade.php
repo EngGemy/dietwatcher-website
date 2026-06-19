@@ -38,20 +38,75 @@
         .hero-trust {
             position: relative;
             z-index: 25;
-            margin-top: clamp(1.5rem, 3vw, 2.5rem);
+            margin-top: clamp(1.25rem, 3vw, 2.25rem);
             width: 100%;
-            border-top: 1px solid rgba(15, 23, 42, .08);
             border-radius: 0 0 0.375rem 0.375rem;
             overflow: hidden;
+            isolation: isolate;
+            background:
+                linear-gradient(180deg, rgba(15, 23, 42, .04) 0%, rgba(15, 23, 42, .72) 100%),
+                linear-gradient(135deg, rgba(39, 159, 249, .08) 0%, rgba(63, 181, 54, .06) 100%);
+            backdrop-filter: blur(14px) saturate(1.2);
+            -webkit-backdrop-filter: blur(14px) saturate(1.2);
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, .22),
+                0 -12px 40px rgba(15, 23, 42, .08);
+        }
+        .hero-trust::before {
+            content: '';
+            position: absolute;
+            inset-inline: 0;
+            top: 0;
+            height: 2px;
             background: linear-gradient(
-                180deg,
-                rgba(255, 255, 255, .62) 0%,
-                rgba(255, 255, 255, .78) 100%
+                90deg,
+                transparent 0%,
+                var(--color-blue, #279ff9) 20%,
+                var(--color-green, #3fb536) 50%,
+                var(--color-blue, #279ff9) 80%,
+                transparent 100%
             );
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
+            background-size: 200% 100%;
+            animation: heroTrustBeam 4.5s ease-in-out infinite;
+            z-index: 2;
+        }
+        .hero-trust::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: .035;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(255, 255, 255, .35) 2px,
+                rgba(255, 255, 255, .35) 3px
+            );
+            mix-blend-mode: overlay;
+            z-index: 1;
+        }
+        .hero-trust__sweep {
+            position: absolute;
+            inset-block: 0;
+            width: 40%;
+            background: linear-gradient(
+                105deg,
+                transparent 30%,
+                rgba(255, 255, 255, .12) 50%,
+                transparent 70%
+            );
+            transform: translateX(-120%);
+            animation: heroTrustSweep 7s ease-in-out 1.5s infinite;
+            pointer-events: none;
+            z-index: 1;
+        }
+        [dir="rtl"] .hero-trust__sweep {
+            animation-name: heroTrustSweepRtl;
         }
         .hero-trust__list {
+            position: relative;
+            z-index: 3;
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             list-style: none;
@@ -67,25 +122,33 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: .65rem;
-            min-height: 4.25rem;
-            padding: .85rem 1rem;
+            gap: .7rem;
+            min-height: 4.35rem;
+            padding: .9rem 1rem;
             text-decoration: none;
             color: inherit;
-            border-bottom: 1px solid rgba(15, 23, 42, .06);
-            transition: background .2s ease;
+            border-bottom: 1px solid rgba(255, 255, 255, .08);
+            opacity: 0;
+            transform: translateY(14px);
+            filter: blur(4px);
+            animation: heroTrustItemIn .85s cubic-bezier(.16, 1, .3, 1) forwards;
+            transition: background .25s ease, transform .25s ease;
         }
+        .hero-trust__item:nth-child(1) { animation-delay: 1.05s; }
+        .hero-trust__item:nth-child(2) { animation-delay: 1.18s; }
+        .hero-trust__item:nth-child(3) { animation-delay: 1.31s; }
+        .hero-trust__item:nth-child(4) { animation-delay: 1.44s; }
         @media (min-width: 768px) {
             .hero-trust__item {
-                min-height: 4.5rem;
+                min-height: 4.65rem;
                 border-bottom: none;
             }
             .hero-trust__item:not(:last-child) {
-                border-inline-end: 1px solid rgba(15, 23, 42, .08);
+                border-inline-end: 1px solid rgba(255, 255, 255, .1);
             }
         }
         .hero-trust__item:nth-child(odd) {
-            border-inline-end: 1px solid rgba(15, 23, 42, .06);
+            border-inline-end: 1px solid rgba(255, 255, 255, .08);
         }
         @media (min-width: 768px) {
             .hero-trust__item:nth-child(odd) {
@@ -98,33 +161,41 @@
             }
         }
         a.hero-trust__item:hover {
-            background: rgba(39, 159, 249, .05);
-        }
-        a.hero-trust__item--green:hover {
-            background: rgba(63, 181, 54, .06);
+            background: rgba(255, 255, 255, .06);
+            transform: translateY(-2px);
         }
         .hero-trust__icon {
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
-            width: 2.15rem;
-            height: 2.15rem;
+            width: 2.35rem;
+            height: 2.35rem;
             border-radius: 999px;
-            background: #fff;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, .06);
+            background: rgba(255, 255, 255, .94);
+            transition: transform .3s cubic-bezier(.16, 1, .3, 1), box-shadow .3s ease;
         }
         .hero-trust__icon svg {
-            width: 1.05rem;
-            height: 1.05rem;
+            width: 1.08rem;
+            height: 1.08rem;
+            position: relative;
+            z-index: 1;
         }
         .hero-trust__icon--blue {
             color: var(--color-blue, #279ff9);
-            box-shadow: 0 0 0 1px rgba(39, 159, 249, .14);
+            box-shadow:
+                0 0 0 1px rgba(39, 159, 249, .25),
+                0 0 18px rgba(39, 159, 249, .25);
         }
         .hero-trust__icon--green {
             color: var(--color-green, #3fb536);
-            box-shadow: 0 0 0 1px rgba(63, 181, 54, .16);
+            box-shadow:
+                0 0 0 1px rgba(63, 181, 54, .28),
+                0 0 18px rgba(63, 181, 54, .22);
+        }
+        .hero-trust__item:hover .hero-trust__icon {
+            transform: scale(1.08);
         }
         .hero-trust__copy {
             min-width: 0;
@@ -132,37 +203,78 @@
         }
         .hero-trust__headline {
             display: block;
-            font-size: .82rem;
+            font-size: .84rem;
             font-weight: 800;
             line-height: 1.25;
-            color: #0f172a;
+            color: #fff;
             letter-spacing: -.01em;
+            text-shadow: 0 1px 12px rgba(0, 0, 0, .25);
+        }
+        .hero-trust__headline--glow {
+            background: linear-gradient(90deg, #fff 0%, #bae6fd 45%, #bbf7d0 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
         .hero-trust__label {
             display: block;
-            margin-top: .12rem;
+            margin-top: .14rem;
             font-size: .68rem;
             font-weight: 500;
-            line-height: 1.3;
-            color: rgba(15, 23, 42, .58);
+            line-height: 1.35;
+            color: rgba(255, 255, 255, .72);
         }
         @media (min-width: 1024px) {
-            .hero-trust__headline { font-size: .88rem; }
+            .hero-trust__headline { font-size: .9rem; }
             .hero-trust__label { font-size: .72rem; }
+        }
+        @keyframes heroTrustBeam {
+            0%, 100% { background-position: 100% 0; opacity: .65; }
+            50% { background-position: 0% 0; opacity: 1; }
+        }
+        @keyframes heroTrustSweep {
+            0%, 72%, 100% { transform: translateX(-120%); opacity: 0; }
+            8% { opacity: 1; }
+            36% { transform: translateX(280%); opacity: 1; }
+            44% { opacity: 0; }
+        }
+        @keyframes heroTrustSweepRtl {
+            0%, 72%, 100% { transform: translateX(120%); opacity: 0; }
+            8% { opacity: 1; }
+            36% { transform: translateX(-280%); opacity: 1; }
+            44% { opacity: 0; }
+        }
+        @keyframes heroTrustItemIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+                filter: blur(0);
+            }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .hero-trust::before,
+            .hero-trust__sweep { animation: none; }
+            .hero-trust__item {
+                opacity: 1;
+                transform: none;
+                filter: none;
+                animation: none;
+            }
         }
     </style>
 @endonce
 
 <div class="hero-trust" aria-label="{{ __('home.trust.aria') }}">
+    <span class="hero-trust__sweep" aria-hidden="true"></span>
     <ul class="hero-trust__list">
         @foreach($items as $item)
             @php
                 $tag = $item['href'] ? 'a' : 'li';
+                $isStat = $item['icon'] === 'meals';
             @endphp
             <{{ $tag }}
                 @class([
                     'hero-trust__item',
-                    'hero-trust__item--green' => $item['tone'] === 'green' && $item['href'],
                 ])
                 @if($item['href'])
                     href="{{ $item['href'] }}"
@@ -195,7 +307,7 @@
                     @endswitch
                 </span>
                 <span class="hero-trust__copy">
-                    <span class="hero-trust__headline">{{ $item['headline'] }}</span>
+                    <span @class(['hero-trust__headline', 'hero-trust__headline--glow' => $isStat])>{{ $item['headline'] }}</span>
                     <span class="hero-trust__label">{{ $item['label'] }}</span>
                 </span>
             </{{ $tag }}>

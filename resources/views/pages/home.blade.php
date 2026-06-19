@@ -8,9 +8,14 @@
 
 @section('content')
     {{-- Hero Section --}}
-    <section>
+    <section class="hero-section">
         <div
             class="hero-shell relative container overflow-hidden rounded-md bg-gray-200">
+            <div class="hero-cinematic" aria-hidden="true">
+                <span class="hero-cinematic__vignette"></span>
+                <span class="hero-cinematic__glow hero-cinematic__glow--blue"></span>
+                <span class="hero-cinematic__glow hero-cinematic__glow--green"></span>
+            </div>
             <div class="hero-grid relative z-20 mx-auto grid w-full max-w-[1500px] gap-10 lg:grid-cols-2 lg:gap-0">
                 <div class="hero-copy md:pb-28">
                     <h1 class="hero-title mb-4 font-bold md:mb-6">
@@ -130,6 +135,7 @@
             .cat-section {
                 position: relative;
                 overflow: hidden;
+                margin-top: -.5rem;
                 background:
                     radial-gradient(ellipse 80% 55% at 50% -10%, rgba(39, 159, 249, 0.09), transparent 70%),
                     linear-gradient(180deg, #f8fbff 0%, #fff 42%, #fff 100%);
@@ -1782,6 +1788,58 @@
 }
 
 /* Hero supporting elements */
+.hero-section {
+    position: relative;
+}
+.hero-section::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    bottom: -1px;
+    height: 5rem;
+    pointer-events: none;
+    background: linear-gradient(180deg, transparent, rgba(248, 251, 255, .95));
+    z-index: 5;
+}
+.hero-cinematic {
+    position: absolute;
+    inset: 0;
+    z-index: 12;
+    pointer-events: none;
+    overflow: hidden;
+    border-radius: inherit;
+}
+.hero-cinematic__vignette {
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse 90% 70% at 50% 40%, transparent 35%, rgba(15, 23, 42, .12) 100%),
+        linear-gradient(180deg, transparent 55%, rgba(15, 23, 42, .28) 100%);
+}
+.hero-cinematic__glow {
+    position: absolute;
+    width: clamp(220px, 34vw, 420px);
+    height: clamp(220px, 34vw, 420px);
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: .35;
+    animation: heroGlowDrift 12s ease-in-out infinite;
+}
+.hero-cinematic__glow--blue {
+    inset-inline-end: 8%;
+    inset-block-start: 10%;
+    background: rgba(39, 159, 249, .45);
+}
+.hero-cinematic__glow--green {
+    inset-inline-start: 6%;
+    inset-block-end: 18%;
+    background: rgba(63, 181, 54, .35);
+    animation-delay: -6s;
+}
+@keyframes heroGlowDrift {
+    0%, 100% { transform: translate(0, 0) scale(1); opacity: .3; }
+    50% { transform: translate(-12px, 8px) scale(1.08); opacity: .42; }
+}
 .hero-shell {
     display: flex;
     flex-direction: column;
@@ -1864,6 +1922,19 @@
 }
 .hero-bg {
     opacity: .95;
+    animation: heroKenBurns 22s ease-in-out infinite alternate;
+    will-change: transform;
+}
+@keyframes heroKenBurns {
+    0% { transform: scale(1) translateX(0); }
+    100% { transform: scale(1.06) translateX(-1.5%); }
+}
+[dir="rtl"] .hero-bg {
+    animation-name: heroKenBurnsRtl;
+}
+@keyframes heroKenBurnsRtl {
+    0% { transform: scaleX(-1) scale(1) translateX(0); }
+    100% { transform: scaleX(-1) scale(1.06) translateX(-1.5%); }
 }
 .hero-food {
     position: absolute;
@@ -2598,6 +2669,11 @@
         animation: none !important;
         opacity: 1 !important;
         transform: none !important;
+    }
+    .hero-bg,
+    .hero-cinematic__glow,
+    .hero-phones {
+        animation: none !important;
     }
     .hero-btn-anim:hover,
     .hero-btn-anim:active {
