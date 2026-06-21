@@ -53,9 +53,8 @@ class CheckoutController extends Controller
         }
 
         $subscriptions = [];
-        $account = app(AccountApiService::class);
-        if ($account->hasToken()) {
-            $subsResult = $account->listSubscriptions();
+        if ($token !== '') {
+            $subsResult = app(AccountApiService::class)->listSubscriptions();
             if (($subsResult['ok'] ?? false) && is_array($subsResult['data']['subscriptions'] ?? null)) {
                 $subscriptions = $subsResult['data']['subscriptions'];
             }
