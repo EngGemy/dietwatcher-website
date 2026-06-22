@@ -76,6 +76,56 @@ class CheckoutController extends Controller
         ));
     }
 
+    /**
+     * @param  array<int, array<string, mixed>>  $zones
+     */
+    private function defaultZoneId(array $zones): ?int
+    {
+        $active = collect($zones)
+            ->filter(fn (array $zone): bool => (bool) ($zone['is_active'] ?? true))
+            ->values();
+
+        if ($active->count() === 1) {
+            $id = (int) ($active->first()['id'] ?? 0);
+
+            return $id > 0 ? $id : null;
+        }
+
+        $riyadh = $active->first(function (array $zone): bool {
+            $name = $zone['name'] ?? '';
+            if (is_array($name)) {
+                $name = $name[app()->getLocale()] ?? $name['ar'] ?? $name['en'] ?? '';
+            }
+            $n = mb_strtolower((string) $name);
+
+            return str_contains($n, 'riyadh') || str_contains($n, 'الرياض');
+        });
+
+        if (is_array($riyadh)) {
+            $id = (int) ($riyadh['id'] ?? 0);
+
+            return $id > 0 ? $id : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function applyDefaultZoneId(array &$validated): void
+    {
+        if (($validated['delivery_type'] ?? '') !== 'home' || ! empty($validated['zone_id'])) {
+            return;
+        }
+
+        $zones = $this->externalDataService->getZones();
+        $defaultId = $this->defaultZoneId(is_array($zones) ? $zones : []);
+        if ($defaultId) {
+            $validated['zone_id'] = $defaultId;
+        }
+    }
+
     private function rememberCheckoutRegionDuration(int $addressId, int $regionDurationId): void
     {
         if ($addressId <= 0 || $regionDurationId <= 0) {
@@ -415,6 +465,8 @@ class CheckoutController extends Controller
             ];
         }
 
+        $defaultZoneId = $this->defaultZoneId(is_array($zones) ? $zones : []);
+
         // Plans = delivery included in price, Meals = fee from zone
         $deliveryFeeAmount = $hasPlanItems ? 0 : (float) Setting::getValue('delivery_fee', 25);
 
@@ -608,6 +660,7 @@ class CheckoutController extends Controller
             'deliveryFeeAmount',
             'vatRate',
             'zones',
+            'defaultZoneId',
             'durationMultipliers',
             'planDurations',
             'planDurationPrices',
@@ -687,6 +740,8 @@ class CheckoutController extends Controller
                 }
             }
         }
+
+        $this->applyDefaultZoneId($validated);
 
         if (
             ($validated['delivery_type'] ?? '') === 'home'
@@ -1971,6 +2026,8 @@ class CheckoutController extends Controller
             ], 422);
         }
         $validated['phone'] = $normalizedMoyasarPhone;
+
+        $this->applyDefaultZoneId($validated);
 
         if (
             ($validated['delivery_type'] ?? '') === 'home'

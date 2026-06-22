@@ -464,7 +464,9 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
                         {{-- Home: city + inline map + address ? no x-transition (can leave map invisible); x-show keeps block in DOM --}}
                         @php
-                            $riyadhZone = collect($zones)->first(function ($zone) {
+                            $activeZones = collect($zones)->filter(fn ($zone) => $zone['is_active'] ?? true)->values();
+                            $singleZone = $activeZones->count() === 1 ? $activeZones->first() : null;
+                            $riyadhZone = $singleZone ?? collect($zones)->first(function ($zone) {
                                 $name = $zone['name'] ?? '';
                                 if (is_array($name)) {
                                     $name = ($name[app()->getLocale()] ?? $name['ar'] ?? $name['en'] ?? '');
@@ -472,19 +474,22 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                 $n = mb_strtolower((string) $name);
                                 return str_contains($n, 'riyadh') || str_contains($n, 'الرياض');
                             });
+                            $lockedZone = $singleZone ?? $riyadhZone;
+                            $resolvedDefaultZoneId = (int) old('zone_id', $defaultZoneId ?? ($lockedZone['id'] ?? 0));
                         @endphp
-                        <div x-show="deliveryType === 'home' && (savedAddresses.length === 0 || addingNewAddress)" class="space-y-4" x-init="if (!selectedZoneId) selectedZoneId = '{{ (string) (($riyadhZone['id'] ?? '') ?: '') }}'">
+                        <div x-show="deliveryType === 'home' && (savedAddresses.length === 0 || addingNewAddress)" class="space-y-4">
                                 <div>
                                     <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('City') }}</label>
+                                    @if($lockedZone)
+                                        <input type="hidden" name="zone_id" value="{{ $lockedZone['id'] }}">
+                                        <div class="form-control cursor-default select-none bg-gray-50 text-gray-700">
+                                            {{ is_array($lockedZone['name']) ? ($lockedZone['name'][app()->getLocale()] ?? $lockedZone['name']['en'] ?? '') : $lockedZone['name'] }}
+                                        </div>
+                                    @else
                                     <select name="zone_id" class="form-control @error('zone_id') border-red-500 @enderror"
                                             x-model="selectedZoneId" @change="onZoneChange()"
-                                            :disabled="deliveryType === 'pickup' || @json((bool) $riyadhZone)"
+                                            :disabled="deliveryType === 'pickup'"
                                             :required="deliveryType === 'home'">
-                                        @if($riyadhZone)
-                                            <option value="{{ $riyadhZone['id'] }}">
-                                                {{ is_array($riyadhZone['name']) ? ($riyadhZone['name'][app()->getLocale()] ?? $riyadhZone['name']['en'] ?? '') : $riyadhZone['name'] }}
-                                            </option>
-                                        @else
                                             <option value="">{{ __('Select city') }}</option>
                                             @foreach($zones as $zone)
                                                 @if($zone['is_active'] ?? true)
@@ -493,8 +498,8 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                                                 </option>
                                                 @endif
                                             @endforeach
-                                        @endif
                                     </select>
+                                    @endif
                                     @error('zone_id')
                                         <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
                                     @enderror
@@ -1817,7 +1822,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
             _customerStateGeneration: 0,
 
             // Zone state
-            selectedZoneId: @json(old('zone_id', '')),
+            selectedZoneId: @json(($defaultZoneId ?? 0) > 0 ? (string) $defaultZoneId : old('zone_id', '')),
             zones: @json($zones),
 
             checkoutProgramId: @json((int) ($checkoutProgramId ?? 0)),
@@ -1875,6 +1880,28 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                     return fromForm;
                 }
                 return '{{ csrf_token() }}';
+            },
+
+            ensureDefaultZoneSelected() {
+                if (String(this.selectedZoneId || '').trim() !== '') {
+                    return;
+                }
+                const active = (this.zones || []).filter(z => z.is_active !== false);
+                if (active.length === 1 && active[0]?.id) {
+                    this.selectedZoneId = String(active[0].id);
+                    return;
+                }
+                const locale = '{{ app()->getLocale() }}';
+                const riyadh = active.find(z => {
+                    const name = typeof z.name === 'object'
+                        ? (z.name[locale] || z.name.ar || z.name.en || '')
+                        : (z.name || '');
+                    const n = String(name).toLowerCase();
+                    return n.includes('riyadh') || n.includes('الرياض');
+                });
+                if (riyadh?.id) {
+                    this.selectedZoneId = String(riyadh.id);
+                }
             },
 
             syncAddressErrorDisplay() {
@@ -3596,7 +3623,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 const lat = String(this.inlineMapLat || (form.querySelector('input[name="delivery_lat"]')?.value ?? '')).trim();
                 const lng = String(this.inlineMapLng || (form.querySelector('input[name="delivery_lng"]')?.value ?? '')).trim();
                 const district = String(this.inlineMapDistrictId || (form.querySelector('input[name="delivery_district_id"]')?.value ?? '')).trim();
-                const zone = String(this.selectedZoneId || form.querySelector('select[name="zone_id"]')?.value || '').trim();
+                const zone = String(this.selectedZoneId || form.querySelector('input[name="zone_id"]')?.value || form.querySelector('select[name="zone_id"]')?.value || '').trim();
 
                 return lat !== '' && lng !== '' && district !== '' && zone !== '';
             },
@@ -3609,7 +3636,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
                 const lat = String(form.querySelector('input[name="delivery_lat"]')?.value ?? '').trim();
                 const lng = String(form.querySelector('input[name="delivery_lng"]')?.value ?? '').trim();
                 const dist = String(form.querySelector('input[name="delivery_district_id"]')?.value ?? '').trim();
-                const zone = String(this.selectedZoneId || form.querySelector('select[name="zone_id"]')?.value || '').trim();
+                const zone = String(this.selectedZoneId || form.querySelector('input[name="zone_id"]')?.value || form.querySelector('select[name="zone_id"]')?.value || '').trim();
                 const street = String(this.addressStreet || '').trim();
 
                 return lat !== '' && lng !== '' && dist !== '' && zone !== '' && street !== '';
@@ -4537,6 +4564,7 @@ $initialAddressPhoneLocal = \App\Support\SaudiPhone::localDigitsForInput(old('ad
 
             // Watch for duration changes to re-validate coupon
             async init() {
+                this.ensureDefaultZoneSelected();
                 this.ensureDistrictsCache();
                 window.addEventListener('checkout-auth-success', async (event) => {
                     const detail = event.detail || {};
