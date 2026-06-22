@@ -69,6 +69,8 @@ final class ExternalApiConfig
             'phone_verified',
             'customer_profile_hydrated',
             'customer_name',
+            'checkout_api_subscription_checkout',
+            'checkout_moyasar_order',
         ]);
 
         return true;

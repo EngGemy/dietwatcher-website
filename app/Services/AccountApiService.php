@@ -1030,8 +1030,34 @@ class AccountApiService
         }
 
         $createData = is_array($created['create_data'] ?? null) ? $created['create_data'] : [];
-        $bootstrap = $this->extractMoyasarBootstrapFromCreateResponse($createData, $created['raw'] ?? null);
+        $bootstrap = is_array($created['bootstrap'] ?? null)
+            ? $this->finalizeMoyasarBootstrap($created['bootstrap'], $createData)
+            : null;
+
         if ($bootstrap === null) {
+            $bootstrap = $this->extractMoyasarBootstrapFromCreateResponse($createData, $created['raw'] ?? null);
+        }
+
+        if ($bootstrap === null) {
+            $cached = session('checkout_api_subscription_checkout');
+            $payloadHash = (string) ($created['payload_hash'] ?? '');
+            if (
+                is_array($cached)
+                && $payloadHash !== ''
+                && ($cached['payload_hash'] ?? '') === $payloadHash
+                && is_array($cached['bootstrap'] ?? null)
+            ) {
+                $bootstrap = $this->finalizeMoyasarBootstrap($cached['bootstrap'], $createData);
+            }
+        }
+
+        if ($bootstrap === null) {
+            Log::warning('AccountApiService::bootstrapSubscriptionMoyasar could not build Moyasar bootstrap', [
+                'subscription_id' => $created['subscription_id'] ?? null,
+                'has_payment_in_create_data' => $this->extractPaymentResource($createData) !== null,
+                'create_data_keys' => is_array($createData) ? array_keys($createData) : [],
+            ]);
+
             return [
                 'ok' => false,
                 'message' => __('checkout.subscription_payment_unavailable'),
@@ -1270,6 +1296,7 @@ class AccountApiService
                         'raw' => null,
                         'payload' => $payload,
                         'payload_hash' => $payloadHash,
+                        'bootstrap' => $bootstrap,
                     ];
                 }
             }
@@ -1338,6 +1365,7 @@ class AccountApiService
             'raw' => is_array($result['raw'] ?? null) ? $result['raw'] : null,
             'payload' => $payload,
             'payload_hash' => $payloadHash,
+            'bootstrap' => $this->extractMoyasarBootstrapFromCreateResponse($createData, $result['raw'] ?? null),
         ];
     }
 
@@ -1547,24 +1575,24 @@ class AccountApiService
             return null;
         }
 
-        $amountRaw = $payment['amount'] ?? $payment['pay_amount'] ?? null;
-        $amountHalalas = is_numeric($amountRaw) ? (int) $amountRaw : 0;
+        $amountHalalas = $this->resolvePaymentAmountHalalas($payment);
         if ($amountHalalas <= 0) {
+            return null;
+        }
+
+        $moyasar = app(MoyasarPaymentService::class);
+        $publishableKey = $this->resolvePaymentPublishableKey($payment, $moyasar);
+        if (! $moyasar->isValidPublishableKey($publishableKey)) {
+            Log::warning('AccountApiService::extractMoyasarBootstrapFromCreateResponse invalid publishable key', [
+                'api_key' => $payment['publishable_api_key'] ?? $payment['publishable_key'] ?? null,
+                'config_key_set' => $moyasar->isValidPublishableKey($moyasar->getPublishableKey()),
+            ]);
+
             return null;
         }
 
         $metadata = is_array($payment['metadata'] ?? null) ? $payment['metadata'] : [];
         $metadata = array_map(static fn ($v) => (string) $v, $metadata);
-
-        $publishableKey = trim((string) (
-            $payment['publishable_api_key']
-            ?? $payment['publishable_key']
-            ?? ''
-        ));
-
-        if (! app(MoyasarPaymentService::class)->isValidPublishableKey($publishableKey)) {
-            return null;
-        }
 
         $subscriptionId = null;
         if (is_array($data)) {
@@ -1582,6 +1610,87 @@ class AccountApiService
             'subscription_id' => $subscriptionId,
             'external_payment_id' => is_numeric($externalPaymentId) ? (int) $externalPaymentId : null,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $bootstrap
+     * @param  array<string, mixed>|null  $createData
+     * @return array<string, mixed>|null
+     */
+    protected function finalizeMoyasarBootstrap(array $bootstrap, ?array $createData = null): ?array
+    {
+        $moyasar = app(MoyasarPaymentService::class);
+        $amountHalalas = (int) ($bootstrap['amount_halalas'] ?? 0);
+        if ($amountHalalas <= 0) {
+            return null;
+        }
+
+        $publishableKey = $moyasar->resolvePublishableKey($bootstrap['publishable_key'] ?? null);
+        if (! $moyasar->isValidPublishableKey($publishableKey)) {
+            return null;
+        }
+
+        $bootstrap['publishable_key'] = $publishableKey;
+        $bootstrap['amount_halalas'] = $amountHalalas;
+
+        if (empty($bootstrap['subscription_id']) && is_array($createData)) {
+            $subscriptionId = $this->extractExternalSubscriptionId($createData);
+            if ($subscriptionId > 0) {
+                $bootstrap['subscription_id'] = $subscriptionId;
+            }
+        }
+
+        return $bootstrap;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payment
+     */
+    protected function resolvePaymentAmountHalalas(array $payment): int
+    {
+        foreach (['amount_halalas', 'amount_halala', 'amountHalalas', 'amount_in_halalas'] as $key) {
+            $value = $payment[$key] ?? null;
+            if (is_numeric($value) && (int) $value > 0) {
+                return (int) $value;
+            }
+        }
+
+        foreach (['amount', 'pay_amount', 'total', 'pay_amount_total'] as $key) {
+            if (! isset($payment[$key]) || ! is_numeric($payment[$key])) {
+                continue;
+            }
+
+            $amount = (float) $payment[$key];
+            if ($amount <= 0) {
+                continue;
+            }
+
+            // Staging/dev APIs sometimes return SAR (299.00) instead of halalas (29900).
+            if ($amount < 1000 || fmod($amount, 1.0) !== 0.0) {
+                return (int) round($amount * 100);
+            }
+
+            return (int) round($amount);
+        }
+
+        return 0;
+    }
+
+    protected function resolvePaymentPublishableKey(array $payment, MoyasarPaymentService $moyasar): string
+    {
+        foreach ([
+            $payment['publishable_api_key'] ?? null,
+            $payment['publishable_key'] ?? null,
+            data_get($payment, 'moyasar.publishable_key'),
+            data_get($payment, 'moyasar.publishable_api_key'),
+        ] as $candidate) {
+            $resolved = $moyasar->resolvePublishableKey(is_string($candidate) ? $candidate : null);
+            if ($moyasar->isValidPublishableKey($resolved)) {
+                return $resolved;
+            }
+        }
+
+        return $moyasar->resolvePublishableKey(null);
     }
 
     /**
@@ -1964,6 +2073,10 @@ class AccountApiService
 
         if (isset($data['subscription']['payment']) && is_array($data['subscription']['payment'])) {
             return $data['subscription']['payment'];
+        }
+
+        if (isset($data['data']['payment']) && is_array($data['data']['payment'])) {
+            return $data['data']['payment'];
         }
 
         return null;
