@@ -1524,7 +1524,7 @@
                 @forelse($latestPosts as $post)
                     <div class="blog-card blog-premium-card" data-anim="fade-up" data-blog-card>
                         <div class="blog-card__thumbnail">
-                            <a href="{{ route('blog.show', $post->translate(app()->getLocale())->slug) }}" data-blog-link>
+                            <a href="{{ $post->showUrl() }}" data-blog-link>
                                 @php
                                     $postImage = $post->cover_image_exists
                                         ? $post->cover_image_url
@@ -1534,7 +1534,7 @@
                             </a>
                         </div>
 
-                        <a href="{{ route('blog.show', $post->translate(app()->getLocale())->slug) }}" class="blog-card__body" data-blog-link>
+                        <a href="{{ $post->showUrl() }}" class="blog-card__body" data-blog-link>
                             <time datetime="{{ $post->published_at->format('Y-m-d') }}">{{ $post->formatted_date }}</time>
                             <h3 class="blog-card__title">
                                 {{ $post->title }}

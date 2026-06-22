@@ -65,7 +65,7 @@
                     <h3>{{ __('blog.latest_articles') }}</h3>
                     <div class="bshowx-latest">
                         @foreach($latestPosts->take(4) as $latest)
-                            <a href="{{ route('blog.show', $latest->translate(app()->getLocale())->slug) }}" class="bshowx-latest__item">
+                            <a href="{{ $latest->showUrl() }}" class="bshowx-latest__item">
                                 <img src="{{ $latest->cover_image_url }}" alt="{{ $latest->title }}" loading="lazy">
                                 <div>
                                     <p>{{ Str::limit($latest->title, 62) }}</p>
@@ -99,7 +99,7 @@
         </div>
         <div class="bshowx-related__grid">
             @foreach($latestPosts->take(3) as $related)
-                <a href="{{ route('blog.show', $related->translate(app()->getLocale())->slug) }}" class="bshowx-r-card">
+                <a href="{{ $related->showUrl() }}" class="bshowx-r-card">
                     <img src="{{ $related->cover_image_url }}" alt="{{ $related->title }}" loading="lazy">
                     <div>
                         @if($related->category)

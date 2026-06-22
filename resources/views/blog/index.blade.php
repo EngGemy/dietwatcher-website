@@ -66,7 +66,7 @@
 
         @if($featuredPost)
             @php
-                $featuredHref = route('blog.show', $featuredPost->translate(app()->getLocale())->slug);
+                $featuredHref = $featuredPost->showUrl();
             @endphp
             <article class="blogx-featured">
                 <a href="{{ $featuredHref }}" class="blogx-featured__media" aria-label="{{ $featuredPost->title }}">

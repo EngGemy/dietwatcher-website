@@ -1,7 +1,7 @@
 @props(['post'])
 
 @php
-    $href = route('blog.show', $post->translate(app()->getLocale())->slug);
+    $href = $post->showUrl();
     $authorName = $post->author?->name ?? __('Diet Watchers');
 @endphp
 

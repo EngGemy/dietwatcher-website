@@ -191,4 +191,44 @@ class BlogPost extends Model
             ? $this->published_at->format('M d, Y') 
             : '';
     }
+
+    /**
+     * Resolve a URL slug for the given locale, with sensible fallbacks.
+     */
+    public function resolvedSlug(?string $locale = null): string
+    {
+        $locale = $locale ?? app()->getLocale();
+        $fallbackLocale = (string) config('app.fallback_locale', 'en');
+
+        $translation = $this->translate($locale, false);
+        if ($translation && filled($translation->slug)) {
+            return (string) $translation->slug;
+        }
+
+        foreach (array_unique([$fallbackLocale, 'ar', 'en']) as $candidateLocale) {
+            if ($candidateLocale === $locale) {
+                continue;
+            }
+
+            $fallback = $this->translate($candidateLocale, false);
+            if ($fallback && filled($fallback->slug)) {
+                return (string) $fallback->slug;
+            }
+        }
+
+        if (filled($this->slug)) {
+            return (string) $this->slug;
+        }
+
+        if (filled($this->title)) {
+            return Str::slug((string) $this->title);
+        }
+
+        return (string) $this->getKey();
+    }
+
+    public function showUrl(?string $locale = null): string
+    {
+        return route('blog.show', $this->resolvedSlug($locale));
+    }
 }

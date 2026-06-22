@@ -15,7 +15,7 @@ class BlogController extends Controller
     public function index(Request $request): View
     {
         $query = BlogPost::published()
-            ->with(['author', 'tags', 'category']);
+            ->with(['author', 'tags', 'category', 'translations']);
 
         if ($search = $request->input('search')) {
             $query->whereTranslationLike('title', "%{$search}%")
@@ -44,11 +44,24 @@ class BlogController extends Controller
     {
         $locale = app()->getLocale();
 
-        // Find post by translated slug in current locale
         $post = BlogPost::published()
-            ->whereTranslation('slug', $slug)
-            ->with(['author', 'tags', 'likes', 'category'])
+            ->whereTranslation('slug', $slug, $locale)
+            ->with(['author', 'tags', 'likes', 'category', 'translations'])
             ->first();
+
+        if (! $post) {
+            $post = BlogPost::published()
+                ->whereHas('translations', fn ($q) => $q->where('slug', $slug))
+                ->with(['author', 'tags', 'likes', 'category', 'translations'])
+                ->first();
+        }
+
+        if (! $post) {
+            $post = BlogPost::published()
+                ->where('slug', $slug)
+                ->with(['author', 'tags', 'likes', 'category', 'translations'])
+                ->first();
+        }
 
         if (! $post) {
             abort(404);
@@ -61,7 +74,7 @@ class BlogController extends Controller
 
         $latestPosts = BlogPost::published()
             ->where('id', '!=', $post->id)
-            ->with(['category'])
+            ->with(['category', 'translations'])
             ->orderByDesc('published_at')
             ->limit(5)
             ->get();
